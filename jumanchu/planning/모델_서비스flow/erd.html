@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>금융 서비스 ERD</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1e1e1e;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+    padding: 30px;
+    min-width: 2400px;
+  }
+
+  .title {
+    font-size: 26px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 24px;
+  }
+
+  /* === 도메인 가로 배치 (Flexbox) === */
+  .grid {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    align-items: flex-start;
+    width: 2300px;
+  }
+
+  .domain {
+    border: 2px dashed;
+    border-radius: 10px;
+    padding: 18px 14px 14px;
+    background: rgba(255,255,255,0.02);
+    flex-shrink: 0;
+    vertical-align: top;
+  }
+  .d-user      { width: 280px; }
+  .d-recommend { width: 290px; }
+  .d-stock     { width: 320px; }
+  .d-trade     { width: 380px; }
+  .d-community { width: 320px; }
+  .domain-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    text-align: center;
+    letter-spacing: 0.5px;
+  }
+
+  /* 도메인별 색상 */
+  .d-user      { border-color: #4FC3F7; }
+  .d-user .domain-title { color: #4FC3F7; }
+  .d-recommend { border-color: #FFD54F; }
+  .d-recommend .domain-title { color: #FFD54F; }
+  .d-stock     { border-color: #81C784; }
+  .d-stock .domain-title { color: #81C784; }
+  .d-trade     { border-color: #FF8A65; border-style: solid; border-width: 3px;
+                 box-shadow: 0 0 20px rgba(255,138,101,0.2); }
+  .d-trade .domain-title { color: #FF8A65; }
+  .d-community { border-color: #F06292; }
+  .d-community .domain-title { color: #F06292; }
+
+  /* === 테이블 박스 === */
+  .table {
+    background: #2d2d2d;
+    border: 1px solid #444;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    font-size: 11.5px;
+  }
+  .table.core {
+    background: #3d2d1d;
+    border-color: #E65100;
+    box-shadow: 0 0 12px rgba(230,81,0,0.3);
+  }
+
+  .table-name {
+    padding: 7px 10px;
+    font-weight: 700;
+    color: #fff;
+    font-size: 12.5px;
+  }
+  /* 테이블 헤더 색상 */
+  .h-user      { background: #0277BD; }
+  .h-recommend { background: #F9A825; color: #000 !important; }
+  .h-stock     { background: #2E7D32; }
+  .h-news      { background: #558B2F; }
+  .h-trade     { background: #D84315; }
+  .h-trade-core{ background: #E65100; }
+  .h-community { background: #AD1457; }
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 10px;
+    border-top: 1px solid #3a3a3a;
+  }
+  .row:first-of-type { border-top: none; }
+  .col-name { color: #e0e0e0; }
+  .col-type { color: #888; font-size: 10.5px; }
+
+  .pk { color: #FFD54F; }
+  .fk { color: #81C784; }
+  .highlight { color: #FFB74D; }
+
+  /* 관계 범례 */
+  .legend {
+    margin-top: 30px;
+    padding: 16px 20px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    font-size: 12px;
+    color: #aaa;
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-color {
+    width: 14px; height: 14px; border-radius: 3px;
+  }
+  .legend-arrow {
+    font-size: 16px; color: #888;
+  }
+
+  /* 관계 요약 박스 */
+  .relations {
+    margin-top: 24px;
+    padding: 20px 24px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 10px;
+    border-left: 4px solid #FF8A65;
+  }
+  .relations-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #FF8A65;
+    margin-bottom: 12px;
+  }
+  .relations-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 32px;
+    font-size: 12px;
+    color: #ccc;
+  }
+  .relations-list > div {
+    width: 30%;
+  }
+  .rel-arrow { color: #888; }
+  .rel-from { color: #4FC3F7; }
+  .rel-to { color: #81C784; }
+</style>
+</head>
+<body>
+
+<div class="title">⭐ 금융 서비스 ERD</div>
+<div class="subtitle">근거 있는 매매 + 맞춤형 종목 추천 서비스</div>
+
+<div class="grid">
+
+  <!-- ============== 사용자 도메인 ============== -->
+  <div class="domain d-user">
+    <div class="domain-title">사용자 도메인</div>
+
+    <div class="table">
+      <div class="table-name h-user">USER</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name">username</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">password</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">email</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">nickname</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">created_at</span><span class="col-type">datetime</span></div>
+    </div>
+
+    <div class="table">
+      <div class="table-name h-user">USER_INVESTMENT_PROFILE</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 user_id</span></span><span class="col-type">FK (1:1)</span></div>
+      <div class="row"><span class="col-name">risk_type</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">investment_style</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">preferred_period</span><span class="col-type">int</span></div>
+      <div class="row"><span class="col-name">preferred_sector</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">updated_at</span><span class="col-type">datetime</span></div>
+    </div>
+  </div>
+
+  <!-- ============== 추천 도메인 ============== -->
+  <div class="domain d-recommend">
+    <div class="domain-title">추천 도메인</div>
+
+    <div class="table">
+      <div class="table-name h-recommend">STOCK_RECOMMENDATION</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 user_id</span></span><span class="col-type">→ USER</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 stock_id</span></span><span class="col-type">→ STOCK</span></div>
+      <div class="row"><span class="col-name">score</span><span class="col-type">float 0~1</span></div>
+      <div class="row"><span class="col-name">reason</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">recommendation_type</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">is_clicked</span></span><span class="col-type">bool</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">is_dismissed</span></span><span class="col-type">bool</span></div>
+      <div class="row"><span class="col-name">recommended_at</span><span class="col-type">datetime</span></div>
+    </div>
+  </div>
+
+  <!-- ============== 주식 상품 도메인 ============== -->
+  <div class="domain d-stock">
+    <div class="domain-title">상품 도메인 - 주식</div>
+
+    <div class="table">
+      <div class="table-name h-stock">STOCK</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name">code</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">name</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">market</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">sector</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">industry</span><span class="col-type">string</span></div>
+    </div>
+
+    <div class="table">
+      <div class="table-name h-stock">STOCK_PRICE</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 stock_id</span></span><span class="col-type">→ STOCK</span></div>
+      <div class="row"><span class="col-name">price_date</span><span class="col-type">date</span></div>
+      <div class="row"><span class="col-name">open/high/low/close</span><span class="col-type">int</span></div>
+      <div class="row"><span class="col-name">volume</span><span class="col-type">bigint</span></div>
+    </div>
+
+    <div class="table">
+      <div class="table-name h-stock">STOCK_INDICATOR</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 stock_id</span></span><span class="col-type">→ STOCK</span></div>
+      <div class="row"><span class="col-name">per / pbr / roe</span><span class="col-type">float</span></div>
+      <div class="row"><span class="col-name">eps / dividend_yield</span><span class="col-type">float</span></div>
+      <div class="row"><span class="col-name">calculated_date</span><span class="col-type">date</span></div>
+    </div>
+
+    <div class="table">
+      <div class="table-name h-stock">FINANCIAL_STATEMENT</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 stock_id</span></span><span class="col-type">→ STOCK</span></div>
+      <div class="row"><span class="col-name">year / quarter</span><span class="col-type">int</span></div>
+      <div class="row"><span class="col-name">revenue / profit</span><span class="col-type">bigint</span></div>
+      <div class="row"><span class="col-name">assets / liabilities</span><span class="col-type">bigint</span></div>
+    </div>
+
+    <div class="table">
+      <div class="table-name h-stock">STOCK_NEWS</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name">title</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">url / source</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">published_at</span><span class="col-type">datetime</span></div>
+      <div class="row"><span class="col-name">sentiment_score</span><span class="col-type">float</span></div>
+    </div>
+
+    <div class="table">
+      <div class="table-name h-news">NEWS_RELATED_STOCK</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 news_id</span></span><span class="col-type">→ STOCK_NEWS</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 stock_id</span></span><span class="col-type">→ STOCK</span></div>
+      <div class="row"><span class="col-name">relevance_score</span><span class="col-type">float</span></div>
+    </div>
+  </div>
+
+  <!-- ============== 거래/보유 도메인 (핵심) ============== -->
+  <div class="domain d-trade">
+    <div class="domain-title">⭐ 거래/보유 도메인 (서비스 핵심)</div>
+
+    <div class="table">
+      <div class="table-name h-trade">HOLDING</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 user_id</span></span><span class="col-type">→ USER</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 stock_id</span></span><span class="col-type">→ STOCK</span></div>
+      <div class="row"><span class="col-name">quantity</span><span class="col-type">int</span></div>
+      <div class="row"><span class="col-name">average_price</span><span class="col-type">float</span></div>
+      <div class="row"><span class="col-name">first_acquired_at</span><span class="col-type">datetime</span></div>
+      <div class="row"><span class="col-name">updated_at</span><span class="col-type">datetime</span></div>
+    </div>
+
+    <div class="table core">
+      <div class="table-name h-trade-core">⭐ STOCK_DIARY</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 user_id</span></span><span class="col-type">→ USER</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 stock_id</span></span><span class="col-type">→ STOCK</span></div>
+      <div class="row"><span class="col-name">action_type</span><span class="col-type">BUY/SELL</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">reason_category</span></span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">reason_text</span></span><span class="col-type">text</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">confidence</span></span><span class="col-type">int 1~5</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">target_price</span></span><span class="col-type">int</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">stop_loss_price</span></span><span class="col-type">int</span></div>
+      <div class="row"><span class="col-name">price / quantity</span><span class="col-type">int</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 related_news_id</span></span><span class="col-type">→ STOCK_NEWS</span></div>
+      <div class="row"><span class="col-name">diary_date</span><span class="col-type">date</span></div>
+    </div>
+
+    <div class="table">
+      <div class="table-name h-trade">DIARY_REVIEW</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 diary_id</span></span><span class="col-type">→ STOCK_DIARY (1:1)</span></div>
+      <div class="row"><span class="col-name">actual_return</span><span class="col-type">float</span></div>
+      <div class="row"><span class="col-name">judgment</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">lesson</span><span class="col-type">text</span></div>
+      <div class="row"><span class="col-name">reviewed_at</span><span class="col-type">datetime</span></div>
+    </div>
+  </div>
+
+  <!-- ============== 공유/커뮤니티 도메인 ============== -->
+  <div class="domain d-community">
+    <div class="domain-title">공유/커뮤니티 도메인</div>
+
+    <div class="table">
+      <div class="table-name h-community">SHARED_PORTFOLIO</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 user_id</span></span><span class="col-type">→ USER</span></div>
+      <div class="row"><span class="col-name">title</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">description</span><span class="col-type">text</span></div>
+      <div class="row"><span class="col-name">is_public</span><span class="col-type">bool</span></div>
+      <div class="row"><span class="col-name">view_count</span><span class="col-type">int</span></div>
+    </div>
+
+    <div class="table">
+      <div class="table-name h-community">SHARED_PORTFOLIO_ITEM</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 portfolio_id</span></span><span class="col-type">→ SHARED_PF</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 stock_id</span></span><span class="col-type">→ STOCK</span></div>
+      <div class="row"><span class="col-name">weight</span><span class="col-type">float (%)</span></div>
+      <div class="row"><span class="col-name">comment</span><span class="col-type">string</span></div>
+    </div>
+
+    <div class="table">
+      <div class="table-name h-community">COMMUNITY_POST</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 user_id</span></span><span class="col-type">→ USER</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">post_type</span></span><span class="col-type">free/stock/pf</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 stock_id</span></span><span class="col-type">FK nullable</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 portfolio_id</span></span><span class="col-type">FK nullable</span></div>
+      <div class="row"><span class="col-name">title / content</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">view_count</span><span class="col-type">int</span></div>
+    </div>
+
+    <div class="table">
+      <div class="table-name h-community">COMMENT</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 user_id</span></span><span class="col-type">→ USER</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 post_id</span></span><span class="col-type">→ POST</span></div>
+      <div class="row"><span class="col-name">content</span><span class="col-type">text</span></div>
+    </div>
+
+    <div class="table">
+      <div class="table-name h-community">POST_LIKE</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 user_id</span></span><span class="col-type">→ USER</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 post_id</span></span><span class="col-type">→ POST</span></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 관계 요약 -->
+<div class="relations">
+  <div class="relations-title">📌 주요 관계 (FK 흐름)</div>
+  <div class="relations-list">
+    <div><span class="rel-from">USER</span> <span class="rel-arrow">─1:1→</span> <span class="rel-to">USER_INVESTMENT_PROFILE</span></div>
+    <div><span class="rel-from">USER</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">HOLDING</span> / <span class="rel-to">STOCK_DIARY</span></div>
+    <div><span class="rel-from">USER</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">STOCK_RECOMMENDATION</span></div>
+    <div><span class="rel-from">STOCK</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">STOCK_PRICE / INDICATOR</span></div>
+    <div><span class="rel-from">STOCK</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">FINANCIAL_STATEMENT</span></div>
+    <div><span class="rel-from">STOCK</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">HOLDING / DIARY / REC.</span></div>
+    <div><span class="rel-from">STOCK_NEWS</span> <span class="rel-arrow">─N:M→</span> <span class="rel-to">STOCK</span> (via NEWS_RELATED_STOCK)</div>
+    <div><span class="rel-from">STOCK_NEWS</span> <span class="rel-arrow">─optional→</span> <span class="rel-to">STOCK_DIARY (참고 뉴스)</span></div>
+    <div><span class="rel-from">STOCK_DIARY</span> <span class="rel-arrow">─1:1→</span> <span class="rel-to">DIARY_REVIEW</span></div>
+    <div><span class="rel-from">USER</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">SHARED_PORTFOLIO</span></div>
+    <div><span class="rel-from">SHARED_PORTFOLIO</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">SHARED_PORTFOLIO_ITEM</span></div>
+    <div><span class="rel-from">COMMUNITY_POST</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">COMMENT / POST_LIKE</span></div>
+  </div>
+</div>
+
+<!-- 범례 -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-color" style="background:#4FC3F7"></div>사용자</div>
+  <div class="legend-item"><div class="legend-color" style="background:#FFD54F"></div>추천</div>
+  <div class="legend-item"><div class="legend-color" style="background:#81C784"></div>주식 상품</div>
+  <div class="legend-item"><div class="legend-color" style="background:#FF8A65"></div>거래/보유 (핵심)</div>
+  <div class="legend-item"><div class="legend-color" style="background:#F06292"></div>공유/커뮤니티</div>
+  <div class="legend-item"><span class="pk">🔑</span> Primary Key</div>
+  <div class="legend-item"><span class="fk">🔗</span> Foreign Key</div>
+  <div class="legend-item"><span class="highlight">●</span> 핵심 필드</div>
+</div>
+
+</body>
+</html>

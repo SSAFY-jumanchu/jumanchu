@@ -1,0 +1,18 @@
+# 줄바꿈 자동 정규화 (Windows/macOS/Linux 혼용 팀에서 권장)
+* text=auto eol=lf
+
+# 윈도우 전용 스크립트
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# 바이너리
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.docx  binary
+*.xlsx  binary
+*.pptx  binary
