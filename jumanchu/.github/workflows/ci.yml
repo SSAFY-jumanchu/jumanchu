@@ -40,6 +40,16 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
+      - name: Migration check (누락된 마이그레이션 차단)
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.test
+          SECRET_KEY: ci-test-secret
+          DEBUG: "False"
+        run: |
+          if [ -f manage.py ]; then
+            python manage.py makemigrations --check --dry-run
+          fi
+
       - name: Run tests
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
@@ -47,7 +57,9 @@ jobs:
           DEBUG: "False"
         run: |
           if [ -f manage.py ]; then python manage.py check; fi
-          pytest -q || true   # 초기에는 테스트 없을 수 있으므로 일단 통과 처리 (코드 들어오면 || true 제거)
+          # TODO(SCRUM-23 이후): 첫 테스트가 추가되는 PR에서 `|| true` 제거.
+          # 그 전까지는 테스트 파일이 없을 수 있어 보호용으로 유지.
+          pytest -q || true
 
   # ---------- Frontend (Vue.js) ----------
   frontend:
@@ -80,4 +92,5 @@ jobs:
         run: npm run build --if-present
 
       - name: Test
+        # TODO(SCRUM-27 이후): 첫 FE 테스트가 추가되는 PR에서 `|| true` 제거.
         run: npm test --if-present -- --run || true
