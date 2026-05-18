@@ -45,7 +45,7 @@
   .d-user      { width: 280px; }
   .d-recommend { width: 290px; }
   .d-stock     { width: 320px; }
-  .d-trade     { width: 380px; }
+  .d-trade     { width: 490px; }
   .d-community { width: 320px; }
   .domain-title {
     font-size: 15px;
@@ -222,9 +222,16 @@
       <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
       <div class="row"><span class="col-name">code</span><span class="col-type">string</span></div>
       <div class="row"><span class="col-name">name</span><span class="col-type">string</span></div>
-      <div class="row"><span class="col-name">market</span><span class="col-type">string</span></div>
-      <div class="row"><span class="col-name">sector</span><span class="col-type">string</span></div>
-      <div class="row"><span class="col-name">industry</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name">market</span><span class="col-type">KOSPI/KOSDAQ/NYSE/NASDAQ</span></div>
+      <div class="row"><span class="col-name">sector / industry</span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">market_cap</span></span><span class="col-type">bigint</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">listed_at</span></span><span class="col-type">date</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">currency</span></span><span class="col-type">KRW/USD</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">kis_short_code</span></span><span class="col-type">string</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">is_active</span></span><span class="col-type">bool</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">is_sp500</span></span><span class="col-type">bool</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">is_nasdaq100</span></span><span class="col-type">bool</span></div>
+      <div class="row"><span class="col-name">updated_at</span><span class="col-type">datetime</span></div>
     </div>
 
     <div class="table">
@@ -240,18 +247,27 @@
       <div class="table-name h-stock">STOCK_INDICATOR</div>
       <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
       <div class="row"><span class="col-name"><span class="fk">🔗 stock_id</span></span><span class="col-type">→ STOCK</span></div>
-      <div class="row"><span class="col-name">per / pbr / roe</span><span class="col-type">float</span></div>
-      <div class="row"><span class="col-name">eps / dividend_yield</span><span class="col-type">float</span></div>
+      <div class="row"><span class="col-name">per / pbr / eps</span><span class="col-type">float</span></div>
+      <div class="row"><span class="col-name">roe / roa</span><span class="col-type">float</span></div>
+      <div class="row"><span class="col-name">dividend_yield</span><span class="col-type">float</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">beta / volatility</span></span><span class="col-type">float (자체계산)</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">high_52w / low_52w</span></span><span class="col-type">int</span></div>
       <div class="row"><span class="col-name">calculated_date</span><span class="col-type">date</span></div>
     </div>
 
     <div class="table">
-      <div class="table-name h-stock">FINANCIAL_STATEMENT</div>
+      <div class="table-name h-stock">FINANCIAL_SUMMARY</div>
       <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
       <div class="row"><span class="col-name"><span class="fk">🔗 stock_id</span></span><span class="col-type">→ STOCK</span></div>
-      <div class="row"><span class="col-name">year / quarter</span><span class="col-type">int</span></div>
-      <div class="row"><span class="col-name">revenue / profit</span><span class="col-type">bigint</span></div>
-      <div class="row"><span class="col-name">assets / liabilities</span><span class="col-type">bigint</span></div>
+      <div class="row"><span class="col-name">fiscal_period</span><span class="col-type">2025Q3</span></div>
+      <div class="row"><span class="col-name">revenue / op_profit / net_profit</span><span class="col-type">bigint</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">operating_margin / net_margin</span></span><span class="col-type">float %</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">revenue_yoy</span></span><span class="col-type">float %</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">op_profit_yoy / net_profit_yoy</span></span><span class="col-type">float %</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">debt_ratio</span></span><span class="col-type">float %</span></div>
+      <div class="row"><span class="col-name">equity_ratio / current_ratio</span><span class="col-type">float %</span></div>
+      <div class="row"><span class="col-name">payout_ratio</span><span class="col-type">float %</span></div>
+      <div class="row"><span class="col-name">data_source / fetched_at</span><span class="col-type">DART/yf · dt</span></div>
     </div>
 
     <div class="table">
@@ -277,6 +293,28 @@
     <div class="domain-title">⭐ 거래/보유 도메인 (서비스 핵심)</div>
 
     <div class="table">
+      <div class="table-name h-trade">ACCOUNT</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 user_id</span></span><span class="col-type">FK (1:1)</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">balance</span></span><span class="col-type">decimal(15,0)</span></div>
+      <div class="row"><span class="col-name">created_at / updated_at</span><span class="col-type">datetime</span></div>
+    </div>
+
+    <div class="table core">
+      <div class="table-name h-trade-core">⭐ ORDER (트랜잭션 핵심)</div>
+      <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 user_id</span></span><span class="col-type">→ USER</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 account_id</span></span><span class="col-type">→ ACCOUNT</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 stock_id</span></span><span class="col-type">→ STOCK</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">side</span></span><span class="col-type">BUY / SELL</span></div>
+      <div class="row"><span class="col-name">quantity / price</span><span class="col-type">int / decimal</span></div>
+      <div class="row"><span class="col-name">total_amount</span><span class="col-type">decimal</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">status</span></span><span class="col-type">PENDING/FILLED/FAILED</span></div>
+      <div class="row"><span class="col-name"><span class="highlight">idempotency_key</span></span><span class="col-type">string unique</span></div>
+      <div class="row"><span class="col-name">created_at / executed_at</span><span class="col-type">datetime</span></div>
+    </div>
+
+    <div class="table">
       <div class="table-name h-trade">HOLDING</div>
       <div class="row"><span class="col-name"><span class="pk">🔑 id</span></span><span class="col-type">int PK</span></div>
       <div class="row"><span class="col-name"><span class="fk">🔗 user_id</span></span><span class="col-type">→ USER</span></div>
@@ -298,7 +336,7 @@
       <div class="row"><span class="col-name"><span class="highlight">confidence</span></span><span class="col-type">int 1~5</span></div>
       <div class="row"><span class="col-name"><span class="highlight">target_price</span></span><span class="col-type">int</span></div>
       <div class="row"><span class="col-name"><span class="highlight">stop_loss_price</span></span><span class="col-type">int</span></div>
-      <div class="row"><span class="col-name">price / quantity</span><span class="col-type">int</span></div>
+      <div class="row"><span class="col-name"><span class="fk">🔗 order_id</span></span><span class="col-type">→ ORDER (nullable)</span></div>
       <div class="row"><span class="col-name"><span class="fk">🔗 related_news_id</span></span><span class="col-type">→ STOCK_NEWS</span></div>
       <div class="row"><span class="col-name">diary_date</span><span class="col-type">date</span></div>
     </div>
@@ -371,11 +409,14 @@
   <div class="relations-title">📌 주요 관계 (FK 흐름)</div>
   <div class="relations-list">
     <div><span class="rel-from">USER</span> <span class="rel-arrow">─1:1→</span> <span class="rel-to">USER_INVESTMENT_PROFILE</span></div>
-    <div><span class="rel-from">USER</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">HOLDING</span> / <span class="rel-to">STOCK_DIARY</span></div>
+    <div><span class="rel-from">USER</span> <span class="rel-arrow">─1:1→</span> <span class="rel-to">ACCOUNT</span></div>
+    <div><span class="rel-from">USER</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">HOLDING / ORDER / STOCK_DIARY</span></div>
     <div><span class="rel-from">USER</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">STOCK_RECOMMENDATION</span></div>
+    <div><span class="rel-from">ACCOUNT</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">ORDER</span></div>
     <div><span class="rel-from">STOCK</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">STOCK_PRICE / INDICATOR</span></div>
-    <div><span class="rel-from">STOCK</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">FINANCIAL_STATEMENT</span></div>
-    <div><span class="rel-from">STOCK</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">HOLDING / DIARY / REC.</span></div>
+    <div><span class="rel-from">STOCK</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">FINANCIAL_SUMMARY</span></div>
+    <div><span class="rel-from">STOCK</span> <span class="rel-arrow">─1:N→</span> <span class="rel-to">HOLDING / ORDER / DIARY / REC.</span></div>
+    <div><span class="rel-from">ORDER</span> <span class="rel-arrow">─0/1:1→</span> <span class="rel-to">STOCK_DIARY (선택)</span></div>
     <div><span class="rel-from">STOCK_NEWS</span> <span class="rel-arrow">─N:M→</span> <span class="rel-to">STOCK</span> (via NEWS_RELATED_STOCK)</div>
     <div><span class="rel-from">STOCK_NEWS</span> <span class="rel-arrow">─optional→</span> <span class="rel-to">STOCK_DIARY (참고 뉴스)</span></div>
     <div><span class="rel-from">STOCK_DIARY</span> <span class="rel-arrow">─1:1→</span> <span class="rel-to">DIARY_REVIEW</span></div>
