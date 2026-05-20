@@ -3,7 +3,8 @@ import zipfile
 import io
 import requests
 from django.conf import settings
-
+import FinanceDataReader as fdr
+import numpy as np
 
 def get_corp_code_dict():
     url = "https://opendart.fss.or.kr/api/corpCode.xml"
@@ -27,3 +28,31 @@ def get_corp_code_dict():
             corp_map[stock_code] = corp_code
 
     return corp_map
+
+def calculate_beta(code, start='2024-01-01'):
+    try:
+        stock = fdr.DataReader(code, start)
+        market = fdr.DataReader('KS11', start)
+
+        stock['return'] = stock['Close'].pct_change()
+        market['return'] = market['Close'].pct_change()
+
+        df = stock[['return']].join(
+            market[['return']],
+            lsuffix='_stock',
+            rsuffix='_market'
+        ).dropna()
+
+        if len(df) < 30:
+            return None
+
+        cov = np.cov(df['return_stock'], df['return_market'])[0][1]
+        var = np.var(df['return_market'])
+
+        beta = cov / var if var != 0 else None
+
+        return round(beta, 4)
+
+    except Exception as e:
+        print(f"베타 계산 실패 {code}: {e}")
+        return None
