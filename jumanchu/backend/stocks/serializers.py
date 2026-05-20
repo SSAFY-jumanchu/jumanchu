@@ -1,0 +1,171 @@
+from rest_framework import serializers
+
+from stocks.models import (
+    FinancialSummary,
+    Stock,
+    StockIndicator,
+)
+
+
+class StockSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Stock
+        fields = ['code', 'name', 'market', 'sector', 'industry',
+                  'listed_at', 'market_cap', 'currency', 'kis_short_code',
+                  'is_active', 'is_sp500', 'is_nasdaq100', 'updated_at']
+
+
+class StockDetailSerializer(StockSerializer):
+    description = serializers.CharField(required=False, allow_blank=True)
+    homepage_url = serializers.URLField(required=False, allow_null=True)
+    ceo_name = serializers.CharField(required=False, allow_blank=True)
+    employee_count = serializers.IntegerField(required=False, allow_null=True)
+    is_in_watchlist = serializers.BooleanField()
+
+    class Meta(StockSerializer.Meta):
+        fields = StockSerializer.Meta.fields + [
+            'description', 'homepage_url', 'ceo_name',
+            'employee_count', 'is_in_watchlist',
+        ]
+
+
+class StockListResponseSerializer(serializers.Serializer):
+    items = StockSerializer(many=True)
+    page = serializers.IntegerField()
+    size = serializers.IntegerField()
+    total = serializers.IntegerField()
+
+
+class StockDetailResponseSerializer(serializers.Serializer):
+    stock = StockDetailSerializer()
+
+
+class StockWarningsSerializer(serializers.Serializer):
+    is_management = serializers.BooleanField()
+    is_short_overheated = serializers.BooleanField()
+    is_trading_halted = serializers.BooleanField()
+    is_vi_active = serializers.BooleanField()
+    short_term_overheated = serializers.BooleanField()
+    investment_caution = serializers.BooleanField()
+    warning_label = serializers.CharField(required=False, allow_null=True)
+
+
+class StockPriceSerializer(serializers.Serializer):
+    stock_code = serializers.CharField()
+    current = serializers.DecimalField(max_digits=18, decimal_places=4)
+    open = serializers.DecimalField(max_digits=18, decimal_places=4)
+    high = serializers.DecimalField(max_digits=18, decimal_places=4)
+    low = serializers.DecimalField(max_digits=18, decimal_places=4)
+    prev_close = serializers.DecimalField(max_digits=18, decimal_places=4)
+    change = serializers.DecimalField(max_digits=18, decimal_places=4)
+    change_rate = serializers.FloatField()
+    volume = serializers.IntegerField()
+    trading_value = serializers.DecimalField(max_digits=20, decimal_places=4)
+    upper_limit = serializers.DecimalField(max_digits=18, decimal_places=4)
+    lower_limit = serializers.DecimalField(max_digits=18, decimal_places=4)
+    warnings = StockWarningsSerializer()
+    fetched_at = serializers.DateTimeField()
+
+
+class StockPriceResponseSerializer(serializers.Serializer):
+    price = StockPriceSerializer()
+
+
+class OrderBookEntrySerializer(serializers.Serializer):
+    price = serializers.DecimalField(max_digits=18, decimal_places=4)
+    quantity = serializers.IntegerField()
+
+
+class OrderBookSerializer(serializers.Serializer):
+    stock_code = serializers.CharField()
+    asks = OrderBookEntrySerializer(many=True)
+    bids = OrderBookEntrySerializer(many=True)
+    total_ask_quantity = serializers.IntegerField()
+    total_bid_quantity = serializers.IntegerField()
+    fetched_at = serializers.DateTimeField()
+
+
+class OrderBookResponseSerializer(serializers.Serializer):
+    orderbook = OrderBookSerializer()
+
+
+class CandleSerializer(serializers.Serializer):
+    time = serializers.DateTimeField()
+    open = serializers.DecimalField(max_digits=18, decimal_places=4)
+    high = serializers.DecimalField(max_digits=18, decimal_places=4)
+    low = serializers.DecimalField(max_digits=18, decimal_places=4)
+    close = serializers.DecimalField(max_digits=18, decimal_places=4)
+    volume = serializers.IntegerField()
+
+
+class ChartResponseSerializer(serializers.Serializer):
+    stock_code = serializers.CharField()
+    period = serializers.CharField()
+    interval = serializers.CharField()
+    candles = CandleSerializer(many=True)
+    generated_at = serializers.DateTimeField()
+
+
+class FinancialSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FinancialSummary
+        fields = ['fiscal_period', 'revenue', 'operating_profit', 'net_profit',
+                  'operating_margin', 'net_margin',
+                  'revenue_yoy', 'operating_profit_yoy', 'net_profit_yoy',
+                  'debt_ratio', 'equity_ratio', 'current_ratio', 'payout_ratio',
+                  'data_source', 'fetched_at']
+
+
+class StockIndicatorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StockIndicator
+        fields = ['per', 'pbr', 'eps', 'roe', 'roa', 'dividend_yield',
+                  'beta', 'volatility', 'high_52w', 'low_52w', 'calculated_date']
+
+
+class FinancialsResponseSerializer(serializers.Serializer):
+    stock_code = serializers.CharField()
+    type = serializers.ChoiceField(choices=['quarterly', 'annual'])
+    summaries = FinancialSummarySerializer(many=True)
+    indicator = StockIndicatorSerializer()
+    last_updated = serializers.DateTimeField()
+
+
+class PostSummarySerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    author_nickname = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    comment_count = serializers.IntegerField()
+    like_count = serializers.IntegerField()
+
+
+class StockPostsResponseSerializer(serializers.Serializer):
+    items = PostSummarySerializer(many=True)
+    page = serializers.IntegerField()
+    size = serializers.IntegerField()
+    total = serializers.IntegerField()
+
+
+class IndexSummarySerializer(serializers.Serializer):
+    code = serializers.CharField()
+    name = serializers.CharField()
+    current = serializers.FloatField()
+    change = serializers.FloatField()
+    change_rate = serializers.FloatField()
+
+
+class StockSummarySerializer(serializers.Serializer):
+    code = serializers.CharField()
+    name = serializers.CharField()
+    current = serializers.DecimalField(max_digits=18, decimal_places=4)
+    change = serializers.DecimalField(max_digits=18, decimal_places=4)
+    change_rate = serializers.FloatField()
+
+
+class MarketSummaryResponseSerializer(serializers.Serializer):
+    indices = IndexSummarySerializer(many=True)
+    top_gainers = StockSummarySerializer(many=True)
+    top_losers = StockSummarySerializer(many=True)
+    most_active = StockSummarySerializer(many=True)
+    fetched_at = serializers.DateTimeField()

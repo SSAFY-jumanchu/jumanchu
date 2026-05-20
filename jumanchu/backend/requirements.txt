@@ -7,6 +7,7 @@ django-ratelimit==4.1.0
 django-redis==5.4.0
 djangorestframework==3.17.1
 djangorestframework-simplejwt==5.5.0
+drf-spectacular==0.28.0
 idna==3.15
 psycopg[binary]==3.2.10
 python-dotenv==1.2.2
