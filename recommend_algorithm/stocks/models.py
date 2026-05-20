@@ -10,7 +10,7 @@ class Stock(models.Model):
     pbr = models.FloatField(null=True)
     eps = models.FloatField(null=True)
     bps = models.FloatField(null=True)
-    beta = models.FloatField(null=True)
+    beta = models.FloatField(null=True, blank=True, verbose_name="베타(변동성)")
     is_valid = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
 

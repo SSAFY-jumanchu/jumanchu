@@ -3,6 +3,7 @@ import FinanceDataReader as fdr
 from time import sleep
 import numpy as np
 from datetime import datetime, timedelta
+from .models import Stock, PrototypePool
 
 
 def _ensure_utf8_stdout():
@@ -96,15 +97,10 @@ def collect_all_stocks():
             print(f"❌ {name}({code}) 적재 중 에러 발생: {e}")
 
 def calculate_beta_locally(code, market_df):
-    """
-    FinanceDataReader 데이터를 기반으로 최근 1개년 동안의 
-    KOSPI 지수 대비 개별 종목의 통계적 베타(Beta)를 계산합니다.
-    """
     try:
         end_date = datetime.today().strftime('%Y-%m-%d')
-        start_date = (datetime.today() - timedelta(days=365)).strftime('%Y-%m-%d')
+        start_date = (datetime.today() - timedelta(days=1095)).strftime('%Y-%m-%d')
         
-        # 개별 종목 주가 가져오기
         stock_df = fdr.DataReader(code, start_date, end_date)
         
         if stock_df.empty or len(stock_df) < 30:
@@ -112,7 +108,6 @@ def calculate_beta_locally(code, market_df):
             
         stock_df['return'] = stock_df['Close'].pct_change()
         
-        # 날짜 기준으로 시장 지수와 결합
         df = stock_df[['return']].join(
             market_df[['return']], 
             lsuffix='_stock', 
@@ -121,13 +116,12 @@ def calculate_beta_locally(code, market_df):
         
         if len(df) < 30:
             return None
-            
-        # 공분산 및 분산 연산
-        cov = np.cov(df['return_stock'], df['return_market'])[0][1]
-        var = np.var(df['return_market'])
         
-        if var != 0:
-            return round(cov / var, 4)
+        # ddof=1로 통일, cov_matrix[1][1]에서 분산 직접 추출
+        cov_matrix = np.cov(df['return_stock'], df['return_market'])
+        
+        if cov_matrix[1][1] > 1e-10:
+            return round(cov_matrix[0][1] / cov_matrix[1][1], 4)
         return None
         
     except Exception as e:
@@ -156,7 +150,7 @@ def update_prototype_pool_beta():
     print("📈 기준 시장 지수(KOSPI) 데이터 수집 중...")
     try:
         end_date = datetime.today().strftime('%Y-%m-%d')
-        start_date = (datetime.today() - timedelta(days=365)).strftime('%Y-%m-%d')
+        start_date = (datetime.today() - timedelta(days=1095)).strftime('%Y-%m-%d')
         market_df = fdr.DataReader('KS11', start_date, end_date)
         market_df['return'] = market_df['Close'].pct_change()
     except Exception as e:
@@ -190,3 +184,96 @@ def update_prototype_pool_beta():
 
 # update_betas.py management command에서 호출하는 이름과 맞추기 위한 별칭
 update_prototype_pool_betas = update_prototype_pool_beta
+
+def calculate_beta_locally(code, market_df):
+    """
+    각 종목의 최근 3년 주가 데이터를 가져와서 
+    미리 조회해 둔 KOSPI 시장 지수 수익률(market_df)과의 베타값을 연산합니다.
+    """
+    try:
+        # 안전하게 0.1~0.2초 딜레이를 주어 대량 요청 시 차단되는 것을 방지합니다.
+        sleep(0.15)
+        
+        # 최근 3년 데이터 기준 연산
+        end_date = datetime.today().strftime('%Y-%m-%d')
+        start_date = (datetime.today() - timedelta(days=1095)).strftime('%Y-%m-%d')
+        
+        stock_df = fdr.DataReader(code, start_date, end_date)
+        if stock_df.empty or 'Close' not in stock_df.columns:
+            return None
+            
+        stock_df['return'] = stock_df['Close'].pct_change()
+        
+        # 시장 수익률과 종목 수익률 결합
+        df = stock_df[['return']].join(
+            market_df[['return']], 
+            lsuffix='_stock', 
+            rsuffix='_market'
+        ).dropna()
+        
+        # 영업일 기준 데이터가 너무 적으면 신뢰도가 낮으므로 패스
+        if len(df) < 45:
+            return None
+            
+        # 공분산(Covariance) 및 시장 분산(Variance) 계산
+        cov = np.cov(df['return_stock'], df['return_market'])[0][1]
+        var = np.var(df['return_market'])
+        
+        if var != 0:
+            return round(cov / var, 4)
+        return None
+        
+    except Exception as e:
+        print(f"⚠️ {code} 종목 베타 연산 중 에러 발생: {e}")
+        return None
+
+
+def update_all_stocks_beta():
+    """
+    💡 [요청사항 반영] 
+    프로토타입 Pool뿐만 아니라 DB에 존재하는 '모든 주식(Stock)'을 순회하며
+    베타값을 연산하고 원본 마스터 테이블에 저장하는 함수입니다.
+    """
+    _ensure_utf8_stdout()
+    print("📊 [마스터 테이블] 전체 주식 베타값 업데이트를 시작합니다...")
+
+    # 1. 기준 시장 지수(KOSPI) 데이터 미리 딱 한 번만 조회
+    print("📈 기준 시장 지수(KOSPI) 데이터 수집 중...")
+    try:
+        end_date = datetime.today().strftime('%Y-%m-%d')
+        start_date = (datetime.today() - timedelta(days=1095)).strftime('%Y-%m-%d')
+        market_df = fdr.DataReader('KS11', start_date, end_date)
+        market_df['return'] = market_df['Close'].pct_change()
+    except Exception as e:
+        print(f"❌ 코스피 지수 데이터 수집 실패로 인해 베타 계산을 중단합니다: {e}")
+        return
+
+    # 2. DB에 등록된 전체 주식(약 748개 이상) 가져오기
+    all_stocks = Stock.objects.all()
+    total_count = all_stocks.count()
+    updated_count = 0
+
+    print(f"🔄 총 {total_count}개 종목에 대한 전수 조사를 시작합니다.")
+
+    # 3. 모든 종목을 순회하며 베타 연산 및 마스터 테이블 업데이트
+    for idx, stock in enumerate(all_stocks, start=1):
+        calculated_beta = calculate_beta_locally(stock.code, market_df)
+        
+        # 계산 결과가 있든 없든(None이든) 최신 상태로 갱신 (상장폐지나 데이터 부족 대응)
+        stock.beta = calculated_beta
+        stock.save(update_fields=['beta'])
+        
+        if calculated_beta is not None:
+            updated_count += 1
+
+            # 💡 [보너스 로직] 만약 이 종목이 프로토타입 Pool(Top 200 등)에도 속해 있다면 같이 업데이트
+            pool_entry = PrototypePool.objects.filter(stock=stock).first()
+            if pool_entry:
+                pool_entry.beta = calculated_beta
+                pool_entry.save(update_fields=['beta'])
+        
+        # 진행 상황 모니터링 로그
+        if idx % 50 == 0 or idx == total_count:
+            print(f"    진행 중... ({idx}/{total_count}) - 최근 완료 종목: {stock.name} (Beta: {stock.beta})")
+
+    print(f"🎉 [완료] 전체 {total_count}개 중 {updated_count}개 종목의 베타값 업데이트 성공!")
