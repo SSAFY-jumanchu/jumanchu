@@ -93,7 +93,25 @@ python -c "import os, json, dotenv; dotenv.load_dotenv('../.env'); from kis_dome
 ```
 → `bstp_kor_isnm` 줄 보이면 확정.
 
-### 3.4 [P0] STOCK 마스터 적재 배치 작성
+### 3.4 [P0] STOCK 마스터 적재 배치 — 1차 완료, sector enrich 미완
+
+**현재 상태 (SCRUM-58 1차 PR)**:
+- `backend/stocks/management/commands/sync_stock_master.py` 작성됨
+- KIS 종목코드 마스터 zip 파일(`kospi_code.mst.zip` / `kosdaq_code.mst.zip`) 직접 다운로드 + 고정폭 파싱
+- KOSPI 1797건 + KOSDAQ 1780건 = **3577 종목 적재 완료** (ETF/펀드/스팩 제외)
+- 채워진 필드: `code`, `name`, `market`, `currency='KRW'`, `kis_short_code`, `is_active`
+
+**⚠️ KRX 접근 차단 이슈** (중요)
+- `pykrx` / `FinanceDataReader` 둘 다 KRX 정보데이터시스템에 Akamai 봇 차단 걸려서 ticker_list / StockListing 호출 실패
+- 우회: KIS 정적 마스터 zip 사용 (인증 불필요)
+- 향후 일봉(STOCK_PRICE) 수집 시에도 같은 문제 — pykrx OHLCV는 동작 확인됐으나 KOSDAQ 일부에서 막힐 가능성. yfinance/KIS API 등 대체 출처 필요할 수 있음
+
+**다음 단계 (별도 PR)**
+- `enrich_stock_sector` 명령 — KIS `inquire-price` 호출로 `sector`(=bstp_kor_isnm) 채우기
+- `enrich_stock_meta` 명령 — KIS 종목 기본정보(`CTPF1604R`)로 market_cap / listed_at / ceo_name / description 등 보강
+- 미국 종목(S&P500 / NASDAQ100) — Wikipedia/Slickcharts + yfinance 별도 PR
+
+### 3.4.1 [P1] DART 재무 → Django 적재 management command
 
 ERD §4.1에 적재 흐름 정리돼 있음. 약 3000 종목 (KOSPI ~800 + KOSDAQ ~1600 + S&P500 + NASDAQ100):
 - 한국: **pykrx** (코드 리스트) + **KIS** (종목별 상세)
@@ -118,7 +136,7 @@ Gemini 피드백 ([docs/table and api feedback](table%20and%20api%20feedback)) �
 | 2.3 | **view_count 락 회피** — Redis `INCR` 버퍼 + Celery 배치(5~10분 주기)로 DB 동기화. 좋아요 카운트도 `CommunityPost.likes_count` 캐싱 컬럼으로 비정규화 | 커뮤니티 API 트래픽 확인 후 또는 초기 구현 시 |
 | 2.4 | **캐싱 TTL 유동화** — 장중(09:00~15:30) 3초/1초, 장외 60초+로 분기. KIS TPS 절약 | StockPriceView 실구현 시 |
 
-### 3.6 [P1] DART 재무 → Django 적재 management command
+### 3.6 [P1] DART 재무 → Django 적재 management command (3.4.1과 중복 — 통합 예정)
 
 `backend/stocks/management/commands/sync_financials.py`:
 ```python
