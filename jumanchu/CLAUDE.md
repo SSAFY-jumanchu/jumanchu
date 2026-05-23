@@ -10,8 +10,9 @@ SSAFY 광주 1반 6조, 약 6주 (2026-05-11 ~ 2026-06-25, 발표 6/25).
 
 ## 기술 스택
 
-- **Backend**: Django, Django REST Framework, PostgreSQL(예정)
-- **Frontend**: Vue.js, Pinia, Vite
+- **Backend**: Django 5.2, Django REST Framework, PostgreSQL 16 (Docker로 로컬 실행)
+- **Frontend**: Vue 3.5, Pinia, vue-router, axios, Vite 8
+- **인증**: JWT (`djangorestframework-simplejwt` 도입 예정) — 정책은 `docs/인증_권한_정책.md`
 - **외부 API**: KIS / pykrx / yfinance / DART OpenAPI / NewsData·Gnews / OpenAI
 - **CI/CD**: GitHub Actions (`.github/workflows/ci.yml`)
 - **이슈 관리**: Jira (`SCRUM` 프로젝트, `SCRUM-NN` 키 사용)
@@ -28,10 +29,17 @@ SSAFY 광주 1반 6조, 약 6주 (2026-05-11 ~ 2026-06-25, 발표 6/25).
 
 ```
 jumanchu/
-├── backend/              # Django (생성 예정)
-├── frontend/             # Vue (생성 예정)
-├── docs/                 # 모든 문서 (USER_STORIES, BRANCH_STRATEGY, JIRA_*, KICKOFF 등)
-├── planning/             # 기획 자료 (기획서 docx, ERD, UCD, 화면 시안)
+├── backend/              # Django 5.2 + DRF (config/만 셋업, 도메인 앱은 추가 예정)
+│   ├── config/           # settings, urls, wsgi, asgi
+│   ├── manage.py
+│   └── requirements.txt
+├── frontend/             # Vue 3.5 + Pinia + vue-router + axios + Vite 8
+│   ├── src/
+│   ├── public/
+│   └── package.json
+├── kis_test/             # KIS API 검증 스크립트 (가상 매매, 시세 호출)
+├── docs/                 # 모든 문서 (API/ERD/인증/Jira/브랜치 가이드 등 — 아래 표 참고)
+├── planning/             # 기획 자료 (기획서, ERD, UCD, 화면 시안, 아키텍처 SVG)
 ├── .github/              # PR/이슈 템플릿, CI 워크플로우
 └── CLAUDE.md             # 이 파일
 ```
@@ -39,6 +47,10 @@ jumanchu/
 ## 자주 쓰는 명령
 
 ```bash
+# DB (PostgreSQL 컨테이너)
+docker compose up -d db          # 기동
+docker compose down              # 종료 (데이터는 named volume에 보존)
+
 # Backend
 cd backend && python manage.py runserver
 python manage.py makemigrations && python manage.py migrate
@@ -46,7 +58,7 @@ python manage.py test
 
 # Frontend
 cd frontend && npm run dev
-npm run build && npm test
+npm run build && npm run preview
 ```
 
 ## 컨벤션
@@ -54,8 +66,8 @@ npm run build && npm test
 ### Git
 - **브랜치**: `<type>/<JIRA-KEY>-<짧은-설명>` 예) `feature/SCRUM-23-django-setup`
 - **커밋**: `<type>(<scope>): <subject>  [JIRA-KEY]` 예) `feat(auth): 회원가입 API 추가  [SCRUM-55]`
-- **PR**: `develop` 대상, CI 통과 + 1명 이상 리뷰 → Squash merge
-- `main`/`develop` 직접 push 금지
+- **PR**: `dev` 대상, CI 통과 + 1명 이상 리뷰 → Squash merge
+- `main`/`dev` 직접 push 금지
 - 자세히 → `docs/BRANCH_STRATEGY.md`
 
 ### Jira
@@ -74,6 +86,8 @@ npm run build && npm test
 
 추천 알고리즘 함수는 정율이 만들고, BE가 view에서 호출. **코드 작성 전 시그니처 합의 필수**.
 
+> Algo 모듈 위치는 합의 필요 (예: `backend/recommend/`). 현재 미생성 — 첫 추천 작업 시작 시 BE/Algo 페어로 결정.
+
 ```python
 # Algo가 만드는 함수
 def recommend_by_trending_news(user_id: int, limit: int = 10) -> list[StockRecommendation]:
@@ -89,10 +103,10 @@ class TrendingRecommendView(APIView):
 ## 충돌 방지 방침
 
 ### Git 머지 충돌
-- **작업 시작 전 `git pull origin develop`** 필수
+- **작업 시작 전 `git pull origin dev`** 필수
 - 한 브랜치 = 한 Story 또는 Sub-task (작게 자르기)
 - PR은 24시간 안에 머지 (장수명 브랜치 금지)
-- 브랜치가 develop과 24시간 이상 분기됐으면 **rebase**
+- 브랜치가 `dev`와 24시간 이상 분기됐으면 **rebase**
 - 같은 파일을 동시 수정할 가능성이 보이면 Slack에 미리 공지
 
 ### 인터페이스 충돌 (BE↔Algo↔FE)
@@ -119,10 +133,14 @@ class TrendingRecommendView(APIView):
 
 | 작업 | 먼저 봐야 할 문서 |
 |---|---|
-| 새 API 만들기 | `docs/USER_STORIES.md` (해당 US-NN) + `planning/모델_서비스flow/erd.png` |
-| 새 Vue 화면 만들기 | `docs/USER_STORIES.md` + `planning/화면예시/` |
-| 추천 알고리즘 작업 | `docs/USER_STORIES.md` US-04/05/10 (기획은 정율 책임) |
-| DB 모델 변경 | `planning/모델_서비스flow/erd.png` 먼저 확인 |
+| 새 API 만들기 | `docs/USER_STORIES.md` (해당 US-NN) + `docs/API_명세_초안.md` + `docs/API_스키마_v1.md` |
+| 새 Vue 화면 만들기 | `docs/USER_STORIES.md` + `docs/API_스키마_v1.md` + `planning/화면예시/` |
+| 추천 알고리즘 작업 | `docs/USER_STORIES.md` US-04/05/10 + `docs/DART_COLUMN.md` (입력 지표) |
+| DB 모델 변경 | **`docs/ERD.md` (진실의 원천)** + `planning/모델_서비스flow/erd.html` (시각본) |
+| 인증·권한 구현 | `docs/인증_권한_정책.md` (JWT/IsOwner 정책) |
+| 재무 지표 컬럼 추가 | `docs/DART_COLUMN.md` (컬럼 사전 + P0/P1/P2 우선순위) |
+| 서비스 흐름 이해 | `planning/모델_서비스flow/service_flow.md` |
+| 백엔드 아키텍처 | `planning/아키텍처/jumanchu_backend_architecture.svg` |
 | PR 만들기 | `docs/BRANCH_STRATEGY.md` |
 | Jira 이슈 만들기 | `docs/JIRA_관리구조.md` |
 
@@ -133,7 +151,7 @@ class TrendingRecommendView(APIView):
 ```
 docs/USER_STORIES.md US-02(회원가입)을 보고
 Django 회원가입 API를 구현해줘. 인수 조건을 모두 충족해야 해.
-ERD는 planning/모델_서비스flow/erd.png 참고.
+ERD는 docs/ERD.md (진실의 원천), 인증 정책은 docs/인증_권한_정책.md 참고.
 커밋 메시지에 [SCRUM-2] 넣어줘.
 ```
 

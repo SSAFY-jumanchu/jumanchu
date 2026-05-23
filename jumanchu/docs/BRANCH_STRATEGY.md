@@ -7,17 +7,17 @@
 | 브랜치 | 역할 | push 권한 |
 |---|---|---|
 | `main` | 발표/시연용 안정 버전. 항상 동작해야 함. | PR 머지만 |
-| `develop` | 통합 브랜치. 모든 feature가 여기로 머지됨. | PR 머지만 |
+| `dev` | 통합 브랜치. 모든 feature가 여기로 머지됨. | PR 머지만 |
 
 ## 2. 작업 브랜치 (Short-lived)
 
 | 접두어 | 용도 | 분기 위치 | 머지 대상 |
 |---|---|---|---|
-| `feature/` | 새 기능 (Story 단위) | `develop` | `develop` |
-| `fix/` | 버그 수정 | `develop` | `develop` |
-| `hotfix/` | 시연 직전 긴급 수정 | `main` | `main` + `develop` |
-| `chore/` | 설정, 문서, 의존성 업데이트 | `develop` | `develop` |
-| `refactor/` | 동작 변경 없는 리팩토링 | `develop` | `develop` |
+| `feature/` | 새 기능 (Story 단위) | `dev` | `dev` |
+| `fix/` | 버그 수정 | `dev` | `dev` |
+| `hotfix/` | 시연 직전 긴급 수정 | `main` | `main` + `dev` |
+| `chore/` | 설정, 문서, 의존성 업데이트 | `dev` | `dev` |
+| `refactor/` | 동작 변경 없는 리팩토링 | `dev` | `dev` |
 
 ## 3. 브랜치 명명 규칙
 
@@ -64,7 +64,7 @@ Closes SCRUM-4
 ## 5. PR 워크플로우
 
 1. Jira에서 이슈를 **In Progress**로 옮긴다.
-2. `develop`에서 `feature/SCRUM-XX-...` 브랜치를 만든다.
+2. `dev`에서 `feature/SCRUM-XX-...` 브랜치를 만든다.
 3. 작업 후 푸시 → PR 생성 (PR 템플릿 자동 적용).
 4. Jira 이슈를 **In Review**로 옮기고 PR 링크를 코멘트에 단다.
 5. 최소 1명 리뷰 + CI 통과 후 **Squash and merge**.
@@ -73,17 +73,17 @@ Closes SCRUM-4
 
 ## 6. main 머지 시점
 
-- 스프린트 종료 시 `develop` → `main` PR
+- 스프린트 종료 시 `dev` → `main` PR
 - 시연/발표 D-Day 직전에만 추가 머지
 - main 머지는 태그(`v0.1.0`, `v0.2.0`...)와 함께
 
 ## 7. 보호 규칙 (GitHub Branch Protection 권장 설정)
 
-`main` / `develop` 공통:
+`main` / `dev` 공통:
 - [ ] PR 없이 직접 push 금지
 - [ ] 최소 1명 리뷰 승인 필요
 - [ ] CI 통과 필수
 - [ ] 머지 전 최신 base 강제 (Require branches to be up to date)
 - [ ] 자기 자신 리뷰 승인 금지
 
-> 2인 팀이라 1명 승인이 부담이면 `develop`만 우선 보호하고 `main`은 수동 운영해도 됨.
+> 2인 팀이라 1명 승인이 부담이면 `dev`만 우선 보호하고 `main`은 수동 운영해도 됨.

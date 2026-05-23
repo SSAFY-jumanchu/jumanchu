@@ -10,6 +10,7 @@
 | 문서 | 언제 보나 |
 |---|---|
 | [PROJECT_SETUP_SUMMARY.md](./PROJECT_SETUP_SUMMARY.md) | **가장 먼저.** 지금 어디까지 셋업됐는지, 내가 뭘 해야 하는지 한 페이지 요약 |
+| [LOCAL_SETUP.md](./LOCAL_SETUP.md) | **새 PC에서 처음 클론할 때.** Docker/Python/Node 설치 → `.env` → DB → migrate → 서버 실행 |
 | [GITHUB_SETUP.md](./GITHUB_SETUP.md) | 로컬 git 초기화 → GitHub 원격 연결 → 첫 push 까지 단계별 명령 |
 | [BRANCH_STRATEGY.md](./BRANCH_STRATEGY.md) | 브랜치 명명 규칙 + 커밋 컨벤션 + PR 워크플로우 |
 

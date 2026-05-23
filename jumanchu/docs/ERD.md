@@ -8,7 +8,7 @@
 | 구분 | 변경 |
 |---|---|
 | 🆕 신규 | `ACCOUNT` (가상 잔액), `ORDER` (시스템 매매 기록) |
-| 🔄 변경 | `STOCK` (5개 필드 보강), `FINANCIAL_STATEMENT` (원본 X, 가공 지표만), `STOCK_DIARY` (매매 정보 → ORDER 이관, 일기 책임만) |
+| 🔄 변경 | `STOCK` (5개 필드 보강 + 메타 4개: description/homepage_url/ceo_name/employee_count — API_스키마_v1.md §3.2 정합), `ORDER` (fee/tax 보강), `FINANCIAL_STATEMENT` (원본 X, 가공 지표만), `STOCK_DIARY` (매매 정보 → ORDER 이관, 일기 책임만) |
 | ⏸️ 보류 | `STOCK_RECOMMENDATION` — 추천 트랙 1 완료 후 재검토 |
 | 📌 정책 | `STOCK_PRICE` 일봉만 DB, 실시간 시세는 Redis 캐싱 (DB 저장 X) |
 
@@ -60,6 +60,10 @@
 | **is_active** 🆕 | bool | 상장폐지 여부 |
 | **is_sp500** 🆕 | bool | S&P 500 구성 종목 여부 |
 | **is_nasdaq100** 🆕 | bool | NASDAQ 100 구성 종목 여부 |
+| **description** 🆕 | text | 회사 소개 (KIS 종목 기본정보 또는 yfinance) |
+| **homepage_url** 🆕 | string | 홈페이지 URL |
+| **ceo_name** 🆕 | string | 대표자명 |
+| **employee_count** 🆕 | int | 종업원 수 |
 | updated_at | datetime | KIS 마스터 갱신 시각 |
 
 인덱스: `(code, market)` unique, `(market, is_active)` for filtering, `(is_sp500)`, `(is_nasdaq100)` for index 필터.
@@ -165,6 +169,8 @@ user_id, stock_id, quantity, average_price, first_acquired_at, updated_at.
 | quantity | int | |
 | price | decimal | 체결가 |
 | total_amount | decimal | quantity × price (감사용) |
+| **fee** 🆕 | decimal | 수수료 (모의 매매 기본 0, 추후 정책에 따라 부과) |
+| **tax** 🆕 | decimal | 매도 거래세 (모의 매매 기본 0) |
 | status | enum | PENDING / FILLED / FAILED (비동기 대비) |
 | idempotency_key | string unique | 중복 매수/매도 차단 |
 | created_at | datetime | 요청 시각 |
