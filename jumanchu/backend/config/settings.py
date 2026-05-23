@@ -10,15 +10,10 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
-import os
 from pathlib import Path
-
-from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-load_dotenv(BASE_DIR.parent / '.env')
 
 
 # Quick-start development settings - unsuitable for production
@@ -42,34 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
-    # Third-party
-    'rest_framework',
-    'corsheaders',
-    'drf_spectacular',
-
-    # Local apps
-    'accounts',
-    'stocks',
-    'portfolio',
-    'diary',
-    'community',
 ]
-
-AUTH_USER_MODEL = 'accounts.User'
-
-REST_FRAMEWORK = {
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-}
-
-SPECTACULAR_SETTINGS = {
-    'TITLE': '주만추 API',
-    'DESCRIPTION': '주린이용 주식 투자 서비스 — REST API 명세 (v1.1)',
-    'VERSION': '1.1.0',
-    'SERVE_INCLUDE_SCHEMA': False,
-    'COMPONENT_SPLIT_REQUEST': True,
-    'SCHEMA_PATH_PREFIX': r'/api/v1',
-}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -106,12 +74,8 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ['DB_NAME'],
-        'USER': os.environ['DB_USER'],
-        'PASSWORD': os.environ['DB_PASSWORD'],
-        'HOST': os.environ.get('DB_HOST', 'localhost'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 

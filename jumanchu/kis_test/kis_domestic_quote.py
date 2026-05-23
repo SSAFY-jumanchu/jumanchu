@@ -285,9 +285,8 @@ class KISDomesticQuote:
 
 def _demo() -> None:
     """사용 예시: 삼성전자(005930) 모의투자 환경에서 시세 조회."""
-    # 프로젝트 루트(.env)를 명시적으로 로드 — 이 스크립트는 kis_test/ 하위에 있음
-    from dotenv import load_dotenv
-    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+    # .env 사용 시:
+    # from dotenv import load_dotenv; load_dotenv()
     cfg = KISConfig(
         app_key=os.environ["KIS_APP_KEY"],
         app_secret=os.environ["KIS_APP_SECRET"],
