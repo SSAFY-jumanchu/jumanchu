@@ -3,15 +3,9 @@ certifi==2026.4.22
 charset-normalizer==3.4.7
 Django==5.2.14
 django-cors-headers==4.9.0
-django-ratelimit==4.1.0
-django-redis==5.4.0
 djangorestframework==3.17.1
-djangorestframework-simplejwt==5.5.0
-drf-spectacular==0.28.0
 idna==3.15
-psycopg[binary]==3.2.10
 python-dotenv==1.2.2
-redis==5.2.1
 requests==2.34.2
 sqlparse==0.5.5
 tzdata==2026.2
