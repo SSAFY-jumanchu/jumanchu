@@ -107,7 +107,18 @@ python manage.py sync_stock_master --market US
 
 이 시점에 위 3.3의 업종 결정이 필요함.
 
-### 3.5 [P1] DART 재무 → Django 적재 management command
+### 3.5 [P1] 피드백 누적 — 구현 단계에서 처리할 미래 이슈
+
+Gemini 피드백 ([docs/table and api feedback](table%20and%20api%20feedback)) 중 명세대로(계획됨)거나 미래 이슈로 분류된 항목들:
+
+| # | 이슈 | 처리 시점 |
+|---|---|---|
+| 1.2 | **USD 잔고/환율 처리** — `Account.balance`는 KRW 단일. 해외 주식 매매 시 KRW 잔고에서 환전 차감(고정/실시간 환율)할지, 통화별 잔고 분리할지 결정 필요 | 미국 종목 매매 활성화 직전 |
+| 1.4 | **SharedPortfolioItem weight 합계 검증** — 동일 포트폴리오 내 weight 합이 100% 되도록 모델 `clean()` 또는 API 단 validator | 공유 포트폴리오 작성 API 실구현 시 |
+| 2.3 | **view_count 락 회피** — Redis `INCR` 버퍼 + Celery 배치(5~10분 주기)로 DB 동기화. 좋아요 카운트도 `CommunityPost.likes_count` 캐싱 컬럼으로 비정규화 | 커뮤니티 API 트래픽 확인 후 또는 초기 구현 시 |
+| 2.4 | **캐싱 TTL 유동화** — 장중(09:00~15:30) 3초/1초, 장외 60초+로 분기. KIS TPS 절약 | StockPriceView 실구현 시 |
+
+### 3.6 [P1] DART 재무 → Django 적재 management command
 
 `backend/stocks/management/commands/sync_financials.py`:
 ```python

@@ -24,6 +24,10 @@ class Stock(models.Model):
     is_active = models.BooleanField(default=True)
     is_sp500 = models.BooleanField(default=False)
     is_nasdaq100 = models.BooleanField(default=False)
+    description = models.TextField(blank=True)
+    homepage_url = models.URLField(max_length=200, null=True, blank=True)
+    ceo_name = models.CharField(max_length=100, blank=True)
+    employee_count = models.PositiveIntegerField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

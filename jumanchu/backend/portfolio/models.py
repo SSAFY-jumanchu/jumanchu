@@ -61,6 +61,8 @@ class Order(models.Model):
     quantity = models.PositiveIntegerField()
     price = models.DecimalField(max_digits=18, decimal_places=4)
     total_amount = models.DecimalField(max_digits=20, decimal_places=4)
+    fee = models.DecimalField(max_digits=12, decimal_places=4, default=0)
+    tax = models.DecimalField(max_digits=12, decimal_places=4, default=0)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     idempotency_key = models.CharField(max_length=64, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
