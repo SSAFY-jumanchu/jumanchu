@@ -74,6 +74,12 @@ coverage/
 secrets.json
 credentials.json
 
+# ===== DB dumps (팀원 공유는 USB/Drive로) =====
+jumanchu_db_*.sql
+jumanchu_db_*.dump
+_enrich.log
+_full_enrich.log
+
 # ===== Misc =====
 *.bak
 *.tmp
