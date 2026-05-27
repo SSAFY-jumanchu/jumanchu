@@ -80,6 +80,9 @@ jumanchu_db_*.dump
 _enrich.log
 _full_enrich.log
 
+# ===== 일회성 검증 결과 (kis_test 스크립트 dump) =====
+_kis_overseas_results.txt
+
 # ===== Misc =====
 *.bak
 *.tmp
