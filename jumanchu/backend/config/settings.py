@@ -62,6 +62,13 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'jumanchu-default',
+    },
+}
+
 SPECTACULAR_SETTINGS = {
     'TITLE': '주만추 API',
     'DESCRIPTION': '주린이용 주식 투자 서비스 — REST API 명세 (v1.1)',
