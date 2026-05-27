@@ -1,7 +1,7 @@
 # 작업 인수인계 — 다음에 할 일
 
 > 다른 PC에서 이어 받을 때 이 문서부터 읽으면 됩니다.
-> 갱신: 2026-05-26
+> 갱신: 2026-05-27
 
 ---
 
@@ -12,16 +12,11 @@
 - Stock·Order 모델 필드 보강 (description/homepage_url/ceo_name/employee_count, fee/tax)
 - drf-spectacular Swagger 스텁 25개 (`/api/docs/`)
 - DART 클라이언트 + FinancialSummary 가공 (`dart_test/`)
-- STOCK 마스터 적재 (3577 종목 code/name/market) — `sync_stock_master`
+- STOCK 마스터 적재 (3577 한국 종목 code/name/market) — `sync_stock_master`
 - KIS enrichment 명령 (`enrich_stock_meta_from_kis`) + **전체 실행 완료** (sector/market_cap/StockIndicator per/pbr/eps)
-
-`feature/SCRUM-58-dart-enrich` (2026-05-26 작업, PR 대기):
-- DART 클라이언트 → `backend/stocks/services/dart_client.py`로 이전 + `DartConfig.from_env()` 추가
-- `enrich_stock_meta_from_dart` 명령 — ceo_name/homepage_url/industry(KSIC)/listed_at 채움
-  - `hm_url`에 스킴 없을 때 `http://` 프리픽스 자동 부여
-  - `est_dt`(설립일) → `listed_at` 근사 매핑
-- 전체 실행 완료 (~2,800종목)
-- **DB 덤프 `jumanchu_db_2026-05-26.sql` 생성** (팀원 공유용, git에는 안 올림)
+- DART 클라이언트 → `backend/stocks/services/dart_client.py` + `enrich_stock_meta_from_dart` 명령 (ceo_name/homepage_url/industry/listed_at) — 전체 적재 완료
+- **US STOCK 마스터 적재 명령 (`sync_us_stock_master`)** — NASDAQ 3,906 + NYSE 2,036 = 미국 5,942종목 (2026-05-27)
+- DB 덤프 `jumanchu_db_2026-05-27.sql` (1.4MB, 한국+미국 마스터 + 한국 enrichment 포함, 팀원 공유용 — git 제외)
 
 ---
 
@@ -81,19 +76,9 @@ DART 응답의 자본변동표(SCE) 또는 현금흐름표(CIS)에 "배당금지
 dividend_row = _find_account(rows, sj_div="CIS", names=["배당금지급", "배당금의 지급"])
 ```
 
-### 2.6 [P1] 미국 종목 마스터 적재 (S&P500 / NASDAQ100)
+### 2.6 [P1] 미국 종목 enrichment (yfinance)
 
-한국의 `sync_stock_master`처럼 **티커/이름/시장만 먼저** 적재. enrichment는 2.7에서 분리.
-
-- 출처: Wikipedia (S&P500 구성종목 표) + Slickcharts/공식 NASDAQ100 리스트
-- 명령: `sync_us_stock_master --source sp500` / `--source nasdaq100`
-- Stock 필드: `code`(ticker), `name`, `market="NYSE"|"NASDAQ"`, `currency="USD"`, `is_sp500`/`is_nasdaq100` 플래그
-- 약 500 + 100 = 약 600종목 (중복 제외)
-- 호출 한도 없음 (정적 페이지 파싱)
-
-### 2.7 [P1] 미국 종목 enrichment (yfinance)
-
-KOSPI의 KIS+DART enrichment에 대응. **2.6 완료 후 실행**.
+KOSPI의 KIS+DART enrichment에 대응. 마스터 적재(`sync_us_stock_master`) 완료된 5,942종목에 메타 채우기.
 
 - yfinance `.info` 사용 (인증 불필요, rate limit 약함)
 - 매핑 표:
@@ -110,13 +95,16 @@ KOSPI의 KIS+DART enrichment에 대응. **2.6 완료 후 실행**.
 ```python
 import yfinance as yf
 info = yf.Ticker("AAPL").info
-# 600종목 × ~2s = 약 20분 (sleep 1.0s)
+# 5,942종목 × ~2s ≈ 약 3시간 (sleep 1.0s, 단발 실행 시)
+# 시연용 핵심 종목만 우선 (--limit 500 등) 추천
 ```
 
 - 명령: `enrich_us_stock_meta_from_yfinance` (KIS 명령 미러링)
 - 옵션: `--limit`, `--dry-run`, `--only-empty`
+- 의존성 추가: `yfinance` (requirements.txt — 현재 미설치)
+- 발표 데모용으로는 시총 큰 종목 우선 적재 → `--sort market_cap` 옵션 검토
 
-### 2.8 [P1] KSIC 매핑 테이블 (industry 코드 → 한글 이름)
+### 2.7 [P1] KSIC 매핑 테이블 (industry 코드 → 한글 이름)
 
 DART의 `induty_code`는 KSIC 표준 산업 코드("212", "46712" 등). 현재는 코드만 저장돼서 DB browser/admin에서 알아보기 어려움.
 
@@ -127,13 +115,13 @@ DART의 `induty_code`는 KSIC 표준 산업 코드("212", "46712" 등). 현재�
 
 > **왜 P1인가**: 사용자에게 보여줄 한글 분류는 `Stock.sector`(KIS 출처)에 이미 있음. KSIC는 세부 필터링/통계용이라 급하지 않음.
 
-### 2.9 [P2] KIS_ENV 정리 (소소)
+### 2.8 [P2] KIS_ENV 정리 (소소)
 
 `.env`에 `KIS_ENV=virtual`인데 `kis_test/kis_domestic_quote.py`는 `vts`만 받음.
 → `backend/stocks/services/kis_client.py`엔 이미 alias 추가됨 (운영용 OK).
 → `kis_test/`는 검증용으로만 남았으므로 굳이 손 안 봐도 됨. 정리할 거면 alias 추가하거나 `.env`를 `vts`로 통일.
 
-### 2.10 [P2] 미래 이슈 (Gemini 피드백 carryover)
+### 2.9 [P2] 미래 이슈 (Gemini 피드백 carryover)
 
 구현 단계 진입 시 처리:
 
