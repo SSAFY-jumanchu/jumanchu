@@ -1,7 +1,7 @@
 # 작업 인수인계 — 다음에 할 일
 
 > 다른 PC에서 이어 받을 때 이 문서부터 읽으면 됩니다.
-> 갱신: 2026-05-27
+> 갱신: 2026-05-28 (US enrichment 완료 + Stock 조회 API foundations 진행)
 
 ---
 
@@ -15,8 +15,10 @@
 - STOCK 마스터 적재 (3577 한국 종목 code/name/market) — `sync_stock_master`
 - KIS enrichment 명령 (`enrich_stock_meta_from_kis`) + **전체 실행 완료** (sector/market_cap/StockIndicator per/pbr/eps)
 - DART 클라이언트 → `backend/stocks/services/dart_client.py` + `enrich_stock_meta_from_dart` 명령 (ceo_name/homepage_url/industry/listed_at) — 전체 적재 완료
-- **US STOCK 마스터 적재 명령 (`sync_us_stock_master`)** — NASDAQ 3,906 + NYSE 2,036 = 미국 5,942종목 (2026-05-27)
+- **US STOCK 마스터 적재 명령 (`sync_us_stock_master`)** — NASDAQ 3,906 + NYSE 2,036 = 미국 5,942종목
+- **US enrichment 명령 (`enrich_us_stock_meta`)** — KIS price-detail(HHDFS76200200) + yfinance 하이브리드. 배치 결과: StockIndicator 100%, market_cap 99.8%, sector 45.6% (SPAC 다수 빈값 — 정상), industry 82.5%, homepage_url 78.9% [SCRUM-58]
 - DB 덤프 `jumanchu_db_2026-05-27.sql` (1.4MB, 한국+미국 마스터 + 한국 enrichment 포함, 팀원 공유용 — git 제외)
+- **Stock 조회 API foundations** (Step 1-3 / 11) — KIS_ENV=prod 전환, `settings.py CACHES` (LocMemCache), 전체 URL trailing slash 패치 (accounts/stocks/portfolio 23 path). Step 4-11(price_dispatch, views, tests)은 다음 세션 [SCRUM-60]
 
 ---
 
@@ -30,13 +32,19 @@ Swagger 스텁만 있는 8개 Auth 엔드포인트에 실제 로직 채우기.
 - login/logout: JWT 발급 + Cookie(HttpOnly) refresh
 - 자세히 → `docs/인증_권한_정책.md`
 
-### 2.2 [P0] Stock 조회 API 실구현 (SCRUM-?)
+### 2.2 [P0] Stock 조회 API 실구현 Step 4-11 (SCRUM-60)
 
-종목 상세 페이지에 필요한 데이터는 이제 다 DB에 있음 (Stock + StockIndicator):
-- `GET /api/stocks/{code}/` — sector/market_cap/per/pbr/eps/ceo_name/homepage_url
-- `GET /api/stocks/?market=KOSPI&search=` — 검색/필터
-- `GET /api/stocks/{code}/price/` — 현재가 (KIS 실시간 호출)
-- 캐싱 TTL: 장중 3초 / 장외 60초 (followup §3.4 미래이슈 참조)
+Step 1-3 foundations 완료 (§1 참조). 남은 단계:
+- Step 4: `backend/stocks/services/price_dispatch.py` — KR/US 매퍼 + `fetch_price(stock)` + `get_cache_ttl(stock)` 장중 3s/장외 60s 분기 (KST + ET)
+- Step 5: `backend/stocks/pagination.py` — `{items, page, size, total}` envelope helper
+- Step 6: `views.py` 3개 view 실구현 — `StockListView`/`StockDetailView`/`StockPriceView` (`is_in_watchlist` false 하드코딩)
+- Step 7: `requirements.txt`에 `freezegun` 추가 (시간 의존 테스트용)
+- Step 8: `stocks/tests.py` ~15개 케이스 (KIS mock)
+- Step 9: 수동 curl + `manage.py spectacular --validate`
+- Step 10: docs/API_스키마_v1.md 변경이력 + 이 §2.2 항목 제거
+- Step 11: feature 브랜치 PR
+
+세부 plan: `jumanchu/.claude-plans/stock-api.md` (workspace 내부, gitignore)
 
 ### 2.3 [P1] DART 재무 → FinancialSummary 적재 명령 작성
 
@@ -76,75 +84,11 @@ DART 응답의 자본변동표(SCE) 또는 현금흐름표(CIS)에 "배당금지
 dividend_row = _find_account(rows, sj_div="CIS", names=["배당금지급", "배당금의 지급"])
 ```
 
-### 2.6 [P1] 미국 종목 enrichment — 하이브리드 (KIS 시세 + yfinance 메타)
+### 2.6 [P2] 미국 enrichment yfinance 누락분 보완 (~20%)
 
-마스터 적재(`sync_us_stock_master`) 완료된 **5,942종목**에 sector/industry/market_cap/homepage_url + PER/PBR/EPS 채우기.
-
-#### 결론: 하이브리드 채택 (2026-05-27 탐색 완료)
-
-탐색 결과 ([kis_test/kis_overseas_quote.py](jumanchu/kis_test/kis_overseas_quote.py)) — KIS 해외 API에서 작동 확인된 것:
-
-| 엔드포인트 | TR_ID | 모의 환경 | 응답에 있는 핵심 컬럼 |
-|---|---|---|---|
-| current-price | HHDFS00000300 | ✅ | 현재가/거래량 (메타 빈약) |
-| **price-detail** | **HHDFS76200200** | **✅** | **e_icod(업종 한글), tomv(시총), perx/pbrx/epsx, h52p/l52p, shar** |
-| search-info | CTPF1702R | ❌ EGW02006 모의 미지원 | (실전키도 메타 부족) |
-
-→ KIS price-detail이 sector(한글)/PER/PBR/시총까지 다 줌. 하지만 industry(영문 세분 분류)/website는 KIS에 없음 → yfinance 보완.
-
-#### 컬럼별 출처
-
-| Stock/Indicator 필드 | 출처 | 키 매핑 | 비고 |
-|---|---|---|---|
-| `Stock.sector` | **KIS price-detail** | `e_icod` | 한글 ("컴퓨터전자장비/기기"). 한국과 일관! |
-| `Stock.market_cap` | **KIS** | `tomv` | USD 단위 직접 |
-| `Stock.industry` | **yfinance** | `industry` | 영문 ("Consumer Electronics") |
-| `Stock.homepage_url` | **yfinance** | `website` | KIS에 없음 |
-| `StockIndicator.per` | **KIS** | `perx` | 한국과 동일 출처 |
-| `StockIndicator.pbr` | **KIS** | `pbrx` | 한국과 동일 |
-| `StockIndicator.eps` | **KIS** | `epsx` | 한국과 동일 |
-| `StockIndicator.high_52w`, `low_52w` | **KIS** | `h52p`, `l52p` | 한국에선 안 채웠지만 미국엔 보너스 |
-
-#### 채우지 않을 컬럼 (사용자 결정)
-- `ceo_name` — yfinance 부정확 (WMT 같은 corporate-complex 케이스)
-- `employee_count` — 정율(Algo) 합의 전 보류
-- `description` — 영문, 한국과 비대칭
-- `listed_at` — yfinance None 흔함, KIS도 미확인
-
-#### 구현 가이드
-
-1. **`backend/stocks/services/kis_client.py`에 `get_overseas_price_detail(excd, symbol)` 추가**
-   - 한국 `get_current_price`와 동일 패턴
-   - `excd`: NAS/NYS, `symbol`: ticker
-   - tr_id: HHDFS76200200
-   - path: `/uapi/overseas-price/v1/quotations/price-detail`
-
-2. **`backend/stocks/management/commands/enrich_us_stock_meta.py` 작성**
-   - 한국 `enrich_stock_meta_from_kis`와 `enrich_stock_meta_from_dart`를 합친 형태
-   - KIS price-detail 호출 → sector/market_cap/PER/PBR/EPS/52주 채움
-   - yfinance .info 호출 → industry/homepage_url 채움
-   - 5,942 × (KIS 0.5s + yfinance 0.5s) ≈ **약 1.5시간**
-   - 옵션: `--limit`, `--dry-run`, `--only-empty`
-
-3. **KIS 모의 환경 안정성**: 한국에서 6% 실패율 봤음 (ETF/우선주). 미국은 마스터에 ETF 없으니 더 낮을 가능성. `--only-empty` 재시도 2회 정책 유지.
-
-4. **참고 메모리**: [us_stock_yfinance_quirks](~/.claude/projects/.../memory/us_stock_yfinance_quirks.md) — yfinance "Mr." 접두어, exchange 약어 무시 등 8가지 quirks
-
-5. **실전키 검토**: 모의에서도 price-detail 잘 동작하므로 발급 부담 대비 효익 작음. 발표 매매 시연 같은 별도 이유 있으면 발급.
-
-#### 결정된 사항 (이미 합의)
-
-채울 컬럼 (사용자 결정 2026-05-27):
-- ✅ `sector`, `industry`, `market_cap`, `homepage_url`
-- ✅ `StockIndicator.per`, `StockIndicator.pbr`
-- ❌ `ceo_name` (KIS 한국주는 DART로 채웠지만 미국은 출처 불명확 + 분석 무관)
-- ❌ `employee_count` (정율 합의 전엔 보류)
-- ❌ `description` (영문, 한국과 비대칭)
-- ❌ `listed_at` (yfinance None 흔함, KIS도 미확인)
-
-#### 참고 메모리
-
-데이터 한계: `~/.claude/projects/.../memory/us_stock_yfinance_quirks.md` — yfinance 사용 시 알아둘 8가지 케이스 (CEO 부정확, "Mr." 접두어, 거래소 코드 약어 등)
+1차 배치 도중 yfinance throttling → `--only-empty --no-yfinance` 재실행으로 KIS는 100% 채움. 다만 yfinance(`industry`/`homepage_url`)은 약 80%만 채움. 남은 ~20%는:
+- 시연 영향 작음 (대부분 마이너 종목 + SPAC)
+- 필요 시 시간 두고 `--only-empty` 한 번 더 (yfinance throttle 해제 후)
 
 ### 2.7 [P1] KSIC 매핑 테이블 (industry 코드 → 한글 이름)
 
@@ -159,9 +103,7 @@ DART의 `induty_code`는 KSIC 표준 산업 코드("212", "46712" 등). 현재�
 
 ### 2.8 [P2] KIS_ENV 정리 (소소)
 
-`.env`에 `KIS_ENV=virtual`인데 `kis_test/kis_domestic_quote.py`는 `vts`만 받음.
-→ `backend/stocks/services/kis_client.py`엔 이미 alias 추가됨 (운영용 OK).
-→ `kis_test/`는 검증용으로만 남았으므로 굳이 손 안 봐도 됨. 정리할 거면 alias 추가하거나 `.env`를 `vts`로 통일.
+현재 `.env`는 `KIS_ENV=prod` (Stock API 실시간 시세용). `kis_test/` 검증 스크립트는 `vts`만 받지만 운영 코드(`backend/stocks/services/kis_client.py`)는 `prod`/`real`/`vts`/`virtual` alias 모두 지원. `kis_test/`는 검증용으로만 남았으므로 굳이 손 안 대도 OK.
 
 ### 2.9 [P2] 미래 이슈 (Gemini 피드백 carryover)
 

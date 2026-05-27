@@ -83,6 +83,10 @@ _full_enrich.log
 # ===== 일회성 검증 결과 (kis_test 스크립트 dump) =====
 _kis_overseas_results.txt
 
+# ===== Claude Code 작업 메타 (개인 추적, 워크스페이스 설정) =====
+.claude/
+.claude-plans/
+
 # ===== Misc =====
 *.bak
 *.tmp
