@@ -165,3 +165,24 @@ class KISClient:
                 "FID_INPUT_ISCD": stock_code,
             },
         )
+
+    def get_overseas_price_detail(self, excd: str, symbol: str) -> dict[str, Any]:
+        """해외주식 현재가 상세 (HHDFS76200200). 모의 환경 OK.
+
+        excd: NAS(나스닥) / NYS(뉴욕) / AMS(아멕스) 등
+        symbol: ticker (예: AAPL)
+
+        응답 output 활용 필드:
+          e_icod  업종 한글명 (예: "컴퓨터전자장비/기기") -> Stock.sector
+          tomv    시가총액 (USD)                          -> Stock.market_cap
+          perx    PER                                     -> StockIndicator.per
+          pbrx    PBR                                     -> StockIndicator.pbr
+          epsx    EPS                                     -> StockIndicator.eps
+          h52p    52주 최고가                              -> StockIndicator.high_52w
+          l52p    52주 최저가                              -> StockIndicator.low_52w
+        """
+        return self._get(
+            path="/uapi/overseas-price/v1/quotations/price-detail",
+            tr_id="HHDFS76200200",
+            params={"AUTH": "", "EXCD": excd, "SYMB": symbol},
+        )
