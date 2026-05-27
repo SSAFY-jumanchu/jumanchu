@@ -76,44 +76,61 @@ DART 응답의 자본변동표(SCE) 또는 현금흐름표(CIS)에 "배당금지
 dividend_row = _find_account(rows, sj_div="CIS", names=["배당금지급", "배당금의 지급"])
 ```
 
-### 2.6 [P1] 미국 종목 enrichment — 출처 결정 + 명령 작성
+### 2.6 [P1] 미국 종목 enrichment — 하이브리드 (KIS 시세 + yfinance 메타)
 
-마스터 적재(`sync_us_stock_master`) 완료된 **5,942종목**에 sector/industry/market_cap/homepage_url + PER/PBR 채우기.
+마스터 적재(`sync_us_stock_master`) 완료된 **5,942종목**에 sector/industry/market_cap/homepage_url + PER/PBR/EPS 채우기.
 
-**현재 미정**: 데이터 출처가 KIS vs yfinance vs 하이브리드 중 무엇이 좋은지.
+#### 결론: 하이브리드 채택 (2026-05-27 탐색 완료)
 
-#### Step 1. KIS 해외 API 탐색 (먼저 할 것)
+탐색 결과 ([kis_test/kis_overseas_quote.py](jumanchu/kis_test/kis_overseas_quote.py)) — KIS 해외 API에서 작동 확인된 것:
 
-KIS Open API에 해외주식 엔드포인트들이 있음:
-- `HHDFS00000300` 해외주식 현재가 — 시세/시총/PER 계열
-- `HHDFS76200200` 해외주식 기본정보 — 메타 (종목명/통화/거래소 등)
+| 엔드포인트 | TR_ID | 모의 환경 | 응답에 있는 핵심 컬럼 |
+|---|---|---|---|
+| current-price | HHDFS00000300 | ✅ | 현재가/거래량 (메타 빈약) |
+| **price-detail** | **HHDFS76200200** | **✅** | **e_icod(업종 한글), tomv(시총), perx/pbrx/epsx, h52p/l52p, shar** |
+| search-info | CTPF1702R | ❌ EGW02006 모의 미지원 | (실전키도 메타 부족) |
 
-탐색 목적: **각 응답이 우리가 필요한 컬럼(sector/industry/market_cap/homepage_url)을 주는지 + KIS_ENV=virtual에서 작동하는지 확인**.
+→ KIS price-detail이 sector(한글)/PER/PBR/시총까지 다 줌. 하지만 industry(영문 세분 분류)/website는 KIS에 없음 → yfinance 보완.
 
-탐색 방법 (kis_test/ 폴더에 검증 스크립트):
-```python
-# kis_test/kis_overseas_quote.py 같은 파일 작성
-# AAPL, NVDA, JPM, BRK-B 등 다양한 종목으로 호출
-# 응답에 어떤 키들이 있는지 출력
-```
+#### 컬럼별 출처
 
-체크리스트:
-- [ ] 모의(virtual) 환경에서 미국 시세 호출 성공률
-- [ ] sector/industry 같은 영문 분류 컬럼 존재 여부
-- [ ] homepage_url 컬럼 존재 여부
-- [ ] market_cap 단위·정확도
-- [ ] PER/PBR 컬럼 존재 여부
-- [ ] 분당 호출 한도 (한국과 다를 수 있음)
+| Stock/Indicator 필드 | 출처 | 키 매핑 | 비고 |
+|---|---|---|---|
+| `Stock.sector` | **KIS price-detail** | `e_icod` | 한글 ("컴퓨터전자장비/기기"). 한국과 일관! |
+| `Stock.market_cap` | **KIS** | `tomv` | USD 단위 직접 |
+| `Stock.industry` | **yfinance** | `industry` | 영문 ("Consumer Electronics") |
+| `Stock.homepage_url` | **yfinance** | `website` | KIS에 없음 |
+| `StockIndicator.per` | **KIS** | `perx` | 한국과 동일 출처 |
+| `StockIndicator.pbr` | **KIS** | `pbrx` | 한국과 동일 |
+| `StockIndicator.eps` | **KIS** | `epsx` | 한국과 동일 |
+| `StockIndicator.high_52w`, `low_52w` | **KIS** | `h52p`, `l52p` | 한국에선 안 채웠지만 미국엔 보너스 |
 
-#### Step 2. 출처 선택 + enrichment 명령 작성
+#### 채우지 않을 컬럼 (사용자 결정)
+- `ceo_name` — yfinance 부정확 (WMT 같은 corporate-complex 케이스)
+- `employee_count` — 정율(Algo) 합의 전 보류
+- `description` — 영문, 한국과 비대칭
+- `listed_at` — yfinance None 흔함, KIS도 미확인
 
-탐색 결과에 따라 3가지 옵션 중 선택:
+#### 구현 가이드
 
-| 옵션 | 채택 조건 | 장단점 |
-|---|---|---|
-| **A. KIS 단독** | KIS 해외가 sector/industry/website 다 줌 + virtual에서 안정 | 한국과 코드 일관성↑. 실전 키 필요 가능성 |
-| **B. yfinance 단독** | KIS 해외가 메타(sector/website) 부족하거나 virtual에서 불안정 | 인증 불필요. 비공식 wrapper라 deprecation 위험 |
-| **C. 하이브리드** | KIS는 시세만 잘 줌, 메타는 부족 | KIS=시세(PER/PBR/market_cap), yfinance=메타(sector/website). 한국 패턴(KIS=시세, DART=메타)과 일관 |
+1. **`backend/stocks/services/kis_client.py`에 `get_overseas_price_detail(excd, symbol)` 추가**
+   - 한국 `get_current_price`와 동일 패턴
+   - `excd`: NAS/NYS, `symbol`: ticker
+   - tr_id: HHDFS76200200
+   - path: `/uapi/overseas-price/v1/quotations/price-detail`
+
+2. **`backend/stocks/management/commands/enrich_us_stock_meta.py` 작성**
+   - 한국 `enrich_stock_meta_from_kis`와 `enrich_stock_meta_from_dart`를 합친 형태
+   - KIS price-detail 호출 → sector/market_cap/PER/PBR/EPS/52주 채움
+   - yfinance .info 호출 → industry/homepage_url 채움
+   - 5,942 × (KIS 0.5s + yfinance 0.5s) ≈ **약 1.5시간**
+   - 옵션: `--limit`, `--dry-run`, `--only-empty`
+
+3. **KIS 모의 환경 안정성**: 한국에서 6% 실패율 봤음 (ETF/우선주). 미국은 마스터에 ETF 없으니 더 낮을 가능성. `--only-empty` 재시도 2회 정책 유지.
+
+4. **참고 메모리**: [us_stock_yfinance_quirks](~/.claude/projects/.../memory/us_stock_yfinance_quirks.md) — yfinance "Mr." 접두어, exchange 약어 무시 등 8가지 quirks
+
+5. **실전키 검토**: 모의에서도 price-detail 잘 동작하므로 발급 부담 대비 효익 작음. 발표 매매 시연 같은 별도 이유 있으면 발급.
 
 #### 결정된 사항 (이미 합의)
 
