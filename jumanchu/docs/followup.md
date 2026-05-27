@@ -76,33 +76,58 @@ DART 응답의 자본변동표(SCE) 또는 현금흐름표(CIS)에 "배당금지
 dividend_row = _find_account(rows, sj_div="CIS", names=["배당금지급", "배당금의 지급"])
 ```
 
-### 2.6 [P1] 미국 종목 enrichment (yfinance)
+### 2.6 [P1] 미국 종목 enrichment — 출처 결정 + 명령 작성
 
-KOSPI의 KIS+DART enrichment에 대응. 마스터 적재(`sync_us_stock_master`) 완료된 5,942종목에 메타 채우기.
+마스터 적재(`sync_us_stock_master`) 완료된 **5,942종목**에 sector/industry/market_cap/homepage_url + PER/PBR 채우기.
 
-- yfinance `.info` 사용 (인증 불필요, rate limit 약함)
-- 매핑 표:
+**현재 미정**: 데이터 출처가 KIS vs yfinance vs 하이브리드 중 무엇이 좋은지.
 
-| Stock 필드 | yfinance .info 키 |
-|---|---|
-| `sector` | `sector` |
-| `industry` | `industry` |
-| `market_cap` | `marketCap` (USD) |
-| `ceo_name` | (직접 키 없음 — `companyOfficers`에서 CEO 추출) |
-| `homepage_url` | `website` |
-| `description` | `longBusinessSummary` |
+#### Step 1. KIS 해외 API 탐색 (먼저 할 것)
 
+KIS Open API에 해외주식 엔드포인트들이 있음:
+- `HHDFS00000300` 해외주식 현재가 — 시세/시총/PER 계열
+- `HHDFS76200200` 해외주식 기본정보 — 메타 (종목명/통화/거래소 등)
+
+탐색 목적: **각 응답이 우리가 필요한 컬럼(sector/industry/market_cap/homepage_url)을 주는지 + KIS_ENV=virtual에서 작동하는지 확인**.
+
+탐색 방법 (kis_test/ 폴더에 검증 스크립트):
 ```python
-import yfinance as yf
-info = yf.Ticker("AAPL").info
-# 5,942종목 × ~2s ≈ 약 3시간 (sleep 1.0s, 단발 실행 시)
-# 시연용 핵심 종목만 우선 (--limit 500 등) 추천
+# kis_test/kis_overseas_quote.py 같은 파일 작성
+# AAPL, NVDA, JPM, BRK-B 등 다양한 종목으로 호출
+# 응답에 어떤 키들이 있는지 출력
 ```
 
-- 명령: `enrich_us_stock_meta_from_yfinance` (KIS 명령 미러링)
-- 옵션: `--limit`, `--dry-run`, `--only-empty`
-- 의존성 추가: `yfinance` (requirements.txt — 현재 미설치)
-- 발표 데모용으로는 시총 큰 종목 우선 적재 → `--sort market_cap` 옵션 검토
+체크리스트:
+- [ ] 모의(virtual) 환경에서 미국 시세 호출 성공률
+- [ ] sector/industry 같은 영문 분류 컬럼 존재 여부
+- [ ] homepage_url 컬럼 존재 여부
+- [ ] market_cap 단위·정확도
+- [ ] PER/PBR 컬럼 존재 여부
+- [ ] 분당 호출 한도 (한국과 다를 수 있음)
+
+#### Step 2. 출처 선택 + enrichment 명령 작성
+
+탐색 결과에 따라 3가지 옵션 중 선택:
+
+| 옵션 | 채택 조건 | 장단점 |
+|---|---|---|
+| **A. KIS 단독** | KIS 해외가 sector/industry/website 다 줌 + virtual에서 안정 | 한국과 코드 일관성↑. 실전 키 필요 가능성 |
+| **B. yfinance 단독** | KIS 해외가 메타(sector/website) 부족하거나 virtual에서 불안정 | 인증 불필요. 비공식 wrapper라 deprecation 위험 |
+| **C. 하이브리드** | KIS는 시세만 잘 줌, 메타는 부족 | KIS=시세(PER/PBR/market_cap), yfinance=메타(sector/website). 한국 패턴(KIS=시세, DART=메타)과 일관 |
+
+#### 결정된 사항 (이미 합의)
+
+채울 컬럼 (사용자 결정 2026-05-27):
+- ✅ `sector`, `industry`, `market_cap`, `homepage_url`
+- ✅ `StockIndicator.per`, `StockIndicator.pbr`
+- ❌ `ceo_name` (KIS 한국주는 DART로 채웠지만 미국은 출처 불명확 + 분석 무관)
+- ❌ `employee_count` (정율 합의 전엔 보류)
+- ❌ `description` (영문, 한국과 비대칭)
+- ❌ `listed_at` (yfinance None 흔함, KIS도 미확인)
+
+#### 참고 메모리
+
+데이터 한계: `~/.claude/projects/.../memory/us_stock_yfinance_quirks.md` — yfinance 사용 시 알아둘 8가지 케이스 (CEO 부정확, "Mr." 접두어, 거래소 코드 약어 등)
 
 ### 2.7 [P1] KSIC 매핑 테이블 (industry 코드 → 한글 이름)
 
