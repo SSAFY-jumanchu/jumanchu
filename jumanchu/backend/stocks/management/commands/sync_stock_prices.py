@@ -4,7 +4,7 @@
 출처
 ----
 한국(KRW): KIS get_domestic_daily_price (FHKST03010100). 100행/호출 → 날짜 페이징
-미국(USD): yfinance history(period) — 한 번에 1년치 OHLCV
+미국(USD): KIS get_overseas_daily_price (HHDFS76240000). 100행/호출 → 날짜 페이징
 
 적재: bulk_create(ignore_conflicts=True) — unique(stock, price_date)라 재실행 안전.
 
@@ -82,28 +82,48 @@ def _kr_to_price(stock: Stock, r: dict) -> Optional[StockPrice]:
     )
 
 
-def _us_rows(stock: Stock, days: int) -> list[StockPrice]:
-    """yfinance history → StockPrice 리스트."""
-    import yfinance as yf
-    period = "1y" if days <= 370 else "2y"
-    df = yf.Ticker(stock.code).history(period=period, auto_adjust=False)
-    if df is None or df.empty:
-        return []
-    out = []
-    for ts, row in df.iterrows():
-        d = ts.date() if hasattr(ts, "date") else ts
-        close = _dec(row.get("Close"))
-        if close is None or close != close:  # NaN 방어
-            continue
-        out.append(StockPrice(
-            stock=stock, price_date=d,
-            open=_dec(row.get("Open")) or close,
-            high=_dec(row.get("High")) or close,
-            low=_dec(row.get("Low")) or close,
-            close=close,
-            volume=int(row.get("Volume") or 0),
-        ))
-    return out
+MARKET_TO_EXCD = {"NASDAQ": "NAS", "NYSE": "NYS"}
+
+
+def _us_daily_rows(client: KISClient, excd: str, symbol: str,
+                   start: date, end: date, sleep_sec: float) -> list[dict]:
+    """KIS 해외 일봉 100행 한계 → 날짜 페이징으로 start~end 전체 수집."""
+    rows: list[dict] = []
+    seen: set[str] = set()
+    cur = end
+    while cur >= start:
+        resp = client.get_overseas_daily_price(excd, symbol, _ymd(cur))
+        out = [r for r in (resp.get("output2") or []) if r.get("xymd")]
+        time.sleep(sleep_sec)  # KIS 호출마다 sleep (종목 간 rate-limit 보호)
+        if not out:
+            break
+        new = [r for r in out if r["xymd"] not in seen]
+        for r in new:
+            seen.add(r["xymd"])
+        rows += new
+        oldest_date = datetime.strptime(min(r["xymd"] for r in out), "%Y%m%d").date()
+        if oldest_date <= start:
+            break
+        cur = oldest_date - timedelta(days=1)
+    return [r for r in rows if r["xymd"] >= _ymd(start)]
+
+
+def _us_to_price(stock: Stock, r: dict) -> Optional[StockPrice]:
+    try:
+        d = datetime.strptime(r["xymd"], "%Y%m%d").date()
+    except (ValueError, KeyError):
+        return None
+    close = _dec(r.get("clos"))
+    if close is None:
+        return None
+    return StockPrice(
+        stock=stock, price_date=d,
+        open=_dec(r.get("open")) or close,
+        high=_dec(r.get("high")) or close,
+        low=_dec(r.get("low")) or close,
+        close=close,
+        volume=int(r.get("tvol") or 0),
+    )
 
 
 class Command(BaseCommand):
@@ -139,7 +159,7 @@ class Command(BaseCommand):
         if market in ("KR", "all"):
             self._run_kr(start, end, limit, dry_run, sleep_sec, only_empty)
         if market in ("US", "all"):
-            self._run_us(days, limit, dry_run, sleep_sec, only_empty)
+            self._run_us(start, end, limit, dry_run, sleep_sec, only_empty)
 
     def _base_qs(self, currency, only_empty, limit):
         qs = Stock.objects.filter(currency=currency, is_active=True).order_by("market", "code")
@@ -172,14 +192,22 @@ class Command(BaseCommand):
                 self.stdout.write(f"    ... KR {i}/{total} (ok={ok} fail={fail})")
         self.stdout.write(self.style.SUCCESS(f"  [KR] 완료 ok={ok} fail={fail}"))
 
-    def _run_us(self, days, limit, dry_run, sleep_sec, only_empty):
+    def _run_us(self, start, end, limit, dry_run, sleep_sec, only_empty):
+        client = KISClient(KISConfig.from_env())
         qs = self._base_qs("USD", only_empty, limit)
         total = qs.count()
         self.stdout.write(f"  [US] 대상 {total}건")
         ok = fail = 0
         for i, stock in enumerate(qs, 1):
+            excd = MARKET_TO_EXCD.get(stock.market)
+            if not excd:
+                fail += 1
+                self.stdout.write(self.style.WARNING(
+                    f"  [US {i:>4}/{total}] {stock.code} 알 수 없는 시장 {stock.market} skip"))
+                continue
             try:
-                prices = _us_rows(stock, days)
+                rows = _us_daily_rows(client, excd, stock.code, start, end, sleep_sec)
+                prices = [p for r in rows if (p := _us_to_price(stock, r))]
                 if dry_run:
                     self.stdout.write(f"  [US {i:>4}/{total}] {stock.code}: {len(prices)}일봉")
                 else:
@@ -188,7 +216,6 @@ class Command(BaseCommand):
             except Exception as e:
                 fail += 1
                 self.stdout.write(self.style.WARNING(f"  [US {i:>4}/{total}] {stock.code} FAIL: {e}"))
-            time.sleep(sleep_sec)
             if i % 50 == 0:
                 self.stdout.write(f"    ... US {i}/{total} (ok={ok} fail={fail})")
         self.stdout.write(self.style.SUCCESS(f"  [US] 완료 ok={ok} fail={fail}"))

@@ -17,6 +17,10 @@ SSAFY 광주 1반 6조, 약 6주 (2026-05-11 ~ 2026-06-25, 발표 6/25).
 - **CI/CD**: GitHub Actions (`.github/workflows/ci.yml`)
 - **이슈 관리**: Jira (`SCRUM` 프로젝트, `SCRUM-NN` 키 사용)
 
+> **종목 가격 데이터는 무조건 KIS API 사용** (현재가·일봉·호가 — 국내/해외 모두).
+> yfinance는 가격 경로에 쓰지 말 것 — `industry`/`homepage_url` 같은 **메타데이터 보완용으로만**.
+> 이유: yfinance 스크래핑 throttling으로 대량 적재가 불안정 + 한·미 출처 일관성(조정주가/필드 의미 통일).
+
 ## 팀 분담 (3인)
 
 - **강재민 (BE)** — Django 코드 전부(모델/뷰/URL/마이그레이션), 외부 API 연동, 추천 함수 호출해 REST로 노출, CI/CD

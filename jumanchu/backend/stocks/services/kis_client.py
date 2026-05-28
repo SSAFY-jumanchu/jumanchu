@@ -187,6 +187,25 @@ class KISClient:
             params={"AUTH": "", "EXCD": excd, "SYMB": symbol},
         )
 
+    def get_overseas_daily_price(self, excd: str, symbol: str, bymd: str,
+                                 gubn: str = "0", modp: str = "0") -> dict[str, Any]:
+        """해외주식 기간별시세 (HHDFS76240000). 모의/실전 OK. 100행/호출.
+
+        excd: NAS/NYS, symbol: ticker
+        gubn: 0=일 / 1=주 / 2=월
+        bymd: 조회 기준일자(YYYYMMDD) — 이 날짜부터 과거로 100행
+        modp: 0=원주가 / 1=수정주가
+
+        응답 output2(일자별 배열) 활용 필드:
+          xymd 일자, open/high/low 시·고·저, clos 종가, tvol 거래량
+        """
+        return self._get(
+            path="/uapi/overseas-price/v1/quotations/dailyprice",
+            tr_id="HHDFS76240000",
+            params={"AUTH": "", "EXCD": excd, "SYMB": symbol,
+                    "GUBN": gubn, "BYMD": bymd, "MODP": modp},
+        )
+
     def get_domestic_daily_price(
         self, stock_code: str, start_yyyymmdd: str, end_yyyymmdd: str,
     ) -> dict[str, Any]:
