@@ -186,3 +186,29 @@ class KISClient:
             tr_id="HHDFS76200200",
             params={"AUTH": "", "EXCD": excd, "SYMB": symbol},
         )
+
+    def get_domestic_daily_price(
+        self, stock_code: str, start_yyyymmdd: str, end_yyyymmdd: str,
+    ) -> dict[str, Any]:
+        """국내주식 기간별 일봉 (FHKST03010100). 모의 환경 OK. 한 번에 ~100행.
+
+        output2 각 행 활용 필드:
+          stck_bsop_date  영업일자 (YYYYMMDD)
+          stck_clpr       종가
+          stck_oprc       시가
+          stck_hgpr       고가
+          stck_lwpr       저가
+          acml_vol        누적 거래량
+        """
+        return self._get(
+            path="/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+            tr_id="FHKST03010100",
+            params={
+                "FID_COND_MRKT_DIV_CODE": "J",
+                "FID_INPUT_ISCD": stock_code,
+                "FID_INPUT_DATE_1": start_yyyymmdd,
+                "FID_INPUT_DATE_2": end_yyyymmdd,
+                "FID_PERIOD_DIV_CODE": "D",
+                "FID_ORG_ADJ_PRC": "0",
+            },
+        )
