@@ -44,6 +44,16 @@ Step 1-3 foundations 완료 (§1 참조). 남은 단계:
 - Step 10: docs/API_스키마_v1.md 변경이력 + 이 §2.2 항목 제거
 - Step 11: feature 브랜치 PR
 
+> **종목 분류 표시 — serializer에 `display_category` computed field 추가 권장**
+> 미국 종목은 `sector`(KIS 한글)가 ~46%만 채워짐 (KIS e_icod가 SPAC/소형주/ADR 미커버). 반면 `industry`(yfinance 영문)는 커버리지가 더 넓음. 단일 표시 필드를 serializer에서 만들어 FE가 분기 없이 쓰게:
+> ```python
+> # stocks/serializers.py
+> display_category = serializers.SerializerMethodField()
+> def get_display_category(self, obj):
+>     return obj.sector or obj.industry or ""  # 한글 우선, 없으면 영문 fallback
+> ```
+> → FE는 `display_category` 하나만 사용. sector/industry 분기 로직이 FE에 흩어지지 않음.
+
 세부 plan: `jumanchu/.claude-plans/stock-api.md` (workspace 내부, gitignore)
 
 ### 2.3 [P1] DART 재무 → FinancialSummary 적재 명령 작성
