@@ -13,6 +13,7 @@ api_v1_patterns = [
 ]
 
 urlpatterns = [
+    path('', include('pages.urls')),
     path('admin/', admin.site.urls),
     path('api/v1/', include(api_v1_patterns)),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

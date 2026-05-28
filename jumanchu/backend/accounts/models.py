@@ -13,13 +13,15 @@ class User(AbstractUser):
 class InvestmentProfile(models.Model):
     class RiskType(models.TextChoices):
         CONSERVATIVE = "CONSERVATIVE", "안정형"
-        MODERATE = "MODERATE", "중립형"
+        BALANCED = "BALANCED", "중립형"
         AGGRESSIVE = "AGGRESSIVE", "공격형"
 
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="investment_profile"
     )
     risk_type = models.CharField(max_length=16, choices=RiskType.choices)
+    risk_score = models.PositiveSmallIntegerField(null=True, blank=True)
+    survey_answers = models.JSONField(default=dict, blank=True)
     investment_style = models.CharField(max_length=50, blank=True)
     preferred_period = models.PositiveSmallIntegerField(
         null=True,

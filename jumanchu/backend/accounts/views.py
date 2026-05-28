@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -5,6 +7,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts import serializers as s
+from accounts.models import InvestmentProfile
+from accounts.services import calculate_investment_profile
 
 
 def _stub():
@@ -93,7 +97,48 @@ class OnboardingView(APIView):
         responses={200: s.OnboardingResponseSerializer},
     )
     def post(self, request):
-        return _stub()
+        serializer = s.OnboardingRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        survey_answers = data.get('survey_answers')
+        score_breakdown = None
+        risk_score = None
+
+        if survey_answers:
+            survey_result = calculate_investment_profile(survey_answers)
+            risk_type = survey_result.risk_type
+            risk_score = survey_result.risk_score
+            risk_profile = survey_result.risk_label
+            score_breakdown = survey_result.score_breakdown
+        else:
+            risk_type = data['risk_type']
+            risk_profile = InvestmentProfile.RiskType(risk_type).label
+
+        profile, _ = InvestmentProfile.objects.get_or_create(
+            user=request.user,
+            defaults={'risk_type': risk_type},
+        )
+        profile.risk_type = risk_type
+        profile.risk_score = risk_score
+        profile.survey_answers = survey_answers or {}
+        profile.investment_style = data.get('investment_style') or profile.investment_style or risk_profile
+
+        if 'preferred_period' in data:
+            profile.preferred_period = data['preferred_period']
+        if 'preferred_sector' in data:
+            profile.preferred_sector = data['preferred_sector']
+
+        profile.save()
+
+        return Response({
+            'user': s.UserSerializer(request.user).data,
+            'profile_stock': None,
+            'welcome_bonus': Decimal('0'),
+            'risk_score': risk_score,
+            'risk_profile': risk_profile,
+            'score_breakdown': score_breakdown,
+        })
 
 
 @extend_schema(tags=['Auth'])

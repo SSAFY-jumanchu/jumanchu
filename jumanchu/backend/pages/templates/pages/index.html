@@ -1,0 +1,217 @@
+{% load static %}
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>주만추 | 투자 성향 기반 주식 추천</title>
+  <link rel="stylesheet" href="{% static 'pages/index.css' %}">
+</head>
+<body class="onboarding-active">
+  {{ survey_questions|json_script:"survey-questions" }}
+  {{ sectors|json_script:"sector-options" }}
+  {{ holding_periods|json_script:"holding-period-options" }}
+  {{ recommendations|json_script:"recommendation-data" }}
+  {{ onboarding_api_url|json_script:"onboarding-api-url" }}
+
+  <section class="onboarding-overlay" data-onboarding-overlay aria-label="투자 성향 온보딩">
+    <div class="onboarding-card" data-onboarding-card>
+      <div class="onboarding-top">
+        <div>
+          <span class="step-label" data-step-label>문항 1</span>
+          <h1 data-question-title>투자 목적</h1>
+          <p data-question-caption>주식 추천의 방향을 정하는 첫 기준입니다.</p>
+        </div>
+        <div class="score-ring" aria-label="가중 점수">
+          <strong data-score-ring>0</strong>
+          <span>score</span>
+        </div>
+      </div>
+
+      <div class="progress-track" aria-hidden="true">
+        <span data-progress-bar></span>
+      </div>
+
+      <div class="option-list" data-option-list></div>
+
+      <div class="onboarding-preferences">
+        <div>
+          <span class="field-label">관심 섹터</span>
+          <div class="segmented" data-sector-list></div>
+        </div>
+        <div>
+          <span class="field-label">선호 보유 기간</span>
+          <div class="segmented compact" data-period-list></div>
+        </div>
+      </div>
+
+      <div class="panel-actions">
+        <button type="button" class="ghost-btn" data-prev-button disabled>이전</button>
+        <button type="button" class="primary-btn" data-next-button disabled>다음</button>
+      </div>
+    </div>
+
+    <div class="onboarding-loading" data-onboarding-loading hidden>
+      <div class="loader-ring" aria-hidden="true"></div>
+      <strong data-loading-title>추천 알고리즘 분석 중</strong>
+      <p data-loading-copy>성향, 섹터, 보유 기간을 조합해 후보 종목을 불러오고 있습니다.</p>
+    </div>
+  </section>
+
+  <main class="app-screen site-content">
+    <div class="laser-field" aria-hidden="true">
+      <svg viewBox="0 0 1440 760" preserveAspectRatio="none">
+        <path class="laser-glow" d="M-80 560 C 170 330 270 650 470 390 S 820 80 1050 290 S 1320 600 1520 220"></path>
+        <path class="laser-core" d="M-80 560 C 170 330 270 650 470 390 S 820 80 1050 290 S 1320 600 1520 220"></path>
+        <path class="laser-trace" d="M-80 560 C 170 330 270 650 470 390 S 820 80 1050 290 S 1320 600 1520 220"></path>
+      </svg>
+    </div>
+
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="주만추 홈">주만추</a>
+      <nav class="menu" aria-label="주요 메뉴">
+        <a href="#main-index" class="active">매칭 카드</a>
+        <a href="#market-pulse">시장 펄스</a>
+        <a href="/api/docs/">API 문서</a>
+      </nav>
+      <div class="market-time">
+        <span class="live-dot" aria-hidden="true"></span>
+        KIS API 연결 준비
+      </div>
+    </header>
+
+    <section class="hero-shell shell">
+      <div class="hero-copy">
+        <div class="eyebrow">
+          <span class="live-dot" aria-hidden="true"></span>
+          투자 성향 기반 종목 매칭
+        </div>
+        <h1>
+          주식도<br>
+          나랑 맞는<br>
+          후보부터
+        </h1>
+        <p>
+          온보딩 결과를 바탕으로 내 성향에 맞는 종목을 카드처럼 넘겨봅니다.
+          마음에 드는 후보는 오른쪽, 애매한 후보는 왼쪽으로 보내세요.
+        </p>
+      </div>
+
+      <div class="hero-status">
+        <div class="mini-metric">
+          <span>매칭 진행률</span>
+          <strong data-progress-text>0%</strong>
+        </div>
+        <div class="mini-metric">
+          <span>가중 점수</span>
+          <strong data-total-score>0</strong>
+        </div>
+        <div class="mini-metric wide" data-profile-card>
+          <span>나의 성향</span>
+          <strong data-risk-label>분석 대기</strong>
+          <small data-risk-description>온보딩이 끝나면 추천 덱이 열립니다.</small>
+        </div>
+      </div>
+    </section>
+
+    <section class="main-index shell" id="main-index" aria-label="메인 매칭 카드">
+      <div class="section-head">
+        <div>
+          <span>Jumanchu match</span>
+          <h2>주만추 매칭 카드</h2>
+        </div>
+        <button type="button" class="view-more" data-reopen-onboarding>성향 다시 분석</button>
+      </div>
+
+      <div class="match-arena">
+        <aside class="match-sidebar">
+          <div class="asset-ladder">
+            <span>자산 레벨</span>
+            <div class="asset-row">
+              <small>현재 내 자산</small>
+              <strong>게이밍 데스크탑</strong>
+            </div>
+            <div class="asset-arrow" aria-hidden="true"></div>
+            <div class="asset-row next">
+              <small>다음 자산</small>
+              <strong>국산 경차</strong>
+            </div>
+          </div>
+
+          <div class="profile-panel" data-main-profile-card>
+            <span data-risk-english>Waiting</span>
+            <strong data-main-risk-label>성향 분석 전</strong>
+            <p data-main-risk-description>온보딩 완료 후 알고리즘이 종목 카드를 채웁니다.</p>
+          </div>
+
+          <div class="algorithm-panel">
+            <span>선택 알고리즘</span>
+            <strong data-algorithm-name>성향 기반 매칭</strong>
+            <p data-algorithm-detail>위험 성향, 관심 섹터, 보유 기간을 함께 반영합니다.</p>
+          </div>
+        </aside>
+
+        <section class="swipe-stage" aria-label="추천 종목 스와이프">
+          <div class="deck-meta">
+            <span data-deck-count>0 / 0</span>
+            <strong data-deck-title>추천 후보 로드 대기</strong>
+          </div>
+
+          <div class="swipe-deck" data-swipe-deck>
+            <article class="empty-card">
+              <span>READY</span>
+              <strong>온보딩 후 카드가 열립니다</strong>
+              <p>당신의 답변으로 추천 알고리즘을 먼저 맞춰볼게요.</p>
+            </article>
+          </div>
+
+          <div class="swipe-actions">
+            <button type="button" class="round-btn pass" data-pass-button aria-label="왼쪽으로 넘기기">←</button>
+            <button type="button" class="round-btn save" data-save-button aria-label="관심 종목 저장">★</button>
+            <button type="button" class="round-btn like" data-like-button aria-label="오른쪽으로 선택">→</button>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="market-pulse shell" id="market-pulse" aria-label="시장 펄스">
+      <div class="section-head">
+        <div>
+          <span>Market pulse</span>
+          <h2>오늘의 시장 인덱스</h2>
+        </div>
+      </div>
+
+      <div class="market-board">
+        <article class="market-card featured">
+          <div>
+            <div class="ticker-head">
+              <span class="ticker-name">KOSPI</span>
+              <span class="ticker-chip">국내 대표</span>
+            </div>
+            <div class="ticker-value">
+              <strong>2,785.92</strong>
+              <span class="change-up">+38.33 +1.39%</span>
+            </div>
+            <p class="market-note">반도체와 2차전지 중심의 수급을 우선 관찰합니다.</p>
+          </div>
+          <svg class="sparkline" viewBox="0 0 210 72" preserveAspectRatio="none" aria-hidden="true">
+            <path class="spark-fill" d="M0,60 C18,52 22,28 36,25 C51,22 55,50 70,48 C89,45 91,30 108,27 C126,24 134,42 150,39 C171,35 176,18 196,16 L210,13 L210,72 L0,72 Z"></path>
+            <path class="spark-line" d="M0,60 C18,52 22,28 36,25 C51,22 55,50 70,48 C89,45 91,30 108,27 C126,24 134,42 150,39 C171,35 176,18 196,16 L210,13"></path>
+          </svg>
+        </article>
+
+        {% for index in market_indices %}
+          <article class="market-card">
+            <span>{{ index.name }}</span>
+            <strong>{{ index.value }}</strong>
+            <em>{{ index.change }}</em>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+
+  <script src="{% static 'pages/index.js' %}" defer></script>
+</body>
+</html>
