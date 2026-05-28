@@ -1,7 +1,7 @@
 # 작업 인수인계 — 다음에 할 일
 
 > 다른 PC에서 이어 받을 때 이 문서부터 읽으면 됩니다.
-> 갱신: 2026-05-28 (US enrichment 완료 + Stock 조회 API foundations 진행)
+> 갱신: 2026-05-28 (재무/일봉/시장지표 명령 작성 완료 — 전체 적재 실행만 남음)
 
 ---
 
@@ -19,6 +19,12 @@
 - **US enrichment 명령 (`enrich_us_stock_meta`)** — KIS price-detail(HHDFS76200200) + yfinance 하이브리드. 배치 결과: StockIndicator 100%, market_cap 99.8%, sector 45.6% (SPAC 다수 빈값 — 정상), industry 82.5%, homepage_url 78.9% [SCRUM-58]
 - DB 덤프 `jumanchu_db_2026-05-27.sql` (1.4MB, 한국+미국 마스터 + 한국 enrichment 포함, 팀원 공유용 — git 제외)
 - **Stock 조회 API foundations** (Step 1-3 / 11) — KIS_ENV=prod 전환, `settings.py CACHES` (LocMemCache), 전체 URL trailing slash 패치 (accounts/stocks/portfolio 23 path). Step 4-11(price_dispatch, views, tests)은 다음 세션 [SCRUM-60]
+- **재무/일봉/시장지표 명령 3개 작성** (commit a28c73c, **전체 실행 전** — dry-run/소량만 검증):
+  - `services/financials.py` — `build_financial_summary` 이전 + roe/roa/payout_ratio 확장
+  - `kis_client.get_domestic_daily_price()` — 국내 일봉(FHKST03010100)
+  - `enrich_financials` — KR(DART)/US(yfinance) → FinancialSummary + roe/roa/dividend_yield (단위 배수 통일)
+  - `sync_stock_prices` — KR(KIS 페이징)/US(yfinance history) → StockPrice 일봉
+  - `calc_market_indicators` — StockPrice + ^KS11/^GSPC → beta/volatility/high_52w/low_52w
 
 ---
 
@@ -56,51 +62,54 @@ Step 1-3 foundations 완료 (§1 참조). 남은 단계:
 
 세부 plan: `jumanchu/.claude-plans/stock-api.md` (workspace 내부, gitignore)
 
-### 2.3 [P1] DART 재무 → FinancialSummary 적재 명령 작성
+### 2.3 [P0] 재무 + 일봉 + 시장지표 **전체 적재 실행** (명령 작성 완료, 실행만 남음)
 
-`dart_test/fetch_financials.py`의 `build_financial_summary()` 함수를 `backend/stocks/services/dart_client.py` 옆으로 이전 후 명령 작성. dart_client.py 본체는 이미 backend에 있음.
+명령 3개 작성·검증 완료 (commit a28c73c, §1 참조). **데이터 전체 적재만 남음 (~5-7시간, 백그라운드)**. 다른 PC에서 돌리고 dump 공유 권장.
 
-```python
-class Command(BaseCommand):
-    def handle(self, *args, **opts):
-        client = DartClient(DartConfig.from_env())
-        for stock in Stock.objects.filter(currency="KRW", is_active=True):
-            try:
-                corp = client.corp_code_of(stock.code)
-            except KeyError:
-                continue   # DART에 없는 종목 (비상장/스팩 등)
-            data = build_financial_summary(client, corp, bsns_year=2024, reprt_code="11011")
-            FinancialSummary.objects.update_or_create(
-                stock=stock, fiscal_period=data["fiscal_period"], defaults=data
-            )
+```powershell
+cd backend
+.\venv\Scripts\Activate.ps1
+# 순차 실행 (각 명령 --only-empty라 중단 시 재개 가능)
+python manage.py enrich_financials --market all --sleep 1.0     *>  ..\_data_fill.log
+python manage.py sync_stock_prices --market all --sleep 0.4     *>> ..\_data_fill.log
+python manage.py calc_market_indicators                          *>> ..\_data_fill.log
+# 끝나면 pg_dump로 jumanchu_db_YYYY-MM-DD.sql 갱신 + 팀 공유 (§3.6)
 ```
 
-페이스: 3577종목 × 1회(연간 보고서) = 약 30분 (sleep 0.3s).
-분기 4건 다 받으면 ×4 = 약 2시간. **시연용은 연간만 권장.**
+| 단계 | 명령 | 예상 |
+|---|---|---|
+| 1 | enrich_financials KR (DART) | 25-35분 |
+| 2 | enrich_financials US (yfinance) | 1.5-2시간 |
+| 3 | sync_stock_prices KR (KIS 페이징) | 1-1.5시간 |
+| 4 | sync_stock_prices US (yfinance) | 1.5-2시간 |
+| 5 | calc_market_indicators | 10-20분 |
 
-### 2.4 [P1] ROE 계산 추가 (DART)
+**출처 매핑 (구현됨)**:
 
-`fetch_financials.py`의 `build_financial_summary()`에 한 줄:
-```python
-"roe": _safe_div(np, total_equity),
-```
-FinancialSummary에 컬럼 없으니 → StockIndicator 적재 함수로 따로 빼거나, 별도 enrich 명령에서.
+| 데이터 | 한국 | 미국 |
+|---|---|---|
+| FinancialSummary (매출/이익/부채/마진/성장률) | DART `build_financial_summary` | yfinance financials/info |
+| roe / roa | DART (순이익/자본·자산) | yfinance returnOnEquity/Assets |
+| payout_ratio | DART CF 배당금의지급/순이익 | yfinance payoutRatio |
+| dividend_yield | **보류(None)** | yfinance dividendYield (÷100 배수화) |
+| 일봉 StockPrice | KIS FHKST03010100 (페이징) | yfinance history 1년 |
+| beta/volatility/52주 | StockPrice + ^KS11 | StockPrice + ^GSPC |
 
-### 2.5 [P1] payout_ratio 계산 추가 (DART)
+**검증된 단위** (모두 배수): 삼성 debt 0.28·payout 0.32·roe 0.086 / AAPL debt 0.795·roe 1.41·div_yld 0.0035.
 
-DART 응답의 자본변동표(SCE) 또는 현금흐름표(CIS)에 "배당금지급" 계정 추출.
-계정명 후보가 회사마다 다르므로 raw 확인 후 후보 리스트:
-```python
-dividend_row = _find_account(rows, sj_div="CIS", names=["배당금지급", "배당금의 지급"])
-```
+**알려진 한계 (후속 P1/P2)**:
+- 한국 `dividend_yield` 보류(None) — 발행주식수 경로 복잡
+- 한국 일부 소형주: 연결재무(CFS) 미제출 → 별도재무(OFS) fallback 미구현, skip됨. 필요 시 `build_financial_summary` fs_div="OFS" 재시도 추가
+- `debt_ratio` 정의 차: DART=총부채/자본, yfinance debtToEquity=유이자부채 기준 → 한·미 의미 약간 다름 (통일 검토)
+- KIS 모의 일봉 일부 종목 일시 500 → `--only-empty` 재실행으로 복구
 
-### 2.6 [P2] 미국 enrichment yfinance 누락분 보완 (~20%)
+### 2.4 [P2] 미국 enrichment yfinance 누락분 보완 (~20%)
 
 1차 배치 도중 yfinance throttling → `--only-empty --no-yfinance` 재실행으로 KIS는 100% 채움. 다만 yfinance(`industry`/`homepage_url`)은 약 80%만 채움. 남은 ~20%는:
 - 시연 영향 작음 (대부분 마이너 종목 + SPAC)
 - 필요 시 시간 두고 `--only-empty` 한 번 더 (yfinance throttle 해제 후)
 
-### 2.7 [P1] KSIC 매핑 테이블 (industry 코드 → 한글 이름)
+### 2.5 [P1] KSIC 매핑 테이블 (industry 코드 → 한글 이름)
 
 DART의 `induty_code`는 KSIC 표준 산업 코드("212", "46712" 등). 현재는 코드만 저장돼서 DB browser/admin에서 알아보기 어려움.
 
@@ -111,11 +120,11 @@ DART의 `induty_code`는 KSIC 표준 산업 코드("212", "46712" 등). 현재�
 
 > **왜 P1인가**: 사용자에게 보여줄 한글 분류는 `Stock.sector`(KIS 출처)에 이미 있음. KSIC는 세부 필터링/통계용이라 급하지 않음.
 
-### 2.8 [P2] KIS_ENV 정리 (소소)
+### 2.6 [P2] KIS_ENV 정리 (소소)
 
 현재 `.env`는 `KIS_ENV=prod` (Stock API 실시간 시세용). `kis_test/` 검증 스크립트는 `vts`만 받지만 운영 코드(`backend/stocks/services/kis_client.py`)는 `prod`/`real`/`vts`/`virtual` alias 모두 지원. `kis_test/`는 검증용으로만 남았으므로 굳이 손 안 대도 OK.
 
-### 2.9 [P2] 미래 이슈 (Gemini 피드백 carryover)
+### 2.7 [P2] 미래 이슈 (Gemini 피드백 carryover)
 
 구현 단계 진입 시 처리:
 
@@ -182,9 +191,16 @@ python manage.py migrate
 #   2) cd ..
 #   3) docker compose exec -T db psql -U jumanchu -d jumanchu < jumanchu_db_2026-05-26.sql
 # 옵션 B: 처음부터 새로 받기
-#   python manage.py sync_stock_master                  # 마스터 (~30초)
-#   python manage.py enrich_stock_meta_from_kis         # 시세/PER (~50분)
-#   python manage.py enrich_stock_meta_from_dart        # CEO/홈페이지/KSIC (~20분)
+#   python manage.py sync_stock_master                  # 한국 마스터 (~30초)
+#   python manage.py sync_us_stock_master               # 미국 마스터 (~1분)
+#   python manage.py enrich_stock_meta_from_kis         # 한국 시세/PER (~50분)
+#   python manage.py enrich_stock_meta_from_dart        # 한국 CEO/홈페이지/KSIC (~20분)
+#   python manage.py enrich_us_stock_meta               # 미국 sector/PER/industry (~1.5h)
+
+# 옵션 C: 재무/일봉/시장지표까지 전체 (§2.3 — 위 마스터/enrich 끝난 뒤, ~5-7h 추가)
+#   python manage.py enrich_financials --market all --sleep 1.0
+#   python manage.py sync_stock_prices --market all --sleep 0.4
+#   python manage.py calc_market_indicators
 
 # 동작 확인
 python manage.py runserver    # /api/docs/ 접속
