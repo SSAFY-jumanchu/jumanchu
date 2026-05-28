@@ -17,7 +17,7 @@
 - DART 클라이언트 → `backend/stocks/services/dart_client.py` + `enrich_stock_meta_from_dart` 명령 (ceo_name/homepage_url/industry/listed_at) — 전체 적재 완료
 - **US STOCK 마스터 적재 명령 (`sync_us_stock_master`)** — NASDAQ 3,906 + NYSE 2,036 = 미국 5,942종목
 - **US enrichment 명령 (`enrich_us_stock_meta`)** — KIS price-detail(HHDFS76200200) + yfinance 하이브리드. 배치 결과: StockIndicator 100%, market_cap 99.8%, sector 45.6% (SPAC 다수 빈값 — 정상), industry 82.5%, homepage_url 78.9% [SCRUM-58]
-- DB 덤프 `jumanchu_db_2026-05-27.sql` (1.4MB, 한국+미국 마스터 + 한국 enrichment 포함, 팀원 공유용 — git 제외)
+- DB 덤프 `jumanchu_db_2026-05-28.sql` (2.0MB, 한국+미국 마스터 + 한국·미국 enrichment 포함. **재무/일봉/시장지표는 미포함** — §2.3 전체 적재 미실행. 팀원 공유용 — git 제외)
 - **Stock 조회 API foundations** (Step 1-3 / 11) — KIS_ENV=prod 전환, `settings.py CACHES` (LocMemCache), 전체 URL trailing slash 패치 (accounts/stocks/portfolio 23 path). Step 4-11(price_dispatch, views, tests)은 다음 세션 [SCRUM-60]
 - **재무/일봉/시장지표 명령 3개 작성** (commit a28c73c, **전체 실행 전** — dry-run/소량만 검증):
   - `services/financials.py` — `build_financial_summary` 이전 + roe/roa/payout_ratio 확장
@@ -160,10 +160,10 @@ DART enrichment(company) 한 번에 ~2,800회 사용 → 같은 날 추가로 �
 - 자세히 → `docs/BRANCH_STRATEGY.md`
 
 ### 3.6 DB 덤프 공유 정책
-- enrichment 끝난 DB는 `pg_dump`로 `.sql` 파일 떨궈서 공유 (가장 최근: `jumanchu_db_2026-05-26.sql`)
+- enrichment 끝난 DB는 `pg_dump`로 `.sql` 파일 떨궈서 공유 (가장 최근: `jumanchu_db_2026-05-28.sql`)
 - git에 올리지 말 것 (대용량 + DB 덤프는 코드 아님)
 - USB/Google Drive로 공유 OK (시크릿 없음)
-- 받는 사람: `docker compose exec -T db psql -U jumanchu -d jumanchu < jumanchu_db_2026-05-26.sql`
+- 받는 사람: `docker compose exec -T db psql -U jumanchu -d jumanchu < jumanchu_db_2026-05-28.sql`
 
 ---
 
@@ -189,7 +189,7 @@ python manage.py migrate
 # 옵션 A: 최신 enrichment까지 끝난 DB 받기 (권장 — KIS+DART 70분 절약)
 #   1) 팀원에게 jumanchu_db_YYYY-MM-DD.sql 받기 (USB/Drive)
 #   2) cd ..
-#   3) docker compose exec -T db psql -U jumanchu -d jumanchu < jumanchu_db_2026-05-26.sql
+#   3) docker compose exec -T db psql -U jumanchu -d jumanchu < jumanchu_db_2026-05-28.sql
 # 옵션 B: 처음부터 새로 받기
 #   python manage.py sync_stock_master                  # 한국 마스터 (~30초)
 #   python manage.py sync_us_stock_master               # 미국 마스터 (~1분)
