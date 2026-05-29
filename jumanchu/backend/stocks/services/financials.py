@@ -46,12 +46,17 @@ def _to_int(amount: Optional[str]) -> Optional[int]:
 def _find_account(
     rows: list[dict[str, Any]],
     *,
-    sj_div: str,
+    sj_div,
     names: list[str],
 ) -> Optional[dict[str, Any]]:
-    """계정명(여러 후보 중 하나) + 재무제표 구분(BS/IS/CF 등)으로 한 행 찾기."""
+    """계정명(여러 후보 중 하나) + 재무제표 구분으로 한 행 찾기.
+
+    sj_div는 문자열 또는 리스트. 손익 항목은 회사에 따라 IS(손익계산서) 또는
+    CIS(포괄손익계산서)에 들어있어 둘 다 봐야 한다.
+    """
+    sj_divs = [sj_div] if isinstance(sj_div, str) else list(sj_div)
     for row in rows:
-        if row.get("sj_div") != sj_div:
+        if row.get("sj_div") not in sj_divs:
             continue
         if row.get("account_nm") in names:
             return row
@@ -81,8 +86,26 @@ def build_financial_summary(
     """
     DART 응답 → FinancialSummary 컬럼 dict (+ roe/roa 계산용 보조 필드).
 
+    fs_div="CFS"(연결재무)로 먼저 시도하고, revenue를 못 뽑으면
+    OFS(별도재무)로 한 번 더 시도한다. 한국 단독회사·소형주는 연결재무를
+    제출하지 않아 CFS만 보면 대량 누락되기 때문.
+
     revenue가 None이면 미공시/면제 회사 → command에서 skip 판정.
     """
+    data = _build_one(client, corp_code, bsns_year, reprt_code, fs_div)
+    if data.get("revenue") is None and fs_div == "CFS":
+        # 연결재무 미제출 → 별도재무(OFS) fallback
+        data = _build_one(client, corp_code, bsns_year, reprt_code, "OFS")
+    return data
+
+
+def _build_one(
+    client: DartClient,
+    corp_code: str,
+    bsns_year: int,
+    reprt_code: str,
+    fs_div: str,
+) -> dict[str, Any]:
     rows = client.get_single_account_all(
         corp_code=corp_code,
         bsns_year=bsns_year,
@@ -100,10 +123,11 @@ def build_financial_summary(
             "_net_profit": None,
         }
 
-    # IS (손익계산서)
-    revenue_row = _find_account(rows, sj_div="IS", names=["매출액", "수익(매출액)", "영업수익"])
-    op_row = _find_account(rows, sj_div="IS", names=["영업이익", "영업이익(손실)"])
-    np_row = _find_account(rows, sj_div="IS", names=["당기순이익", "당기순이익(손실)"])
+    # 손익 항목: 회사에 따라 IS(손익계산서) 또는 CIS(포괄손익계산서)에 있음
+    IS_CIS = ["IS", "CIS"]
+    revenue_row = _find_account(rows, sj_div=IS_CIS, names=["매출액", "수익(매출액)", "영업수익", "매출"])
+    op_row = _find_account(rows, sj_div=IS_CIS, names=["영업이익", "영업이익(손실)"])
+    np_row = _find_account(rows, sj_div=IS_CIS, names=["당기순이익", "당기순이익(손실)"])
 
     # BS (재무상태표)
     total_assets_row = _find_account(rows, sj_div="BS", names=["자산총계"])
