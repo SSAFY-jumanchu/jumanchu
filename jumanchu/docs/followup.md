@@ -1,7 +1,7 @@
 # 작업 인수인계 — 다음에 할 일
 
 > 다른 PC에서 이어 받을 때 이 문서부터 읽으면 됩니다.
-> 갱신: 2026-05-28 (재무/일봉/시장지표 명령 작성 완료 — 전체 적재 실행만 남음)
+> 갱신: 2026-05-29 (재무/일봉/시장지표 전체 적재 완료 — 한국 전체 + 미국 인덱스)
 
 ---
 
@@ -17,14 +17,16 @@
 - DART 클라이언트 → `backend/stocks/services/dart_client.py` + `enrich_stock_meta_from_dart` 명령 (ceo_name/homepage_url/industry/listed_at) — 전체 적재 완료
 - **US STOCK 마스터 적재 명령 (`sync_us_stock_master`)** — NASDAQ 3,906 + NYSE 2,036 = 미국 5,942종목
 - **US enrichment 명령 (`enrich_us_stock_meta`)** — KIS price-detail(HHDFS76200200) + yfinance 하이브리드. 배치 결과: StockIndicator 100%, market_cap 99.8%, sector 45.6% (SPAC 다수 빈값 — 정상), industry 82.5%, homepage_url 78.9% [SCRUM-58]
-- DB 덤프 `jumanchu_db_2026-05-28.sql` (2.0MB, 한국+미국 마스터 + 한국·미국 enrichment 포함. **재무/일봉/시장지표는 미포함** — §2.3 전체 적재 미실행. 팀원 공유용 — git 제외)
 - **Stock 조회 API foundations** (Step 1-3 / 11) — KIS_ENV=prod 전환, `settings.py CACHES` (LocMemCache), 전체 URL trailing slash 패치 (accounts/stocks/portfolio 23 path). Step 4-11(price_dispatch, views, tests)은 다음 세션 [SCRUM-60]
-- **재무/일봉/시장지표 명령 3개 작성** (commit a28c73c, **전체 실행 전** — dry-run/소량만 검증):
-  - `services/financials.py` — `build_financial_summary` 이전 + roe/roa/payout_ratio 확장
-  - `kis_client.get_domestic_daily_price()` — 국내 일봉(FHKST03010100)
+- **S&P500/NASDAQ100 플래그 적재** (`sync_us_index_flags`, Wikipedia) — is_sp500 500 + is_nasdaq100 101 = 513종목. 미국 재무/일봉은 인덱스 구성종목만 적재(`--us-index-only`).
+- **재무/일봉/시장지표 명령 3개 + 전체 적재 완료** (commit a28c73c→62c71d4, 한국 전체 + 미국 인덱스 ~4,090 대상):
+  - `services/financials.py` — `build_financial_summary` 이전 + roe/roa/payout_ratio. **IS/CIS 둘 다 탐색 + CFS→OFS fallback** (한국 재무 152→2,444, 16배↑)
+  - `kis_client.get_domestic_daily_price()` / `get_overseas_daily_price()` — KIS 국내/해외 일봉
   - `enrich_financials` — KR(DART)/US(yfinance) → FinancialSummary + roe/roa/dividend_yield (단위 배수 통일)
-  - `sync_stock_prices` — KR(KIS 페이징)/US(yfinance history) → StockPrice 일봉
+  - `sync_stock_prices` — KR/US 모두 KIS 일봉 페이징 → StockPrice
   - `calc_market_indicators` — StockPrice + ^KS11/^GSPC → beta/volatility/high_52w/low_52w
+  - **적재 결과**: 재무 2,956(DART 2,444+yf 512) / 일봉 KR 2,763·US 305종목(~296만행) / beta·volatility 3,064
+- DB 덤프 `jumanchu_db_2026-05-29.sql` (55MB, 위 전체 포함. 팀원 공유용 — git 제외, USB/Drive)
 
 ---
 
@@ -62,27 +64,20 @@ Step 1-3 foundations 완료 (§1 참조). 남은 단계:
 
 세부 plan: `jumanchu/.claude-plans/stock-api.md` (workspace 내부, gitignore)
 
-### 2.3 [P0] 재무 + 일봉 + 시장지표 **전체 적재 실행** (명령 작성 완료, 실행만 남음)
+### 2.3 [P1] 일봉 누락분 재시도 (적재 본체는 완료)
 
-명령 3개 작성·검증 완료 (commit a28c73c, §1 참조). **데이터 전체 적재만 남음 (~5-7시간, 백그라운드)**. 다른 PC에서 돌리고 dump 공유 권장.
+재무/일봉/시장지표 **전체 적재 완료** (§1, dump 2026-05-29). 일봉만 KIS 모의 500으로 일부 누락 → 재시도하면 복구:
 
 ```powershell
 cd backend
-.\venv\Scripts\Activate.ps1
-# 순차 실행 (각 명령 --only-empty라 중단 시 재개 가능)
-python manage.py enrich_financials --market all --sleep 1.0     *>  ..\_data_fill.log
-python manage.py sync_stock_prices --market all --sleep 0.4     *>> ..\_data_fill.log
-python manage.py calc_market_indicators                          *>> ..\_data_fill.log
-# 끝나면 pg_dump로 jumanchu_db_YYYY-MM-DD.sql 갱신 + 팀 공유 (§3.6)
+# 일봉만 누락분 재시도 (재무/지표는 안 건드림)
+python manage.py sync_stock_prices --market all --us-index-only --only-empty --sleep 0.4
+python manage.py calc_market_indicators --us-index-only   # 새 일봉 반영해 beta/vol 재계산
 ```
 
-| 단계 | 명령 | 예상 |
-|---|---|---|
-| 1 | enrich_financials KR (DART) | 25-35분 |
-| 2 | enrich_financials US (yfinance) | 1.5-2시간 |
-| 3 | sync_stock_prices KR (KIS 페이징) | 1-1.5시간 |
-| 4 | sync_stock_prices US (yfinance) | 1.5-2시간 |
-| 5 | calc_market_indicators | 10-20분 |
+- 현재 일봉: KR 2,763/3,577, US 인덱스 305/513
+- **US 해외 일봉(HHDFS76240000)이 모의에서 특히 불안정** (fail ~41%) → 여러 번 재시도하거나 실전키 검토
+- KR 일봉도 fail ~19% (일시 500)
 
 **출처 매핑 (구현됨)**:
 
@@ -92,16 +87,17 @@ python manage.py calc_market_indicators                          *>> ..\_data_fi
 | roe / roa | DART (순이익/자본·자산) | yfinance returnOnEquity/Assets |
 | payout_ratio | DART CF 배당금의지급/순이익 | yfinance payoutRatio |
 | dividend_yield | **보류(None)** | yfinance dividendYield (÷100 배수화) |
-| 일봉 StockPrice | KIS FHKST03010100 (페이징) | yfinance history 1년 |
+| 일봉 StockPrice | KIS FHKST03010100 (페이징) | KIS HHDFS76240000 (페이징) |
 | beta/volatility/52주 | StockPrice + ^KS11 | StockPrice + ^GSPC |
 
 **검증된 단위** (모두 배수): 삼성 debt 0.28·payout 0.32·roe 0.086 / AAPL debt 0.795·roe 1.41·div_yld 0.0035.
 
 **알려진 한계 (후속 P1/P2)**:
 - 한국 `dividend_yield` 보류(None) — 발행주식수 경로 복잡
-- 한국 일부 소형주: 연결재무(CFS) 미제출 → 별도재무(OFS) fallback 미구현, skip됨. 필요 시 `build_financial_summary` fs_div="OFS" 재시도 추가
+- 한국 재무 CFS/OFS·IS/CIS는 해결(commit 62c71d4, 152→2,444). 잔여 skip 169건은 DART에 실제 데이터 없음(분/반기 면제 등), 964건은 corp 없음(우선주/스팩)
+- 일부 종목 `operating_margin` None — 영업이익 계정명 다양성(후속 계정명 후보 확대)
 - `debt_ratio` 정의 차: DART=총부채/자본, yfinance debtToEquity=유이자부채 기준 → 한·미 의미 약간 다름 (통일 검토)
-- KIS 모의 일봉 일부 종목 일시 500 → `--only-empty` 재실행으로 복구
+- KIS 모의 일봉 일부 종목 일시 500 → `--only-empty` 재실행으로 복구 (§2.3)
 
 ### 2.4 [P2] 미국 enrichment yfinance 누락분 보완 (~20%)
 
@@ -160,10 +156,10 @@ DART enrichment(company) 한 번에 ~2,800회 사용 → 같은 날 추가로 �
 - 자세히 → `docs/BRANCH_STRATEGY.md`
 
 ### 3.6 DB 덤프 공유 정책
-- enrichment 끝난 DB는 `pg_dump`로 `.sql` 파일 떨궈서 공유 (가장 최근: `jumanchu_db_2026-05-28.sql`)
+- enrichment 끝난 DB는 `pg_dump`로 `.sql` 파일 떨궈서 공유 (가장 최근: `jumanchu_db_2026-05-29.sql`)
 - git에 올리지 말 것 (대용량 + DB 덤프는 코드 아님)
 - USB/Google Drive로 공유 OK (시크릿 없음)
-- 받는 사람: `docker compose exec -T db psql -U jumanchu -d jumanchu < jumanchu_db_2026-05-28.sql`
+- 받는 사람: `docker compose exec -T db psql -U jumanchu -d jumanchu < jumanchu_db_2026-05-29.sql`
 
 ---
 
@@ -189,7 +185,7 @@ python manage.py migrate
 # 옵션 A: 최신 enrichment까지 끝난 DB 받기 (권장 — KIS+DART 70분 절약)
 #   1) 팀원에게 jumanchu_db_YYYY-MM-DD.sql 받기 (USB/Drive)
 #   2) cd ..
-#   3) docker compose exec -T db psql -U jumanchu -d jumanchu < jumanchu_db_2026-05-28.sql
+#   3) docker compose exec -T db psql -U jumanchu -d jumanchu < jumanchu_db_2026-05-29.sql
 # 옵션 B: 처음부터 새로 받기
 #   python manage.py sync_stock_master                  # 한국 마스터 (~30초)
 #   python manage.py sync_us_stock_master               # 미국 마스터 (~1분)
