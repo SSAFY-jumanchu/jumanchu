@@ -23,7 +23,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 from django.core.management.base import BaseCommand
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 
 from stocks.models import Stock, StockPrice, StockIndicator
 
@@ -66,10 +66,13 @@ class Command(BaseCommand):
         parser.add_argument("--market", default="all", choices=["KR", "US", "all"])
         parser.add_argument("--limit", type=int, default=None)
         parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument("--us-index-only", action="store_true",
+                            help="미국은 S&P500/NASDAQ100 구성종목만 처리")
 
     def handle(self, *args, **opts):
         market = opts["market"]
         limit = opts["limit"]
+        us_index_only = opts["us_index_only"]
         dry_run = opts["dry_run"]
         today = date.today()
 
@@ -90,6 +93,9 @@ class Command(BaseCommand):
             qs = qs.filter(currency="KRW")
         elif market == "US":
             qs = qs.filter(currency="USD")
+        if us_index_only:
+            # 한국은 전체, 미국은 인덱스 구성종목만
+            qs = qs.filter(Q(currency="KRW") | Q(is_sp500=True) | Q(is_nasdaq100=True))
         if limit:
             qs = qs[:limit]
 

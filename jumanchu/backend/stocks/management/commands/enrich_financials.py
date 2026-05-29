@@ -33,7 +33,7 @@ from typing import Optional
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from dotenv import load_dotenv
 
 from stocks.models import Stock, StockIndicator, FinancialSummary
@@ -135,6 +135,8 @@ class Command(BaseCommand):
         parser.add_argument("--sleep", type=float, default=0.4)
         parser.add_argument("--only-empty", action="store_true",
                             help="FinancialSummary 없는 종목만 처리")
+        parser.add_argument("--us-index-only", action="store_true",
+                            help="미국은 S&P500/NASDAQ100 구성종목만 처리")
 
     def handle(self, *args, **opts):
         load_dotenv(dotenv_path="../.env")
@@ -146,20 +148,23 @@ class Command(BaseCommand):
         dry_run = opts["dry_run"]
         sleep_sec = opts["sleep"]
         only_empty = opts["only_empty"]
+        us_index_only = opts["us_index_only"]
         today = date.today()
 
         self.stdout.write(
             f"[enrich_financials] market={market} year={year} limit={limit} "
-            f"dry_run={dry_run} sleep={sleep_sec}s only_empty={only_empty}"
+            f"dry_run={dry_run} sleep={sleep_sec}s only_empty={only_empty} us_index_only={us_index_only}"
         )
 
         if market in ("KR", "all"):
             self._run_kr(year, limit, dry_run, sleep_sec, only_empty, today)
         if market in ("US", "all"):
-            self._run_us(limit, dry_run, sleep_sec, only_empty, today)
+            self._run_us(limit, dry_run, sleep_sec, only_empty, us_index_only, today)
 
-    def _base_qs(self, currency: str, only_empty: bool, limit: Optional[int]):
+    def _base_qs(self, currency: str, only_empty: bool, limit: Optional[int], us_index_only: bool = False):
         qs = Stock.objects.filter(currency=currency, is_active=True).order_by("market", "code")
+        if currency == "USD" and us_index_only:
+            qs = qs.filter(Q(is_sp500=True) | Q(is_nasdaq100=True))
         if only_empty:
             has_fin = FinancialSummary.objects.filter(stock=OuterRef("pk"))
             qs = qs.filter(~Exists(has_fin))
@@ -215,8 +220,8 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"  [KR] 완료 ok={ok} fail={fail} skip_no_corp={skip_no_corp} skip_no_data={skip_no_data}"))
 
-    def _run_us(self, limit, dry_run, sleep_sec, only_empty, today):
-        qs = self._base_qs("USD", only_empty, limit)
+    def _run_us(self, limit, dry_run, sleep_sec, only_empty, us_index_only, today):
+        qs = self._base_qs("USD", only_empty, limit, us_index_only)
         total = qs.count()
         self.stdout.write(f"  [US] 대상 {total}건")
         ok = fail = skip_no_data = 0

@@ -22,7 +22,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Optional
 
 from django.core.management.base import BaseCommand
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from dotenv import load_dotenv
 
 from stocks.models import Stock, StockPrice
@@ -137,6 +137,8 @@ class Command(BaseCommand):
         parser.add_argument("--sleep", type=float, default=0.4)
         parser.add_argument("--only-empty", action="store_true",
                             help="StockPrice 없는 종목만 처리")
+        parser.add_argument("--us-index-only", action="store_true",
+                            help="미국은 S&P500/NASDAQ100 구성종목만 처리")
 
     def handle(self, *args, **opts):
         load_dotenv(dotenv_path="../.env")
@@ -148,21 +150,24 @@ class Command(BaseCommand):
         dry_run = opts["dry_run"]
         sleep_sec = opts["sleep"]
         only_empty = opts["only_empty"]
+        us_index_only = opts["us_index_only"]
 
         end = date.today()
         start = end - timedelta(days=days)
         self.stdout.write(
             f"[sync_stock_prices] market={market} days={days} ({_ymd(start)}~{_ymd(end)}) "
-            f"limit={limit} dry_run={dry_run} only_empty={only_empty}"
+            f"limit={limit} dry_run={dry_run} only_empty={only_empty} us_index_only={us_index_only}"
         )
 
         if market in ("KR", "all"):
             self._run_kr(start, end, limit, dry_run, sleep_sec, only_empty)
         if market in ("US", "all"):
-            self._run_us(start, end, limit, dry_run, sleep_sec, only_empty)
+            self._run_us(start, end, limit, dry_run, sleep_sec, only_empty, us_index_only)
 
-    def _base_qs(self, currency, only_empty, limit):
+    def _base_qs(self, currency, only_empty, limit, us_index_only=False):
         qs = Stock.objects.filter(currency=currency, is_active=True).order_by("market", "code")
+        if currency == "USD" and us_index_only:
+            qs = qs.filter(Q(is_sp500=True) | Q(is_nasdaq100=True))
         if only_empty:
             has_price = StockPrice.objects.filter(stock=OuterRef("pk"))
             qs = qs.filter(~Exists(has_price))
@@ -192,9 +197,9 @@ class Command(BaseCommand):
                 self.stdout.write(f"    ... KR {i}/{total} (ok={ok} fail={fail})")
         self.stdout.write(self.style.SUCCESS(f"  [KR] 완료 ok={ok} fail={fail}"))
 
-    def _run_us(self, start, end, limit, dry_run, sleep_sec, only_empty):
+    def _run_us(self, start, end, limit, dry_run, sleep_sec, only_empty, us_index_only):
         client = KISClient(KISConfig.from_env())
-        qs = self._base_qs("USD", only_empty, limit)
+        qs = self._base_qs("USD", only_empty, limit, us_index_only)
         total = qs.count()
         self.stdout.write(f"  [US] 대상 {total}건")
         ok = fail = 0
