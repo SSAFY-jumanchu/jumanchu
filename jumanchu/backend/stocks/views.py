@@ -1,8 +1,11 @@
+from datetime import date, datetime, timedelta
 from decimal import InvalidOperation
+from zoneinfo import ZoneInfo
 
 import requests
 from django.core.cache import cache
 from django.db.models import F, Q
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny
@@ -10,13 +13,73 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from stocks import serializers as s
-from stocks.models import Stock
+from stocks.models import Stock, StockPrice
 from stocks.pagination import paginate
-from stocks.services.price_dispatch import fetch_price, get_cache_ttl
+from stocks.services.price_dispatch import (
+    build_today_candle, fetch_minute_candles, fetch_price, get_cache_ttl,
+)
+
+
+PERIOD_INTERVAL_MAP = {
+    "1d":  {"1m", "5m", "15m", "1h"},
+    "1w":  {"15m", "1h", "1d"},
+    "1m":  {"1d", "1w", "1mo"},
+    "3m":  {"1d", "1w", "1mo"},
+    "1y":  {"1d", "1w", "1mo"},
+    "5y":  {"1d", "1w", "1mo"},
+}
+PERIOD_TO_DAYS = {"1d": 1, "1w": 7, "1m": 30, "3m": 90, "1y": 365, "5y": 1825}
+MINUTE_INTERVALS = {"1m", "5m", "15m", "1h"}
+DAY_INTERVALS = {"1d", "1w", "1mo"}
+_KST = ZoneInfo("Asia/Seoul")
 
 
 def _stub():
     return Response({'detail': 'Not implemented'}, status=status.HTTP_501_NOT_IMPLEMENTED)
+
+
+def _db_price_to_candle(p: StockPrice) -> dict:
+    """StockPrice 행 → Candle dict (자정 KST)."""
+    return {
+        "time": datetime.combine(p.price_date, datetime.min.time(), tzinfo=_KST),
+        "open": p.open, "high": p.high, "low": p.low, "close": p.close,
+        "volume": p.volume,
+    }
+
+
+def _aggregate_ohlc(window: list[dict]) -> dict:
+    return {
+        "time": window[0]["time"],
+        "open": window[0]["open"],
+        "high": max(r["high"] for r in window),
+        "low": min(r["low"] for r in window),
+        "close": window[-1]["close"],
+        "volume": sum(r["volume"] for r in window),
+    }
+
+
+def _resample_daily(rows: list[dict], interval: str) -> list[dict]:
+    """일봉 → 주봉/월봉. 1d면 그대로."""
+    if interval == "1d" or not rows:
+        return rows
+    if interval == "1w":
+        key_fn = lambda r: r["time"].isocalendar()[:2]  # (year, week)
+    elif interval == "1mo":
+        key_fn = lambda r: (r["time"].year, r["time"].month)
+    else:
+        return rows
+
+    out, buf, cur = [], [], None
+    for r in rows:
+        k = key_fn(r)
+        if cur is not None and k != cur:
+            out.append(_aggregate_ohlc(buf))
+            buf = []
+        buf.append(r)
+        cur = k
+    if buf:
+        out.append(_aggregate_ohlc(buf))
+    return out
 
 
 def _parse_bool(v):
@@ -171,7 +234,7 @@ class StockChartView(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        summary='캔들 차트',
+        summary='캔들 차트 (일봉/주봉/월봉=DB, 분봉=KIS, 장중 today 합성)',
         parameters=[
             OpenApiParameter('period', str, required=False,
                              enum=['1d', '1w', '1m', '3m', '1y', '5y']),
@@ -181,7 +244,61 @@ class StockChartView(APIView):
         responses={200: s.ChartResponseSerializer},
     )
     def get(self, request, code: str):
-        return _stub()
+        stock = _stock_by_code(code)
+        if not stock:
+            return Response({'detail': '해당 종목을 찾을 수 없습니다.'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        period = request.query_params.get('period', '1d')
+        interval = request.query_params.get('interval', '5m')
+
+        if period not in PERIOD_INTERVAL_MAP:
+            return Response({'detail': f'유효하지 않은 period: {period}',
+                             'code': 'INVALID_PERIOD'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if interval not in PERIOD_INTERVAL_MAP[period]:
+            return Response(
+                {'detail': f'period={period}에 허용되지 않는 interval: {interval}',
+                 'code': 'INVALID_INTERVAL_FOR_PERIOD'},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        cache_key = f'stock:chart:{stock.market}:{stock.code}:{period}:{interval}'
+        ttl = 300 if interval in MINUTE_INTERVALS else 3600
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached, headers={'Cache-Control': f'max-age={ttl}'})
+
+        try:
+            if interval in MINUTE_INTERVALS:
+                candles = fetch_minute_candles(stock, interval)
+            else:
+                days = PERIOD_TO_DAYS[period]
+                start = date.today() - timedelta(days=days)
+                qs = (StockPrice.objects
+                      .filter(stock=stock, price_date__gte=start)
+                      .order_by('price_date'))
+                candles = [_db_price_to_candle(p) for p in qs]
+                # B 패턴: 장중이면 today 한 칸 합성해 append (1w/1mo는 resample이 받아 합산)
+                today_c = build_today_candle(stock)
+                if today_c and (not candles
+                                or candles[-1]['time'].date() != date.today()):
+                    candles.append(today_c)
+                candles = _resample_daily(candles, interval)
+        except (requests.HTTPError, requests.Timeout, RuntimeError,
+                KeyError, ValueError, InvalidOperation):
+            return Response(
+                {'detail': 'KIS 외부 API 오류', 'code': 'EXTERNAL_API_ERROR'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        body = {
+            'stock_code': stock.code,
+            'period': period,
+            'interval': interval,
+            'candles': s.CandleSerializer(candles, many=True).data,
+            'generated_at': timezone.now(),
+        }
+        cache.set(cache_key, body, timeout=ttl)
+        return Response(body, headers={'Cache-Control': f'max-age={ttl}'})
 
 
 @extend_schema(tags=['Stock'])

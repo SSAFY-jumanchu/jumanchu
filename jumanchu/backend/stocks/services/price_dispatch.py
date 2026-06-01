@@ -161,3 +161,132 @@ def _is_market_open(market: str, now: Optional[datetime] = None) -> bool:
 
 def get_cache_ttl(stock: Stock) -> int:
     return 3 if _is_market_open(stock.market) else 60
+
+
+# ----- 분봉 (chart API용) -----
+
+_INTERVAL_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "1h": 60}
+
+
+def _parse_kr_minute_dt(yyyymmdd: str, hhmmss: str) -> datetime:
+    """KIS KR 분봉 time stamp → KST timezone-aware datetime."""
+    return datetime.strptime(yyyymmdd + hhmmss, "%Y%m%d%H%M%S").replace(tzinfo=_KST)
+
+
+def _map_kr_minute_1m(raw: dict) -> list[dict]:
+    """KR FHKST03010200 output2 → 정규화 list (오래된 것부터)."""
+    out = []
+    for r in (raw.get("output2") or []):
+        try:
+            t = _parse_kr_minute_dt(r["stck_bsop_date"], r["stck_cntg_hour"])
+            close = Decimal(r["stck_prpr"])
+            out.append({
+                "time": t,
+                "open": Decimal(r["stck_oprc"]),
+                "high": Decimal(r["stck_hgpr"]),
+                "low": Decimal(r["stck_lwpr"]),
+                "close": close,
+                "volume": int(r.get("cntg_vol") or 0),
+            })
+        except (KeyError, ValueError):
+            continue
+    out.sort(key=lambda x: x["time"])  # KIS는 최신순으로 줌 → 오래된 순으로 뒤집기
+    return out
+
+
+def _map_us_minute(raw: dict) -> list[dict]:
+    """US HHDFS76950200 output2 → 정규화 list (KST timezone, 오래된 것부터).
+    kymd/khms (KIS가 KST 환산해서 줌) 사용.
+    """
+    out = []
+    for r in (raw.get("output2") or []):
+        try:
+            t = _parse_kr_minute_dt(r["kymd"], r["khms"])
+            close = Decimal(r["last"])
+            out.append({
+                "time": t,
+                "open": Decimal(r["open"]),
+                "high": Decimal(r["high"]),
+                "low": Decimal(r["low"]),
+                "close": close,
+                "volume": int(r.get("evol") or 0),
+            })
+        except (KeyError, ValueError):
+            continue
+    out.sort(key=lambda x: x["time"])
+    return out
+
+
+def _aggregate(window: list[dict]) -> dict:
+    return {
+        "time": window[0]["time"],
+        "open": window[0]["open"],
+        "high": max(r["high"] for r in window),
+        "low":  min(r["low"]  for r in window),
+        "close": window[-1]["close"],
+        "volume": sum(r["volume"] for r in window),
+    }
+
+
+def _resample_1m_to_n(rows_1m: list[dict], n: int) -> list[dict]:
+    """1분봉을 n분 윈도우로 OHLC 합산. n=1이면 입력 그대로.
+
+    윈도우 구분: time을 epoch-minutes 기준 n으로 나눈 몫 → 안정적 (시간 경계 가로지름 OK).
+    """
+    if n == 1 or not rows_1m:
+        return rows_1m
+    out, buf = [], []
+    cur_bucket = None
+    for r in rows_1m:
+        epoch_min = int(r["time"].timestamp() // 60)
+        bucket = epoch_min // n
+        if cur_bucket is None or bucket == cur_bucket:
+            buf.append(r)
+            cur_bucket = bucket
+        else:
+            out.append(_aggregate(buf))
+            buf = [r]
+            cur_bucket = bucket
+    if buf:
+        out.append(_aggregate(buf))
+    return out
+
+
+def fetch_minute_candles(stock: Stock, interval: str) -> list[dict]:
+    """KR/US 분봉 호출 + 정규화. 시장별 정책 분기:
+       KR: 1m만 받아 _resample_1m_to_n (KIS가 1m만 줌)
+       US: NMIN 직접 전달 (KIS가 합산해서 줌)
+    """
+    if interval not in _INTERVAL_MINUTES:
+        raise ValueError(f"unsupported interval: {interval!r}")
+    n_minutes = _INTERVAL_MINUTES[interval]
+    client = get_kis_client()
+
+    if stock.market in DOMESTIC_MARKETS:
+        raw = client.get_domestic_minute_price(stock.code)
+        rows_1m = _map_kr_minute_1m(raw)
+        return _resample_1m_to_n(rows_1m, n_minutes)
+
+    if stock.market in US_MARKETS:
+        excd = MARKET_TO_EXCD[stock.market]
+        raw = client.get_overseas_minute_price(excd, stock.code, nmin=str(n_minutes))
+        return _map_us_minute(raw)
+
+    raise ValueError(f"unsupported market: {stock.market!r}")
+
+
+def build_today_candle(stock: Stock) -> Optional[dict]:
+    """⭐ B 패턴 — 장중일 때 fetch_price 결과로 today 일봉 한 칸 합성.
+    fetch_price는 3s 캐시(SCRUM-60) 살아있어 차트 폴링 시 KIS 부담 X.
+    """
+    if not _is_market_open(stock.market):
+        return None
+    p = fetch_price(stock)
+    return {
+        "time": p["fetched_at"],
+        "open": p["open"],
+        "high": p["high"],
+        "low": p["low"],
+        "close": p["current"],
+        "volume": p["volume"],
+    }

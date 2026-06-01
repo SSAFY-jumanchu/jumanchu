@@ -1,5 +1,5 @@
-"""Stock 조회 API (list/detail/price) 통합·단위 테스트."""
-from datetime import datetime
+"""Stock 조회 API (list/detail/price/chart) 통합·단위 테스트."""
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
@@ -11,7 +11,7 @@ from freezegun import freeze_time
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from stocks.models import Stock
+from stocks.models import Stock, StockPrice
 from stocks.services.price_dispatch import (
     WARNINGS_ALL_FALSE,
     _is_market_open,
@@ -205,3 +205,133 @@ class MarketHoursTests(APITestCase):
     @freeze_time('2026-05-30 01:00:00')  # KST 토 10:00 (장외)
     def test_get_cache_ttl_kr_closed(self):
         self.assertEqual(get_cache_ttl(self.kr), 60)
+
+
+def _today_synth_candle(stock):
+    """build_today_candle mock 반환값. 'time'은 timezone-aware."""
+    return {
+        'time': timezone.now(),
+        'open': Decimal('100'),
+        'high': Decimal('110'),
+        'low': Decimal('95'),
+        'close': Decimal('105'),
+        'volume': 12345,
+    }
+
+
+def _minute_candles_mock(stock, interval='1m'):
+    base = datetime(2026, 6, 1, 9, 0, tzinfo=ZoneInfo('Asia/Seoul'))
+    return [
+        {'time': base, 'open': Decimal('100'), 'high': Decimal('102'),
+         'low': Decimal('99'), 'close': Decimal('101'), 'volume': 1000},
+        {'time': base + timedelta(minutes=1),
+         'open': Decimal('101'), 'high': Decimal('103'),
+         'low': Decimal('100'), 'close': Decimal('102'), 'volume': 2000},
+    ]
+
+
+class StockChartTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.kr = Stock.objects.create(code='005930', market='KOSPI',
+                                       name='삼성전자', currency='KRW')
+        # 일봉 5일치 (2026-05-25~05-29, 월요일=2026-06-01 이전)
+        for i, d in enumerate(['2026-05-25', '2026-05-26', '2026-05-27',
+                                '2026-05-28', '2026-05-29']):
+            StockPrice.objects.create(
+                stock=cls.kr, price_date=date.fromisoformat(d),
+                open=Decimal(67000 + i * 100), high=Decimal(68000 + i * 100),
+                low=Decimal(66500 + i * 100), close=Decimal(67500 + i * 100),
+                volume=1000000 + i * 1000,
+            )
+
+    def setUp(self):
+        cache.clear()
+
+    def test_chart_daily_kr_no_synth(self):
+        """interval=1d + 장외 시간 → DB 일봉만, today 합성 없음."""
+        with patch('stocks.views.build_today_candle', return_value=None):
+            res = self.client.get(
+                reverse('stock-chart', kwargs={'code': '005930'}),
+                {'period': '1m', 'interval': '1d'},
+            )
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(body['stock_code'], '005930')
+        self.assertEqual(body['period'], '1m')
+        self.assertEqual(body['interval'], '1d')
+        self.assertEqual(len(body['candles']), 5)
+        # 오래된 것부터 정렬
+        times = [c['time'] for c in body['candles']]
+        self.assertEqual(times, sorted(times))
+
+    def test_chart_today_synth_during_market_hours(self):
+        """장중이면 today 한 칸 append 되어 6개."""
+        with patch('stocks.views.build_today_candle',
+                    side_effect=lambda stock: _today_synth_candle(stock)):
+            res = self.client.get(
+                reverse('stock-chart', kwargs={'code': '005930'}),
+                {'period': '1m', 'interval': '1d'},
+            )
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(len(body['candles']), 6)
+        # 마지막이 today 합성 (close=105)
+        self.assertEqual(float(body['candles'][-1]['close']), 105.0)
+
+    def test_chart_minute_kr_mock_kis(self):
+        """분봉은 KIS 호출(mock) → candles 반환."""
+        with patch('stocks.views.fetch_minute_candles',
+                    side_effect=lambda stock, interval: _minute_candles_mock(stock, interval)) as m:
+            res = self.client.get(
+                reverse('stock-chart', kwargs={'code': '005930'}),
+                {'period': '1d', 'interval': '5m'},
+            )
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(body['interval'], '5m')
+        self.assertEqual(len(body['candles']), 2)
+        self.assertEqual(m.call_count, 1)
+
+    def test_chart_cache_hit(self):
+        """동일 키 2회 호출 → 2회차 캐시 hit (fetch 1번만)."""
+        with patch('stocks.views.fetch_minute_candles',
+                    side_effect=lambda stock, interval: _minute_candles_mock(stock, interval)) as m:
+            self.client.get(reverse('stock-chart', kwargs={'code': '005930'}),
+                            {'period': '1d', 'interval': '5m'})
+            self.client.get(reverse('stock-chart', kwargs={'code': '005930'}),
+                            {'period': '1d', 'interval': '5m'})
+        self.assertEqual(m.call_count, 1)
+
+    def test_chart_invalid_period_interval(self):
+        """period=1d × interval=1d → 400 INVALID_INTERVAL_FOR_PERIOD."""
+        res = self.client.get(
+            reverse('stock-chart', kwargs={'code': '005930'}),
+            {'period': '1d', 'interval': '1d'},
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.json().get('code'), 'INVALID_INTERVAL_FOR_PERIOD')
+
+    def test_chart_invalid_period(self):
+        """알 수 없는 period → 400 INVALID_PERIOD."""
+        res = self.client.get(
+            reverse('stock-chart', kwargs={'code': '005930'}),
+            {'period': '10y', 'interval': '1d'},
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.json().get('code'), 'INVALID_PERIOD')
+
+    def test_chart_404(self):
+        res = self.client.get(reverse('stock-chart', kwargs={'code': 'ZZZZZZ'}))
+        self.assertEqual(res.status_code, 404)
+
+    def test_chart_503_on_kis_failure(self):
+        """분봉 호출 시 KIS 예외 → 503 EXTERNAL_API_ERROR."""
+        with patch('stocks.views.fetch_minute_candles',
+                    side_effect=RuntimeError('KIS down')):
+            res = self.client.get(
+                reverse('stock-chart', kwargs={'code': '005930'}),
+                {'period': '1d', 'interval': '5m'},
+            )
+        self.assertEqual(res.status_code, 503)
+        self.assertEqual(res.json().get('code'), 'EXTERNAL_API_ERROR')
