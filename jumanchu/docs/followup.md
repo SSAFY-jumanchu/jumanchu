@@ -40,29 +40,18 @@ Swagger 스텁만 있는 8개 Auth 엔드포인트에 실제 로직 채우기.
 - login/logout: JWT 발급 + Cookie(HttpOnly) refresh
 - 자세히 → `docs/인증_권한_정책.md`
 
-### 2.2 [P0] Stock 조회 API 실구현 Step 4-11 (SCRUM-60)
+### 2.2 [P2] 종목 분류 표시 — serializer에 `display_category` computed field
 
-Step 1-3 foundations 완료 (§1 참조). 남은 단계:
-- Step 4: `backend/stocks/services/price_dispatch.py` — KR/US 매퍼 + `fetch_price(stock)` + `get_cache_ttl(stock)` 장중 3s/장외 60s 분기 (KST + ET)
-- Step 5: `backend/stocks/pagination.py` — `{items, page, size, total}` envelope helper
-- Step 6: `views.py` 3개 view 실구현 — `StockListView`/`StockDetailView`/`StockPriceView` (`is_in_watchlist` false 하드코딩)
-- Step 7: `requirements.txt`에 `freezegun` 추가 (시간 의존 테스트용)
-- Step 8: `stocks/tests.py` ~15개 케이스 (KIS mock)
-- Step 9: 수동 curl + `manage.py spectacular --validate`
-- Step 10: docs/API_스키마_v1.md 변경이력 + 이 §2.2 항목 제거
-- Step 11: feature 브랜치 PR
+Stock 조회 API(`GET /stocks/{code}/`) 실구현 완료(SCRUM-60). 다만 미국 종목은 `sector`(KIS 한글)가 ~46%만 채워짐 (KIS e_icod가 SPAC/소형주/ADR 미커버). `industry`(yfinance 영문)가 커버리지 더 넓음. 단일 표시 필드를 serializer에서 만들어 FE가 분기 없이 쓰게:
 
-> **종목 분류 표시 — serializer에 `display_category` computed field 추가 권장**
-> 미국 종목은 `sector`(KIS 한글)가 ~46%만 채워짐 (KIS e_icod가 SPAC/소형주/ADR 미커버). 반면 `industry`(yfinance 영문)는 커버리지가 더 넓음. 단일 표시 필드를 serializer에서 만들어 FE가 분기 없이 쓰게:
-> ```python
-> # stocks/serializers.py
-> display_category = serializers.SerializerMethodField()
-> def get_display_category(self, obj):
->     return obj.sector or obj.industry or ""  # 한글 우선, 없으면 영문 fallback
-> ```
-> → FE는 `display_category` 하나만 사용. sector/industry 분기 로직이 FE에 흩어지지 않음.
+```python
+# stocks/serializers.py
+display_category = serializers.SerializerMethodField()
+def get_display_category(self, obj):
+    return obj.sector or obj.industry or ""  # 한글 우선, 영문 fallback
+```
 
-세부 plan: `jumanchu/.claude-plans/stock-api.md` (workspace 내부, gitignore)
+FE 통합 시점에 요청 들어오면 추가.
 
 ### 2.3 [P1] 일봉 누락분 재시도 (적재 본체는 완료)
 
