@@ -30,6 +30,7 @@ view 단에서 503으로 변환.
 """
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
@@ -252,10 +253,37 @@ def _resample_1m_to_n(rows_1m: list[dict], n: int) -> list[dict]:
     return out
 
 
+# KR 분봉 페이징 윈도우 (장 09:00~15:30 = 13개 30분 슬롯)
+# KIS FHKST03010200가 30행/콜이라 1일치 1m봉 채우려면 base_hour 13번 호출
+_KR_MINUTE_BASE_HOURS = [
+    "153000", "150000", "143000", "140000", "133000", "130000", "123000",
+    "120000", "113000", "110000", "103000", "100000", "093000",
+]
+
+
+def _kr_minute_rows_full_day(client: KISClient, code: str,
+                              sleep_sec: float = 0.3) -> list[dict]:
+    """KR 분봉 1일치 페이징 — base_hour 13번 호출(30분 단위 슬라이딩).
+    응답은 dedupe된 raw 1m row 리스트 (시간 순서 X — _map_kr_minute_1m이 정렬).
+    """
+    rows: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for base_hour in _KR_MINUTE_BASE_HOURS:
+        resp = client.get_domestic_minute_price(code, base_hour=base_hour)
+        for r in (resp.get("output2") or []):
+            key = (r.get("stck_bsop_date"), r.get("stck_cntg_hour"))
+            if not key[0] or not key[1] or key in seen:
+                continue
+            seen.add(key)
+            rows.append(r)
+        time.sleep(sleep_sec)
+    return rows
+
+
 def fetch_minute_candles(stock: Stock, interval: str) -> list[dict]:
     """KR/US 분봉 호출 + 정규화. 시장별 정책 분기:
-       KR: 1m만 받아 _resample_1m_to_n (KIS가 1m만 줌)
-       US: NMIN 직접 전달 (KIS가 합산해서 줌)
+       KR: 1m 13콜 페이징(09:00~15:30 1일치) → _resample_1m_to_n (KIS가 1m만 줌, 30행/콜)
+       US: NMIN 직접 전달, 120행/콜로 1일치 커버 (KIS가 합산해서 줌)
     """
     if interval not in _INTERVAL_MINUTES:
         raise ValueError(f"unsupported interval: {interval!r}")
@@ -263,8 +291,8 @@ def fetch_minute_candles(stock: Stock, interval: str) -> list[dict]:
     client = get_kis_client()
 
     if stock.market in DOMESTIC_MARKETS:
-        raw = client.get_domestic_minute_price(stock.code)
-        rows_1m = _map_kr_minute_1m(raw)
+        rows_raw = _kr_minute_rows_full_day(client, stock.code)
+        rows_1m = _map_kr_minute_1m({"output2": rows_raw})
         return _resample_1m_to_n(rows_1m, n_minutes)
 
     if stock.market in US_MARKETS:
