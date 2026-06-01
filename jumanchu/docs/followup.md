@@ -120,6 +120,22 @@ DART의 `induty_code`는 KSIC 표준 산업 코드("212", "46712" 등). 현재�
 | **view_count 락 회피** — Redis INCR 버퍼 + Celery 배치 동기화 | 커뮤니티 API 트래픽 시 |
 | **캐싱 TTL 유동화** — 장중 3초, 장외 60초+ 분기 | StockPriceView 실구현 시 |
 
+### 2.8 [P1] 캔들 차트 API 구현 (SCRUM-131, FE SCRUM-77 unblock)
+
+`GET /stocks/{code}/chart/?period=&interval=` 실구현. 현재 stub(501).
+
+**출처 분기**:
+- `interval` ∈ {`1d`, `1w`, `1mo`} → DB `StockPrice` 읽기 (이미 backfill 완료, 매일 cron으로 1일치 증분)
+- `interval` ∈ {`1m`, `5m`, `15m`, `1h`} → KIS 분봉 호출 + 5분 캐시
+  - KR: `FHKST03010200`, US: 해외 분봉 TR (검증 필요)
+  - `kis_client.py`에 분봉 메서드 2종 + `price_dispatch.fetch_minute_candles` 추가
+
+**B 패턴 — 장중 today 캔들 합성**: DB는 어제까지 confirmed days만. 응답 만들 때 `_is_market_open(stock.market)` 이면 `fetch_price(stock)` 결과(open/high/low/current/volume)를 today 한 칸으로 합성해 append. `fetch_price`는 SCRUM-60에서 작성 + 장중 3s 캐시라 차트 폴링 시 KIS 부담 X. 차트가 "마지막 캔들이 살아 움직이는" 진짜 모양으로 보임.
+
+**유효성**: period × interval 조합 검증 (API_스키마_v1.md §3.5), 안 맞으면 400 `INVALID_INTERVAL_FOR_PERIOD`.
+
+**매일 일봉 갱신 운영**: 장 마감 후 cron `python manage.py sync_stock_prices --market all --days 5 --sleep 0.4` (1콜/종목 ≈ 1시간, 주말·실패 자가복구 위해 5일 윈도우 + ignore_conflicts).
+
 ---
 
 ## 3. 결정/주의 사항
