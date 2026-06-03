@@ -73,7 +73,8 @@ python manage.py calc_market_indicators --us-index-only
 
 - prod 환경 실패율 ≈ 0 (모의 US 해외 fail ~41% 대비 대폭 안정).
 - **이력 깊이 ≈ 1년치/종목** (avg 243행, 총 996,107행, 2025-05-28~2026-06-03). §1의
-  "~296만행"과 불일치 — 이 로컬 DB는 1년치 상태. 다년치 필요 시 `--days` 늘려 재적재.
+  "~296만행"과 불일치 — 이 로컬 DB는 1년치 상태. **1년치로 확정**(5y 차트는 시연 범위
+  아님, FE 5y 버튼은 1년치만 표시) — 다년치 필요 시 `--days` 늘려 재적재.
 - 기존 종목 일봉은 ~2026-05-29(덤프 시점)까지, `--only-empty`라 그 뒤 증분은 안 채움 →
   매일 증분은 §2.8 cron 몫.
 - 지표는 날짜 분리: per/pbr/eps(enrich 2026-05-27) vs beta/vol/52주(calc) → `StockFinancialsView`
