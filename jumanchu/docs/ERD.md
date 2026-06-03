@@ -149,6 +149,7 @@
 | id | int PK | |
 | user_id | FK → USER (1:1) | |
 | balance | decimal(15,0) | 잔액 (원). 시드 100_000_000 |
+| initial_balance | decimal(15,0) | 초기 원금 (시드 100_000_000 + 온보딩 보너스 누적). 수익률 기준점 |
 | created_at, updated_at | datetime | |
 
 **제약**: `CHECK (balance >= 0)`.

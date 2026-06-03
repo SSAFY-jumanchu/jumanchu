@@ -7,6 +7,7 @@ class Account(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="account"
     )
     balance = models.DecimalField(max_digits=15, decimal_places=0, default=100_000_000)
+    initial_balance = models.DecimalField(max_digits=15, decimal_places=0, default=100_000_000)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

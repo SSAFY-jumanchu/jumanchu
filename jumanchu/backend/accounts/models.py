@@ -6,8 +6,12 @@ class User(AbstractUser):
     nickname = models.CharField(max_length=20, unique=True)
     birth_year = models.PositiveSmallIntegerField()
 
+    REQUIRED_FIELDS = ['email', 'nickname', 'birth_year']
+
     def __str__(self):
         return f"{self.username} ({self.nickname})"
+
+
 
 
 class InvestmentProfile(models.Model):

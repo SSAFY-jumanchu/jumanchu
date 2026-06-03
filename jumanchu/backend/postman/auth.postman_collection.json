@@ -1,0 +1,225 @@
+{
+  "info": {
+    "name": "주만추 Auth (full)",
+    "description": "인증 전체 플로우. 1~11을 순서대로 실행하면 회원가입→로그인→내정보→토큰회전→로그아웃→블랙리스트까지 검증됩니다. 12(rate limit)는 login 한도를 일부러 소진하므로 마지막에 따로 실행하세요. 전체를 1분에 여러 번 돌리면 login rate limit(5/분)에 걸릴 수 있습니다.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000/api/v1/auth" },
+    { "key": "password", "value": "Jumanchu2026!" },
+    { "key": "email", "value": "" },
+    { "key": "username", "value": "" },
+    { "key": "nickname", "value": "" },
+    { "key": "accessToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. 회원가입 (201)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": { "type": "text/javascript", "exec": [
+            "// 재실행해도 중복(409) 안 나도록 매번 새 계정 정보 생성",
+            "const n = Math.floor(Math.random() * 1000000);",
+            "pm.collectionVariables.set('username', 'qa_user_' + n);",
+            "pm.collectionVariables.set('nickname', 'qa' + n);",
+            "pm.collectionVariables.set('email', 'qa_user_' + n + '@test.com');"
+          ] }
+        },
+        {
+          "listen": "test",
+          "script": { "type": "text/javascript", "exec": [
+            "pm.test('상태코드 201', () => pm.response.to.have.status(201));",
+            "const body = pm.response.json();",
+            "pm.test('user.email 일치', () => pm.expect(body.user.email).to.eql(pm.collectionVariables.get('email')));",
+            "pm.test('계좌 initial_balance = 1억', () => pm.expect(Number(body.account.initial_balance)).to.eql(100000000));",
+            "pm.test('가입 직후 profile은 null', () => pm.expect(body.user.profile).to.be.null);"
+          ] }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"password_confirm\": \"{{password}}\",\n  \"username\": \"{{username}}\",\n  \"nickname\": \"{{nickname}}\",\n  \"birth_year\": 2000,\n  \"agree_terms\": true\n}" },
+        "url": "{{baseUrl}}/signup/"
+      }
+    },
+    {
+      "name": "2. 회원가입 중복 (409)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 409', () => pm.response.to.have.status(409));"
+        ] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"password_confirm\": \"{{password}}\",\n  \"username\": \"{{username}}\",\n  \"nickname\": \"{{nickname}}\",\n  \"birth_year\": 2000,\n  \"agree_terms\": true\n}" },
+        "url": "{{baseUrl}}/signup/"
+      }
+    },
+    {
+      "name": "3. 로그인 (200, access + refresh 쿠키)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const body = pm.response.json();",
+          "pm.test('access 토큰 존재', () => pm.expect(body.access).to.be.a('string').and.to.have.length.above(10));",
+          "pm.collectionVariables.set('accessToken', body.access);",
+          "const setCookie = pm.response.headers.get('Set-Cookie') || '';",
+          "pm.test('refresh_token 쿠키가 HttpOnly로 설정됨', () => {",
+          "  pm.expect(setCookie).to.include('refresh_token=');",
+          "  pm.expect(setCookie.toLowerCase()).to.include('httponly');",
+          "});"
+        ] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}" },
+        "url": "{{baseUrl}}/login/"
+      }
+    },
+    {
+      "name": "4. 로그인 실패 - 잘못된 비밀번호 (401)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 401', () => pm.response.to.have.status(401));"
+        ] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"wrong-password-9999\"\n}" },
+        "url": "{{baseUrl}}/login/"
+      }
+    },
+    {
+      "name": "5. 내 정보 조회 /me/ (200, Bearer)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const body = pm.response.json();",
+          "pm.test('내 email 일치', () => pm.expect(body.user.email).to.eql(pm.collectionVariables.get('email')));",
+          "pm.test('아직 온보딩 전', () => pm.expect(body.has_completed_onboarding).to.be.false);"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{accessToken}}" } ],
+        "url": "{{baseUrl}}/me/"
+      }
+    },
+    {
+      "name": "6. 인증 없이 /me/ (401)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 401', () => pm.response.to.have.status(401));"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/me/"
+      }
+    },
+    {
+      "name": "7. 내 정보 수정 /me/ PATCH (200)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const body = pm.response.json();",
+          "pm.test('birth_year 수정됨', () => pm.expect(body.user.birth_year).to.eql(1995));"
+        ] } }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"birth_year\": 1995\n}" },
+        "url": "{{baseUrl}}/me/"
+      }
+    },
+    {
+      "name": "8. 토큰 재발급 /token/refresh/ (200, 회전)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const body = pm.response.json();",
+          "pm.test('새 access 발급', () => pm.expect(body.access).to.be.a('string').and.to.have.length.above(10));",
+          "pm.collectionVariables.set('accessToken', body.access);",
+          "const setCookie = pm.response.headers.get('Set-Cookie') || '';",
+          "pm.test('회전된 새 refresh 쿠키 내려옴', () => pm.expect(setCookie).to.include('refresh_token='));"
+        ] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/token/refresh/"
+      }
+    },
+    {
+      "name": "9. 로그아웃 /logout/ (204)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 204', () => pm.response.to.have.status(204));"
+        ] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Authorization", "value": "Bearer {{accessToken}}" } ],
+        "url": "{{baseUrl}}/logout/"
+      }
+    },
+    {
+      "name": "10. 로그아웃 후 재발급 시도 (401)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "// 로그아웃으로 refresh 쿠키가 삭제+블랙리스트됨 → 재발급 불가",
+          "pm.test('상태코드 401', () => pm.response.to.have.status(401));"
+        ] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/token/refresh/"
+      }
+    },
+    {
+      "name": "11. 비밀번호 재설정 (204)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 204', () => pm.response.to.have.status(204));"
+        ] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\"\n}" },
+        "url": "{{baseUrl}}/password/reset/"
+      }
+    },
+    {
+      "name": "12. [rate limit] 로그인 연타 → 429 (Send 여러 번)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "// login은 IP당 5회/분. 이 요청을 연속 Send 하면 한도 초과 시 429가 나와야 함.",
+          "// (Collection Runner로 이 요청만 6회 반복하거나, 수동으로 Send 6번 연타)",
+          "if (pm.response.code === 429) {",
+          "  pm.test('rate limit 차단 (429)', () => pm.response.to.have.status(429));",
+          "} else {",
+          "  pm.test('아직 한도 내 (200/401) — 더 연타하세요', () => pm.expect([200, 401]).to.include(pm.response.code));",
+          "}"
+        ] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}" },
+        "url": "{{baseUrl}}/login/"
+      }
+    }
+  ]
+}
