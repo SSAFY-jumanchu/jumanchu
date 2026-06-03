@@ -1,7 +1,7 @@
 # 작업 인수인계 — 다음에 할 일
 
 > 다른 PC에서 이어 받을 때 이 문서부터 읽으면 됩니다.
-> 갱신: 2026-05-29 (재무/일봉/시장지표 전체 적재 완료 — 한국 전체 + 미국 인덱스)
+> 갱신: 2026-06-03 (데이터 범위 KOSPI+KOSDAQ+S&P500+NASDAQ100 정리 + 일봉 누락 0 + 지표 재계산)
 
 ---
 
@@ -53,20 +53,31 @@ def get_display_category(self, obj):
 
 FE 통합 시점에 요청 들어오면 추가.
 
-### 2.3 [P1] 일봉 누락분 재시도 (적재 본체는 완료)
+### 2.3 [완료 2026-06-03] 일봉 누락분 재시도 + 데이터 범위 정리
 
-재무/일봉/시장지표 **전체 적재 완료** (§1, dump 2026-05-29). 일봉만 KIS 모의 500으로 일부 누락 → 재시도하면 복구:
+**데이터 범위 확정**: KOSPI + KOSDAQ + NASDAQ100 + S&P500. `sync_us_index_flags`를 확장해
+인덱스 아닌 USD 종목을 `is_active=False`로 내림 (US active 5,942→513). 이제
+`is_active=True` == 적재 대상 범위 → 일봉 누락 파악이 한 줄로 끝남.
+
+**결과**: 일봉 0개 종목 1,022 → **0** (활성 4,090/4,090 모두 보유). 지표 재계산도 완료
+(오늘자 beta/volatility/52주 4,086행, skip 4 = 신규상장 <30거래일).
+
+재실행이 필요할 때 (KIS_ENV=prod 권장 — 모의는 일시 500 잦음):
 
 ```powershell
 cd backend
-# 일봉만 누락분 재시도 (재무/지표는 안 건드림)
+python manage.py sync_us_index_flags                                          # 범위 정리(멱등)
 python manage.py sync_stock_prices --market all --us-index-only --only-empty --sleep 0.4
-python manage.py calc_market_indicators --us-index-only   # 새 일봉 반영해 beta/vol 재계산
+python manage.py calc_market_indicators --us-index-only
 ```
 
-- 현재 일봉: KR 2,763/3,577, US 인덱스 305/513
-- **US 해외 일봉(HHDFS76240000)이 모의에서 특히 불안정** (fail ~41%) → 여러 번 재시도하거나 실전키 검토
-- KR 일봉도 fail ~19% (일시 500)
+- prod 환경 실패율 ≈ 0 (모의 US 해외 fail ~41% 대비 대폭 안정).
+- **이력 깊이 ≈ 1년치/종목** (avg 243행, 총 996,107행, 2025-05-28~2026-06-03). §1의
+  "~296만행"과 불일치 — 이 로컬 DB는 1년치 상태. 다년치 필요 시 `--days` 늘려 재적재.
+- 기존 종목 일봉은 ~2026-05-29(덤프 시점)까지, `--only-empty`라 그 뒤 증분은 안 채움 →
+  매일 증분은 §2.8 cron 몫.
+- 지표는 날짜 분리: per/pbr/eps(enrich 2026-05-27) vs beta/vol/52주(calc) → `StockFinancialsView`
+  구현 시 두 행 병합/선택 로직 필요.
 
 **출처 매핑 (구현됨)**:
 
