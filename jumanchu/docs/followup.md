@@ -1,7 +1,7 @@
 # 작업 인수인계 — 다음에 할 일
 
 > 다른 PC에서 이어 받을 때 이 문서부터 읽으면 됩니다.
-> 갱신: 2026-05-29 (재무/일봉/시장지표 전체 적재 완료 — 한국 전체 + 미국 인덱스)
+> 갱신: 2026-06-03 (데이터 범위 KOSPI+KOSDAQ+S&P500+NASDAQ100 정리 + 일봉 누락 0 + 지표 재계산)
 
 ---
 
@@ -40,44 +40,45 @@ Swagger 스텁만 있는 8개 Auth 엔드포인트에 실제 로직 채우기.
 - login/logout: JWT 발급 + Cookie(HttpOnly) refresh
 - 자세히 → `docs/인증_권한_정책.md`
 
-### 2.2 [P0] Stock 조회 API 실구현 Step 4-11 (SCRUM-60)
+### 2.2 [P2] 종목 분류 표시 — serializer에 `display_category` computed field
 
-Step 1-3 foundations 완료 (§1 참조). 남은 단계:
-- Step 4: `backend/stocks/services/price_dispatch.py` — KR/US 매퍼 + `fetch_price(stock)` + `get_cache_ttl(stock)` 장중 3s/장외 60s 분기 (KST + ET)
-- Step 5: `backend/stocks/pagination.py` — `{items, page, size, total}` envelope helper
-- Step 6: `views.py` 3개 view 실구현 — `StockListView`/`StockDetailView`/`StockPriceView` (`is_in_watchlist` false 하드코딩)
-- Step 7: `requirements.txt`에 `freezegun` 추가 (시간 의존 테스트용)
-- Step 8: `stocks/tests.py` ~15개 케이스 (KIS mock)
-- Step 9: 수동 curl + `manage.py spectacular --validate`
-- Step 10: docs/API_스키마_v1.md 변경이력 + 이 §2.2 항목 제거
-- Step 11: feature 브랜치 PR
+Stock 조회 API(`GET /stocks/{code}/`) 실구현 완료(SCRUM-60). 다만 미국 종목은 `sector`(KIS 한글)가 ~46%만 채워짐 (KIS e_icod가 SPAC/소형주/ADR 미커버). `industry`(yfinance 영문)가 커버리지 더 넓음. 단일 표시 필드를 serializer에서 만들어 FE가 분기 없이 쓰게:
 
-> **종목 분류 표시 — serializer에 `display_category` computed field 추가 권장**
-> 미국 종목은 `sector`(KIS 한글)가 ~46%만 채워짐 (KIS e_icod가 SPAC/소형주/ADR 미커버). 반면 `industry`(yfinance 영문)는 커버리지가 더 넓음. 단일 표시 필드를 serializer에서 만들어 FE가 분기 없이 쓰게:
-> ```python
-> # stocks/serializers.py
-> display_category = serializers.SerializerMethodField()
-> def get_display_category(self, obj):
->     return obj.sector or obj.industry or ""  # 한글 우선, 없으면 영문 fallback
-> ```
-> → FE는 `display_category` 하나만 사용. sector/industry 분기 로직이 FE에 흩어지지 않음.
+```python
+# stocks/serializers.py
+display_category = serializers.SerializerMethodField()
+def get_display_category(self, obj):
+    return obj.sector or obj.industry or ""  # 한글 우선, 영문 fallback
+```
 
-세부 plan: `jumanchu/.claude-plans/stock-api.md` (workspace 내부, gitignore)
+FE 통합 시점에 요청 들어오면 추가.
 
-### 2.3 [P1] 일봉 누락분 재시도 (적재 본체는 완료)
+### 2.3 [완료 2026-06-03] 일봉 누락분 재시도 + 데이터 범위 정리
 
-재무/일봉/시장지표 **전체 적재 완료** (§1, dump 2026-05-29). 일봉만 KIS 모의 500으로 일부 누락 → 재시도하면 복구:
+**데이터 범위 확정**: KOSPI + KOSDAQ + NASDAQ100 + S&P500. `sync_us_index_flags`를 확장해
+인덱스 아닌 USD 종목을 `is_active=False`로 내림 (US active 5,942→513). 이제
+`is_active=True` == 적재 대상 범위 → 일봉 누락 파악이 한 줄로 끝남.
+
+**결과**: 일봉 0개 종목 1,022 → **0** (활성 4,090/4,090 모두 보유). 지표 재계산도 완료
+(오늘자 beta/volatility/52주 4,086행, skip 4 = 신규상장 <30거래일).
+
+재실행이 필요할 때 (KIS_ENV=prod 권장 — 모의는 일시 500 잦음):
 
 ```powershell
 cd backend
-# 일봉만 누락분 재시도 (재무/지표는 안 건드림)
+python manage.py sync_us_index_flags                                          # 범위 정리(멱등)
 python manage.py sync_stock_prices --market all --us-index-only --only-empty --sleep 0.4
-python manage.py calc_market_indicators --us-index-only   # 새 일봉 반영해 beta/vol 재계산
+python manage.py calc_market_indicators --us-index-only
 ```
 
-- 현재 일봉: KR 2,763/3,577, US 인덱스 305/513
-- **US 해외 일봉(HHDFS76240000)이 모의에서 특히 불안정** (fail ~41%) → 여러 번 재시도하거나 실전키 검토
-- KR 일봉도 fail ~19% (일시 500)
+- prod 환경 실패율 ≈ 0 (모의 US 해외 fail ~41% 대비 대폭 안정).
+- **이력 깊이 ≈ 1년치/종목** (avg 243행, 총 996,107행, 2025-05-28~2026-06-03). §1의
+  "~296만행"과 불일치 — 이 로컬 DB는 1년치 상태. **1년치로 확정**(5y 차트는 시연 범위
+  아님, FE 5y 버튼은 1년치만 표시) — 다년치 필요 시 `--days` 늘려 재적재.
+- 기존 종목 일봉은 ~2026-05-29(덤프 시점)까지, `--only-empty`라 그 뒤 증분은 안 채움 →
+  매일 증분은 §2.8 cron 몫.
+- 지표는 날짜 분리: per/pbr/eps(enrich 2026-05-27) vs beta/vol/52주(calc) → `StockFinancialsView`
+  구현 시 두 행 병합/선택 로직 필요.
 
 **출처 매핑 (구현됨)**:
 
@@ -130,6 +131,17 @@ DART의 `induty_code`는 KSIC 표준 산업 코드("212", "46712" 등). 현재�
 | **SharedPortfolioItem weight 합계 검증** — 100% 합산 validator | 공유 포트폴리오 API 실구현 시 |
 | **view_count 락 회피** — Redis INCR 버퍼 + Celery 배치 동기화 | 커뮤니티 API 트래픽 시 |
 | **캐싱 TTL 유동화** — 장중 3초, 장외 60초+ 분기 | StockPriceView 실구현 시 |
+
+### 2.8 [P2] 매일 일봉 증분 cron 등록 (운영)
+
+캔들 차트 API 완료(SCRUM-131). 차트가 매일 최신 데이터 보이려면 장 마감 후 일봉 1일치 증분 필요:
+
+```powershell
+# 장 마감 후 (16:00 KST + 06:00 KST 다음날 미국장 마감 후)
+python manage.py sync_stock_prices --market all --days 5 --sleep 0.4
+```
+
+종목당 1콜 ≈ 1시간. 5일 윈도우 + ignore_conflicts로 주말·실패 자가복구. Windows 작업 스케줄러 또는 별도 호스트 cron으로 등록만 하면 됨.
 
 ---
 

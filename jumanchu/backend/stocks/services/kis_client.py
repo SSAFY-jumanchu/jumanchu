@@ -231,3 +231,54 @@ class KISClient:
                 "FID_ORG_ADJ_PRC": "0",
             },
         )
+
+    def get_domestic_minute_price(
+        self, stock_code: str, base_hour: str = "153000",
+        past_data_yn: str = "Y",
+    ) -> dict[str, Any]:
+        """국내주식 당일 분봉 (FHKST03010200). 1분봉만 반환, 한 번에 30행.
+
+        base_hour=HHMMSS — 이 시각부터 과거로 30분치.
+        5m/15m/1h는 호출자(price_dispatch)에서 _resample.
+
+        output2 각 행:
+          stck_bsop_date  영업일자, stck_cntg_hour  체결시각(HHMMSS)
+          stck_oprc/stck_hgpr/stck_lwpr/stck_prpr  시·고·저·종가
+          cntg_vol        체결량
+        """
+        return self._get(
+            path="/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
+            tr_id="FHKST03010200",
+            params={
+                "FID_ETC_CLS_CODE": "",
+                "FID_COND_MRKT_DIV_CODE": "J",
+                "FID_INPUT_ISCD": stock_code,
+                "FID_INPUT_HOUR_1": base_hour,
+                "FID_PW_DATA_INCU_YN": past_data_yn,
+            },
+        )
+
+    def get_overseas_minute_price(
+        self, excd: str, symbol: str, nmin: str = "1",
+        nrec: str = "120", next_token: str = "", keyb: str = "",
+        pinc: str = "1", fill: str = "",
+    ) -> dict[str, Any]:
+        """해외주식 분봉 (HHDFS76950200). NMIN으로 인터벌 직접 지정.
+
+        한 번에 120행. KIS가 OHLC 합산해서 줌 → 클라이언트 재집계 불필요.
+        nmin ∈ {1, 5, 15, 60} (15/60은 작업 시 추가 확인 권장).
+
+        output2 각 행:
+          xymd/xhms  현지 일자/시각(YYYYMMDD/HHMMSS)
+          kymd/khms  한국시간 환산
+          open/high/low/last  시·고·저·종가, evol  거래량, eamt  거래대금
+        """
+        return self._get(
+            path="/uapi/overseas-price/v1/quotations/inquire-time-itemchartprice",
+            tr_id="HHDFS76950200",
+            params={
+                "AUTH": "", "EXCD": excd, "SYMB": symbol,
+                "NMIN": nmin, "PINC": pinc, "NEXT": next_token,
+                "NREC": nrec, "FILL": fill, "KEYB": keyb,
+            },
+        )

@@ -978,3 +978,5 @@ def execute_order(user, stock_code, side, quantity, idempotency_key):
 |---|---|---|
 | 2026-05-13 | v1 초안 — 핵심 4모듈 25 엔드포인트 + 8개 도메인 타입 | 강재민 |
 | 2026-05-13 | **v1.1 ERD 정합성 패치** — `Transaction`→`Order`, `VirtualAccount`→`Account`, `Financial`→`FinancialSummary`+`StockIndicator` 분리, Stock 필드 풍부화, Trading URL `/trades`→`/orders` | 강재민 |
+| 2026-06-01 | **v1.2** — URL trailing slash 전면 통일(Auth/Stock/Order/Portfolio), Stock 조회 API `GET /stocks/`·`/{code}/`·`/{code}/price/` 실구현(KIS 분기 + 장중3s·장외60s 캐시) | 강재민 |
+| 2026-06-01 | **v1.3** — 캔들 차트 API `GET /stocks/{code}/chart/` 실구현. 일봉/주봉/월봉=DB(StockPrice resample), 분봉=KIS(KR FHKST03010200 1m + 클라이언트 _resample / US HHDFS76950200 NMIN). 장중 today 한 칸 합성(B 패턴, 일봉 한정). 캐싱: 분봉 5분 / 일봉 1시간. period×interval 유효성 400 | 강재민 |
