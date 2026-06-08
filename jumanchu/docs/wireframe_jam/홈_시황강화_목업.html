@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1240">
+<title>주만추 홈 — 개선 목업 (보유/관심 + 캘린더)</title>
+<style>
+  :root{
+    --accent:#315dff; --purple:#7d4ee8; --positive:#0f9f6e; --negative:#cf3d3d; --warning:#e58b10;
+    --ink:#1f2a4d; --muted:#5a6a8a; --faint:#9aa8c4; --line:rgba(150,175,235,.30);
+    --glass:rgba(255,255,255,.55); --glass-border:rgba(255,255,255,.65); --radius:16px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Pretendard','Apple SD Gothic Neo',system-ui,-apple-system,sans-serif;
+    background:linear-gradient(135deg,#e9e4ff 0%,#dceeff 46%,#dff5ec 100%);color:var(--ink);min-height:100vh;padding:0 0 40px}
+  .wrap{max-width:1240px;margin:0 auto;padding:0 18px}
+  .panel{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border:1px solid var(--glass-border);border-radius:var(--radius);box-shadow:0 8px 30px rgba(60,80,160,.08)}
+  .eyebrow{font-size:12px;font-weight:800;color:var(--muted);margin:0 0 2px}
+  h2{font-size:18px;font-weight:900;margin:0}
+  .new-tag{background:rgba(125,78,232,.14);color:var(--purple);border:1px solid rgba(125,78,232,.3);
+    font-size:10px;padding:2px 7px;border-radius:6px;margin-left:6px;vertical-align:middle}
+  .up{color:var(--positive)} .down{color:var(--negative)}
+  .pad{padding:18px}
+  .searchbar{display:flex;align-items:center;gap:12px;margin-top:18px;padding:13px 18px}
+  .searchbar .mag{color:var(--accent);flex-shrink:0}
+  .searchbar input{flex:1;border:0;background:transparent;outline:none;font-size:15px;font-weight:700;color:var(--ink)}
+  .searchbar input::placeholder{color:var(--faint);font-weight:600}
+  .searchbar .hot{font-size:12px;color:var(--muted);font-weight:700;white-space:nowrap}
+
+  /* nav */
+  nav{background:rgba(255,255,255,.6);backdrop-filter:blur(10px);border-bottom:1px solid var(--glass-border);position:sticky;top:0;z-index:10}
+  .nav-in{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:22px;padding:12px 18px}
+  .logo{font-size:20px;font-weight:900;color:var(--accent);border:2px solid var(--accent);border-radius:8px;padding:2px 8px}
+  .nav-menu{display:flex;gap:20px;font-size:14px;font-weight:800;color:var(--muted)}
+  .nav-menu .on{color:var(--accent);background:rgba(49,93,255,.1);padding:4px 12px;border-radius:999px}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);font-weight:700}
+  .nav-right .av{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900}
+  .pill{padding:5px 12px;border-radius:999px;border:1px solid var(--glass-border);background:rgba(255,255,255,.6);font-weight:800}
+  .pill.solid{background:rgba(49,93,255,.12);color:var(--accent);border-color:rgba(49,93,255,.3)}
+
+  .grid-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:14px}
+  .grid-mid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:16px}
+  .grid-news{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:16px}
+
+  /* 자산현황 헤더 + 평가액 */
+  .panel-head{display:flex;align-items:center;justify-content:space-between}
+  .hide-btn{font-size:11px;font-weight:900;color:var(--muted);background:rgba(255,255,255,.6);border:1px solid var(--glass-border);border-radius:999px;padding:5px 11px;cursor:pointer}
+  .asset-top{display:flex;gap:26px;align-items:flex-end;margin:14px 0 4px}
+  .asset-top small{font-size:11px;font-weight:800;color:var(--muted)}
+  .asset-eval{font-size:28px;font-weight:900;letter-spacing:-.5px}
+  .asset-ret{font-size:15px;font-weight:900;padding-bottom:4px}
+  .masked .amt{filter:blur(7px);user-select:none}
+
+  /* 목표 mini */
+  .goal-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 6px}
+  .goal{display:flex;align-items:center;gap:10px;padding:11px;border-radius:12px;color:#fff}
+  .goal.dark{background:linear-gradient(135deg,#2b3350,#404a6b)}
+  .goal.green{background:linear-gradient(135deg,#1d6f57,#0f9f6e)}
+  .goal .ic{font-size:18px}
+  .goal small{opacity:.78;font-size:10px;font-weight:700;display:block}
+  .goal b{font-size:13px;font-weight:900;display:block}
+  .goal .amt2{font-size:11px;font-weight:700;opacity:.9}
+  .goal .st{margin-left:auto;font-size:10px;font-weight:900;background:rgba(255,255,255,.2);padding:2px 8px;border-radius:999px}
+  .track{height:6px;background:rgba(150,175,235,.3);border-radius:999px;overflow:hidden;margin:2px 0}
+  .track>i{display:block;height:100%;width:13%;background:var(--accent);border-radius:999px}
+  .pct{text-align:right;font-size:11px;font-weight:900;color:var(--accent);margin-bottom:10px}
+
+  /* 점검 액션 카드 */
+  .acts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+  .act{display:flex;align-items:center;gap:11px;padding:13px;border-radius:12px;background:rgba(255,255,255,.45);border:1px solid var(--glass-border);cursor:pointer}
+  .act:hover{background:rgba(255,255,255,.7)}
+  .act .ic{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+  .act.diary .ic{background:rgba(49,93,255,.12)}
+  .act.care .ic{background:rgba(15,159,110,.13)}
+  .act b{font-size:13px;font-weight:900;display:block}
+  .act small{font-size:11px;font-weight:700;color:var(--muted)}
+  .act .arr{margin-left:auto;color:var(--faint);font-weight:900}
+
+  /* 추천 */
+  .swipe{background:linear-gradient(135deg,#7d4ee8 0%,#9b5cf0 45%,#e0568f 100%);border-radius:18px;padding:22px;color:#fff;position:relative;overflow:hidden;flex:1;display:flex;flex-direction:column;justify-content:center;min-height:200px}
+  .swipe .score{position:absolute;top:18px;right:22px;text-align:right}
+  .swipe .score b{font-size:40px;font-weight:900;line-height:1}
+  .badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:900}
+  .swipe .name{font-size:30px;font-weight:900;margin:30px 0 2px}
+  .swipe .code{opacity:.8;font-size:13px;font-weight:700}
+  .swipe .kv{display:flex;gap:10px;margin-top:18px}
+  .swipe .kv>div{flex:1;background:rgba(255,255,255,.15);border-radius:12px;padding:10px 12px}
+  .swipe .kv small{opacity:.8;font-size:11px}
+  .swipe .kv b{display:block;font-size:16px;font-weight:900}
+  .swipe-foot{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:14px}
+  .sbtn{width:44px;height:44px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 14px rgba(0,0,0,.12)}
+  .sbtn.like{background:var(--accent);color:#fff;width:54px;height:54px;font-size:22px}
+  .likes{text-align:center;font-size:12px;color:var(--muted);font-weight:800;margin-top:10px}
+
+  /* 시장지표 */
+  .mkt-status{display:flex;gap:18px;padding:10px 18px;border-bottom:1px solid var(--line);font-size:12px;font-weight:800;color:var(--muted)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--positive);display:inline-block;margin-right:5px;box-shadow:0 0 0 2.5px rgba(15,159,110,.2)}
+  .idx-row{display:grid;grid-template-columns:repeat(4,1fr)}
+  .idx{padding:14px 18px;border-right:1px solid var(--line)}
+  .idx:last-child{border-right:0}
+  .idx .top{display:flex;justify-content:space-between;align-items:flex-start}
+  .idx .nm{font-size:12px;font-weight:900;color:var(--muted)}
+  .idx .val{font-size:19px;font-weight:900;margin:6px 0 2px}
+  .idx .chg{font-size:12px;font-weight:900}
+  .spark{width:74px;height:30px}
+
+  /* 보유/관심 종목 위젯 */
+  .seg{display:inline-flex;gap:3px;padding:3px;border-radius:999px;background:rgba(255,255,255,.5);border:1px solid var(--glass-border)}
+  .seg button{border:0;background:transparent;font-size:13px;font-weight:900;color:var(--muted);padding:5px 16px;border-radius:999px;cursor:pointer}
+  .seg button.on{background:#fff;color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.07)}
+  .hold-list{margin-top:4px}
+  .hold-row{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:1px solid var(--line)}
+  .hold-row:last-child{border-bottom:0}
+  .h-heart{font-size:15px;color:#e84057;flex-shrink:0;cursor:pointer}
+  .h-rank{width:14px;text-align:center;font-size:13px;font-weight:900;color:var(--muted);flex-shrink:0}
+  .h-av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#fff;flex-shrink:0}
+  .h-name{font-size:14px;font-weight:800}
+  .h-price{margin-left:auto;font-size:14px;font-weight:800;white-space:nowrap}
+  .h-chg{font-size:13px;font-weight:900;padding:5px 10px;border-radius:8px;min-width:82px;text-align:center;flex-shrink:0}
+  .chg-up{background:#ffe9ee;color:#e84057}
+  .chg-down{background:#e9f1ff;color:#3b6fd4}
+  .more-btn{display:block;width:100%;margin-top:10px;text-align:center;font-size:12px;font-weight:900;color:var(--accent);background:rgba(49,93,255,.08);border:1px solid rgba(49,93,255,.2);border-radius:10px;padding:9px;cursor:pointer}
+  /* 보유 종목 뉴스 캐러셀 */
+  .nc{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+  .nc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .nc-track{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:2px}
+  .nc-track::-webkit-scrollbar{height:0}
+  .nc-card{min-width:100%;scroll-snap-align:start;display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.5);border:1px solid var(--glass-border);border-radius:10px;padding:11px 12px}
+  .nc-h{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nc-dots{display:flex;gap:5px;justify-content:center;margin-top:8px}
+  .nc-dots i{width:6px;height:6px;border-radius:50%;background:var(--faint)}
+  .nc-dots i.on{background:var(--accent);width:16px;border-radius:3px}
+
+  /* 캘린더 */
+  .cal-item{display:grid;grid-template-columns:60px 1fr auto;gap:10px;align-items:center;padding:11px 4px;border-bottom:1px solid var(--line)}
+  .cal-item:last-child{border-bottom:0}
+  .cal-date{font-size:11px;font-weight:900;color:var(--muted);text-align:center;background:rgba(49,93,255,.08);border:1px solid rgba(49,93,255,.18);border-radius:8px;padding:5px 0;line-height:1.25}
+  .cal-date.today{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .cal-title{font-size:13px;font-weight:800;line-height:1.35}
+  .cal-imp{font-size:10px;font-weight:900;padding:2px 8px;border-radius:999px}
+  .imp-h{background:rgba(207,61,61,.12);color:var(--negative)} .imp-m{background:rgba(229,139,16,.14);color:var(--warning)}
+
+  /* 뉴스 */
+  .head-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .more{font-size:12px;font-weight:900;color:var(--accent);background:rgba(49,93,255,.1);border:1px solid rgba(49,93,255,.25);padding:5px 12px;border-radius:999px}
+  .news-item{display:flex;align-items:flex-start;gap:10px;padding:11px 2px;border-bottom:1px solid var(--line)}
+  .news-item:last-child{border-bottom:0}
+  .ntag{font-size:10px;font-weight:900;padding:2px 8px;border-radius:6px;background:rgba(49,93,255,.08);color:var(--accent);white-space:nowrap;margin-top:2px}
+  .news-title{font-size:13.5px;font-weight:800;line-height:1.4}
+  .news-src{font-size:11px;color:var(--faint);font-weight:700;margin-top:2px}
+  .news-time{font-size:11px;color:var(--faint);font-weight:700;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <span class="logo">주만추</span>
+    <div class="nav-menu"><span class="on">홈</span><span>주식 조회</span><span>관심 종목</span><span>보유 종목</span><span>장투 케어</span><span>커뮤니티</span></div>
+    <div class="nav-right"><span class="av">김</span> 환영합니다 <b style="color:var(--ink)">김주만</b>
+      <span class="pill">로그아웃</span><span class="pill">회원정보수정</span><span class="pill solid">마이페이지</span></div>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <!-- 주식 검색 -->
+  <div class="searchbar panel">
+    <svg class="mag" width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M14 14l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input type="search" placeholder="종목명 또는 코드로 검색  (예: 삼성전자, 005930, NVDA)">
+    <span class="hot">🔥 인기검색  SK하이닉스 · 엔비디아 · 삼성전자</span>
+  </div>
+
+  <!-- ROW 1: 자산현황 + 추천 -->
+  <div class="grid-top">
+    <section class="panel pad">
+      <div class="panel-head">
+        <div><p class="eyebrow">나의 자산</p><h2>자산 현황</h2></div>
+        <button class="hide-btn" id="hideBtn">👁 금액 숨기기</button>
+      </div>
+
+      <div class="asset-top">
+        <div><small>총 평가액</small><div class="asset-eval"><span class="amt">12,345,000원</span></div></div>
+        <div><small>총 수익률</small><div class="asset-ret up"><span class="amt">+8.2%</span></div></div>
+      </div>
+
+      <div class="goal-row">
+        <div class="goal dark"><span class="ic">🖥️</span><div><small>다음 목표</small><b>게이밍 데스크탑</b><span class="amt2">목표 3,500,000원</span></div><span class="st">진행중</span></div>
+        <div class="goal green"><span class="ic">🚗</span><div><small>달성 완료</small><b>국산 정차</b><span class="amt2">45,000,000원</span></div><span class="st">달성</span></div>
+      </div>
+      <div class="track"><i></i></div>
+      <div class="pct">게이밍 데스크탑 13% 달성</div>
+
+      <div class="acts">
+        <div class="act diary"><span class="ic">📓</span><div><b>투자 일기 쓰러 가기</b><small>작성 대기 1건 (매매 후 미작성)</small></div><span class="arr">→</span></div>
+        <div class="act care"><span class="ic">🩺</span><div><b>장투 점검하기</b><small>내 종목 지금 점검해보세요</small></div><span class="arr">→</span></div>
+      </div>
+
+      <div class="nc">
+        <div class="nc-head"><p class="eyebrow" style="margin:0">📰 보유 종목 뉴스</p><span style="font-size:11px;color:var(--faint);font-weight:700">← → 넘기기</span></div>
+        <div class="nc-track">
+          <div class="nc-card"><span class="ntag">SK하이닉스</span><span class="nc-h">HBM3E 12단 양산 본격화…NVIDIA 독점 공급</span></div>
+          <div class="nc-card"><span class="ntag">삼성전자</span><span class="nc-h">파운드리 2nm 수율 개선…퀄컴 수주 임박</span></div>
+          <div class="nc-card"><span class="ntag">현대차</span><span class="nc-h">전기차 美 판매 호조…관세는 변수</span></div>
+        </div>
+        <div class="nc-dots"><i class="on"></i><i></i><i></i></div>
+      </div>
+    </section>
+
+    <section class="panel pad" style="display:flex;flex-direction:column">
+      <p class="eyebrow">AI 기반 추천</p>
+      <h2 style="margin-bottom:14px">스와이핑 주식 추천</h2>
+      <div class="swipe">
+        <div class="score"><b>94</b><div style="font-size:12px;opacity:.85">점</div></div>
+        <span class="badge" style="background:rgba(255,255,255,.2);color:#fff">KOSPI · 전기·전자</span>
+        <div class="name">SK하이닉스</div>
+        <div class="code">000660</div>
+        <div class="kv"><div><small>현재가</small><b>189,300원</b></div><div><small>등락률</small><b>+2.1%</b></div></div>
+      </div>
+      <div class="likes">🟢 1,284명의 사용자가 좋아요!</div>
+      <div class="swipe-foot"><span class="sbtn">✕</span><span class="sbtn like">♥</span><span class="sbtn">→</span></div>
+    </section>
+  </div>
+
+  <!-- 시장 지표 바 -->
+  <section class="panel" style="margin-top:16px;overflow:hidden">
+    <div class="mkt-status"><span><span class="dot"></span>국내 애프터마켓 15:30~20:00</span><span><span class="dot"></span>해외 프리마켓 17:00~22:30</span></div>
+    <div class="idx-row">
+      <div class="idx"><div class="top"><span class="nm">코스피</span><svg class="spark" data-v="68,70,67,72,74,71,75,73,76,79,78,81" data-up="1"></svg></div><div class="val">2,720.45</div><div class="chg up">+8.35 (+0.31%)</div></div>
+      <div class="idx"><div class="top"><span class="nm">코스닥</span><svg class="spark" data-v="82,80,78,75,77,74,72,73,70,68,66,64" data-up="0"></svg></div><div class="val">878.12</div><div class="chg down">-12.34 (-1.38%)</div></div>
+      <div class="idx"><div class="top"><span class="nm">S&P 500</span><svg class="spark" data-v="55,57,56,59,61,63,62,65,67,69,71,73" data-up="1"></svg></div><div class="val">5,820.14</div><div class="chg up">+15.23 (+0.26%)</div></div>
+      <div class="idx"><div class="top"><span class="nm">나스닥</span><svg class="spark" data-v="50,53,52,56,58,61,60,64,66,69,71,74" data-up="1"></svg></div><div class="val">18,942.67</div><div class="chg up">+89.12 (+0.47%)</div></div>
+    </div>
+  </section>
+
+  <!-- ROW: 내 보유/관심 종목 + 경제 캘린더 -->
+  <div class="grid-mid">
+    <section class="panel pad">
+      <div class="panel-head">
+        <div><p class="eyebrow">내 종목 · 시세 모니터링</p><h2>보유 / 관심 종목</h2></div>
+        <div class="seg"><button class="on">보유</button><button>관심</button></div>
+      </div>
+      <p style="font-size:11px;color:var(--faint);font-weight:700;margin:8px 0 2px">상위 4개 · 현재가와 등락만 (수익률 X)</p>
+      <div class="hold-list">
+        <div class="hold-row"><span class="h-heart">♥</span><span class="h-rank">1</span><span class="h-av" style="background:#5b8def">SK</span><div class="h-name">SK하이닉스</div><div class="h-price">189,300원</div><span class="h-chg chg-up">+2.1%</span></div>
+        <div class="hold-row"><span class="h-heart">♥</span><span class="h-rank">2</span><span class="h-av" style="background:#1428a0">삼성</span><div class="h-name">삼성전자</div><div class="h-price">317,000원</div><span class="h-chg chg-up">+2.4%</span></div>
+        <div class="hold-row"><span class="h-heart">♥</span><span class="h-rank">3</span><span class="h-av" style="background:#76b900">NV</span><div class="h-name">NVIDIA</div><div class="h-price">$214.25</div><span class="h-chg chg-up">+1.8%</span></div>
+        <div class="hold-row"><span class="h-heart">♥</span><span class="h-rank">4</span><span class="h-av" style="background:#0a2a6b">현</span><div class="h-name">현대차</div><div class="h-price">728,000원</div><span class="h-chg chg-down">-0.7%</span></div>
+      </div>
+      <button class="more-btn">보유 종목 더보기 →</button>
+    </section>
+
+    <section class="panel pad">
+      <div class="panel-head">
+        <div><p class="eyebrow">이번 주 주요 일정 <span class="new-tag">NEW</span></p><h2>경제 캘린더</h2></div>
+        <div class="seg cal-seg"><button class="on" data-c="kr">한국</button><button data-c="us">미국</button></div>
+      </div>
+      <div class="cal-list" data-c="kr" style="margin-top:6px">
+        <div class="cal-item"><span class="cal-date today">오늘</span><span class="cal-title">한국 수출입 동향 (관세청)</span><span class="cal-imp imp-m">중</span></div>
+        <div class="cal-item"><span class="cal-date">6/05<br>목</span><span class="cal-title">한국 소비자물가지수(CPI)</span><span class="cal-imp imp-h">상</span></div>
+        <div class="cal-item"><span class="cal-date">6/10<br>화</span><span class="cal-title">한국은행 금통위 (기준금리 결정)</span><span class="cal-imp imp-h">상</span></div>
+        <div class="cal-item"><span class="cal-date">6/12<br>목</span><span class="cal-title">한국 고용동향</span><span class="cal-imp imp-m">중</span></div>
+        <div class="cal-item"><span class="cal-date">6/14<br>토</span><span class="cal-title">한국 경상수지</span><span class="cal-imp imp-m">중</span></div>
+      </div>
+      <div class="cal-list" data-c="us" hidden style="margin-top:6px">
+        <div class="cal-item"><span class="cal-date today">오늘</span><span class="cal-title">미국 신규 구인건수(JOLTs)</span><span class="cal-imp imp-m">중</span></div>
+        <div class="cal-item"><span class="cal-date">6/05<br>목</span><span class="cal-title">미국 ADP 고용변화</span><span class="cal-imp imp-m">중</span></div>
+        <div class="cal-item"><span class="cal-date">6/07<br>토</span><span class="cal-title">미국 비농업 고용지수</span><span class="cal-imp imp-h">상</span></div>
+        <div class="cal-item"><span class="cal-date">6/11<br>수</span><span class="cal-title">FOMC 회의 (기준금리 결정)</span><span class="cal-imp imp-h">상</span></div>
+        <div class="cal-item"><span class="cal-date">6/13<br>금</span><span class="cal-title">미국 소비자물가지수(CPI)</span><span class="cal-imp imp-h">상</span></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 뉴스 -->
+  <div class="grid-news">
+    <section class="panel pad">
+      <div class="head-row"><div><p class="eyebrow">최신 경제 뉴스</p><h2>종합 뉴스</h2></div><span class="more">더보기 →</span></div>
+      <div class="news-item"><span class="ntag">금리</span><div style="flex:1"><div class="news-title">FOMC 금리 동결 가능성 높아져…시장 반응은?</div><div class="news-src">한국경제</div></div><span class="news-time">1시간 전</span></div>
+      <div class="news-item"><span class="ntag">반도체</span><div style="flex:1"><div class="news-title">반도체 수출 전월 대비 18% 증가, 하이닉스 수혜</div><div class="news-src">매일경제</div></div><span class="news-time">2시간 전</span></div>
+      <div class="news-item"><span class="ntag">해외</span><div style="flex:1"><div class="news-title">S&P500 신고가 경신…나스닥도 동반 상승</div><div class="news-src">연합뉴스</div></div><span class="news-time">3시간 전</span></div>
+      <div class="news-item"><span class="ntag">코스피</span><div style="flex:1"><div class="news-title">코스피 2720선 회복, 외국인 선물 매수 전환</div><div class="news-src">서울경제</div></div><span class="news-time">4시간 전</span></div>
+    </section>
+    <section class="panel pad">
+      <div class="head-row"><div><p class="eyebrow">내 관심 종목 소식</p><h2>관심 종목 뉴스</h2></div><span class="more">더보기 →</span></div>
+      <div class="news-item"><span class="ntag">SK하이닉스</span><div style="flex:1"><div class="news-title">SK하이닉스, HBM3E 양산 확대…AI 수요 견조</div><div class="news-src">이데일리</div></div><span class="news-time">30분 전</span></div>
+      <div class="news-item"><span class="ntag">삼성전자</span><div style="flex:1"><div class="news-title">삼성전자, 파운드리 수주 회복세…2분기 기대감</div><div class="news-src">전자신문</div></div><span class="news-time">1시간 전</span></div>
+      <div class="news-item"><span class="ntag">NVDA</span><div style="flex:1"><div class="news-title">NVIDIA 실적 서프라이즈…관련 국내주 수혜</div><div class="news-src">Bloomberg</div></div><span class="news-time">2시간 전</span></div>
+      <div class="news-item"><span class="ntag">AAPL</span><div style="flex:1"><div class="news-title">애플 WWDC AI 기능 대거 공개 예정</div><div class="news-src">디지털데일리</div></div><span class="news-time">3시간 전</span></div>
+    </section>
+  </div>
+
+</div>
+
+<script>
+// 금액 숨기기 토글
+document.getElementById('hideBtn').addEventListener('click',function(){
+  const on=document.body.classList.toggle('masked');
+  this.textContent=on?'🙈 금액 보기':'👁 금액 숨기기';
+});
+// 지수 미니 sparkline
+document.querySelectorAll('.spark').forEach(function(el){
+  const v=el.dataset.v.split(',').map(Number), up=el.dataset.up==='1';
+  const w=74,h=30,min=Math.min(...v),max=Math.max(...v),rng=(max-min)||1;
+  const pts=v.map((x,i)=>[i/(v.length-1)*w,(1-(x-min)/rng)*(h-6)+3]);
+  const line=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  el.setAttribute('viewBox','0 0 '+w+' '+h);
+  el.innerHTML='<path d="'+line+'" fill="none" stroke="'+(up?'#315dff':'#cf3d3d')+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+});
+// 경제 캘린더 한국/미국 토글
+document.querySelectorAll('.cal-seg button').forEach(function(b){
+  b.addEventListener('click',function(){
+    document.querySelectorAll('.cal-seg button').forEach(x=>x.classList.remove('on'));
+    this.classList.add('on');
+    const c=this.dataset.c;
+    document.querySelectorAll('.cal-list').forEach(l=>{ l.hidden = l.dataset.c!==c; });
+  });
+});
+</script>
+</body>
+</html>

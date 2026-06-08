@@ -146,3 +146,31 @@ class NewsRelatedStock(models.Model):
         indexes = [
             models.Index(fields=["stock"]),
         ]
+
+
+class EconomicEvent(models.Model):
+    class Country(models.TextChoices):
+        US = "US", "미국"
+        KR = "KR", "한국"
+
+    class Importance(models.TextChoices):
+        HIGH = "HIGH", "상"
+        MEDIUM = "MEDIUM", "중"
+        LOW = "LOW", "하"
+
+    event_date = models.DateField()
+    title = models.CharField(max_length=120)
+    importance = models.CharField(
+        max_length=8, choices=Importance.choices, default=Importance.MEDIUM
+    )
+    country = models.CharField(max_length=4, choices=Country.choices)
+
+    class Meta:
+        ordering = ["event_date", "id"]
+        indexes = [
+            models.Index(fields=["event_date"]),
+            models.Index(fields=["country", "event_date"]),
+        ]
+
+    def __str__(self):
+        return f"[{self.country}] {self.event_date} {self.title}"

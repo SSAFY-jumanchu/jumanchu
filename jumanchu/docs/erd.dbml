@@ -1,0 +1,409 @@
+// =====================================================================
+//  주만추 ERD (DBML) — 현재 구현 + 추천/장투 데모 결정안
+//  사용법: https://dbdiagram.io 에 이 내용을 통째로 붙여넣으면 그림이 그려집니다.
+//  표기:  [기존]   = 이미 마이그레이션된 테이블/컬럼
+//         [신규]   = 추천/장투 데모를 위해 추가하기로 결정한 것
+//         [선택]   = 여유 되면 (없어도 동작)
+//         [제외]   = 데모에선 안 씀 (테이블은 두되 API 안 만듦)
+//  근거 문서: docs/추천_장투_DB결정.md
+// =====================================================================
+
+Project jumanchu {
+  database_type: 'PostgreSQL'
+  Note: '궁합 추천 + 장투 케어 (데모 범위). 영어 표기는 Django 모델 기준.'
+}
+
+// ───────────────────────── 사용자 도메인 ─────────────────────────
+
+Table user {                    // [기존] accounts_user
+  id integer [pk]
+  username varchar
+  email varchar
+  password varchar
+  nickname varchar [unique]
+  birth_year smallint
+  date_joined datetime
+}
+
+Table investment_profile {      // [기존 + 신규컬럼] accounts_investmentprofile (1:1 user)
+  id integer [pk]
+  user_id integer [unique]
+  // --- 기존 컬럼 ---
+  risk_type varchar             [note: '기존: CONSERVATIVE/MODERATE/AGGRESSIVE']
+  investment_style varchar      [note: '기존']
+  preferred_period smallint     [note: '기존: 선호기간(개월)']
+  preferred_sector varchar      [note: '기존: 단일 섹터']
+  // --- 신규: 온보딩 5벡터 (1~5) ---
+  risk_tolerance smallint       [note: '신규: 리스크 감수']
+  investment_term smallint      [note: '신규: 투자 기간']
+  experience smallint           [note: '신규: 투자 경험']
+  loss_aversion smallint        [note: '신규: 손실 회피']
+  behavior smallint             [note: '신규: 투자 스타일']
+  onboarding_answers jsonb      [note: '신규: 8문항 원답']
+  profiled_at datetime          [note: '신규']
+  signature_stock_id integer    [note: '신규: 가입 시점 궁합 1등 종목 박제 (OO형 투자자)']
+  updated_at datetime
+}
+
+Table user_preferred_sector {   // [신규] 복수 관심 섹터
+  id integer [pk]
+  user_id integer
+  sector varchar
+  weight decimal                [note: '1순위 1.0 / 2순위 0.6 / 3순위 0.3']
+  created_at datetime
+  indexes {
+    (user_id, sector) [unique]
+  }
+}
+
+Table goal {                    // [신규] 목표 마스터 — 시스템이 시드(모든 유저 공통). 누적수익 목표 + 달성 뱃지
+  id integer [pk]
+  name varchar                  [note: '게이밍 데스크탑 등 (우리가 입력)']
+  target_amount bigint          [note: '누적 수익 목표 금액']
+  badge_emoji varchar           [note: '달성 뱃지 아이콘 🖥️']
+  badge_name varchar            [note: '뱃지 이름']
+  sort_order smallint           [note: '목표 진행 순서']
+}
+
+Table user_goal {               // [신규] 유저별 목표 달성 기록 = 뱃지 획득 (닉네임 옆 표시)
+  id integer [pk]
+  user_id integer
+  goal_id integer
+  achieved_at datetime
+  indexes {
+    (user_id, goal_id) [unique]
+  }
+}
+
+Table economic_event {          // [신규] 경제 캘린더 (홈 다가오는 일정 리스트) — 유저 무관 마스터
+  id integer [pk]
+  event_date date
+  title varchar
+  importance varchar            [note: '상/중/하']
+  country varchar
+  created_at datetime
+}
+
+// ───────────────────────── 종목 도메인 ─────────────────────────
+
+Table stock {                   // [기존] stocks_stock
+  id integer [pk]
+  code varchar
+  name varchar
+  market varchar                [note: 'KOSPI/KOSDAQ/NASDAQ/NYSE']
+  sector varchar
+  industry varchar
+  market_cap bigint
+  currency varchar              [note: 'KRW/USD']
+  is_active boolean
+  is_sp500 boolean
+  is_nasdaq100 boolean
+  listed_at date
+  indexes {
+    (code, market) [unique]
+  }
+}
+
+Table stock_price {             // [기존] stocks_stockprice (일봉)
+  id integer [pk]
+  stock_id integer
+  price_date date
+  open decimal
+  high decimal
+  low decimal
+  close decimal
+  volume bigint
+  indexes {
+    (stock_id, price_date) [unique]
+  }
+}
+
+Table stock_indicator {         // [기존] stocks_stockindicator (시장지표)
+  id integer [pk]
+  stock_id integer
+  per float
+  pbr float
+  eps integer
+  roe float
+  roa float
+  dividend_yield float
+  beta float
+  volatility float
+  high_52w integer
+  low_52w integer
+  calculated_date date
+  indexes {
+    (stock_id, calculated_date) [unique]
+  }
+}
+
+Table financial_summary {       // [기존] stocks_financialsummary (재무요약)
+  id integer [pk]
+  stock_id integer
+  fiscal_period varchar
+  revenue bigint
+  operating_profit bigint
+  net_profit bigint
+  revenue_yoy float
+  net_profit_yoy float
+  debt_ratio float
+  equity_ratio float
+  current_ratio float
+  payout_ratio float
+  indexes {
+    (stock_id, fiscal_period) [unique]
+  }
+}
+
+Table stock_news {              // [기존] stocks_stocknews
+  id integer [pk]
+  title varchar
+  url varchar [unique]
+  source varchar
+  published_at datetime
+  sentiment_score decimal       [note: '[신규/나중] 뉴스 파이프라인 붙일 때, 그전엔 50중립']
+}
+
+Table news_related_stock {      // [기존] stocks_newsrelatedstock
+  id integer [pk]
+  news_id integer
+  stock_id integer
+  relevance_score decimal       [note: '[신규/나중]']
+  indexes {
+    (news_id, stock_id) [unique]
+  }
+}
+
+Table stock_dna {               // [신규/선택] 종목 성격 점수 (정규화 캐시)
+  id integer [pk]
+  stock_id integer
+  volatility decimal            [note: 'pct(beta)']
+  value_score decimal           [note: 'pct(1/PBR)']
+  growth_score decimal          [note: 'pct(net_profit_yoy)']
+  stability decimal             [note: 'pct(1/beta)']
+  news_sentiment decimal        [note: '[나중] 뉴스 붙을 때']
+  sector varchar
+  calculated_date date
+  indexes {
+    (stock_id, calculated_date) [unique]
+  }
+}
+
+// ───────────────────────── 거래/보유 도메인 ─────────────────────────
+
+Table account {                 // [기존] portfolio_account (1:1 user, 가상잔액)
+  id integer [pk]
+  user_id integer [unique]
+  balance decimal
+  created_at datetime
+  updated_at datetime
+}
+
+Table holding {                 // [기존] portfolio_holding
+  id integer [pk]
+  user_id integer
+  stock_id integer
+  quantity integer
+  average_price decimal
+  first_acquired_at datetime
+  indexes {
+    (user_id, stock_id) [unique]
+  }
+}
+
+Table "order" {                 // [기존] portfolio_order (시스템 매매기록)
+  id integer [pk]
+  user_id integer
+  account_id integer
+  stock_id integer
+  side varchar                  [note: 'BUY/SELL']
+  quantity integer
+  price decimal
+  total_amount decimal
+  realized_pnl decimal          [note: '매도 실현손익 = (체결가-평균매입가)×수량, 매수는 NULL']
+  status varchar                [note: 'PENDING/FILLED/FAILED']
+  idempotency_key varchar [unique]
+  created_at datetime
+  executed_at datetime
+}
+
+// ───────────────────────── 일기 도메인 ─────────────────────────
+
+Table stock_diary {             // [기존] diary_stockdiary
+  id integer [pk]
+  user_id integer
+  stock_id integer
+  order_id integer              [note: 'nullable (관심일기면 없음)']
+  action_type varchar           [note: 'BUY/SELL/WATCH']
+  reason_text text
+  confidence smallint           [note: '1~5']
+  diary_date date
+}
+
+Table diary_review {            // [기존] diary_diaryreview (1:1 diary)
+  id integer [pk]
+  diary_id integer [unique]
+  actual_return decimal
+  lesson text
+  reviewed_at datetime
+}
+
+// ───────────────────────── 추천/장투 도메인 (신규) ─────────────────────────
+
+Table recommendation_cache {    // [신규] 추천 결과 저장소 (궁합 + 장투 개인점수)
+  id integer [pk]
+  user_id integer
+  stock_id integer
+  rec_type varchar              [note: 'onboarding / long_term']
+  match_score decimal           [note: '0~100']
+  rank smallint
+  reason jsonb                  [note: '요소별 기여 + 한줄요약']
+  expires_at datetime           [note: 'TTL: 하루 뒤 만료']
+  created_at datetime
+  indexes {
+    (user_id, stock_id, rec_type) [unique]
+  }
+}
+
+Table user_liked_stock {        // [신규] 찜한 종목 (Like 시점 스냅샷)
+  id integer [pk]
+  user_id integer
+  stock_id integer
+  liked_at datetime
+  base_pbr decimal              [note: 'Like 시점 PBR (재검증 ±30% 기준)']
+  base_match_score decimal      [note: 'Like 시점 궁합 (변화 ▲▼ 계산용)']
+  last_review_status varchar    [note: 'GREEN/YELLOW/RED']
+  last_reviewed_at datetime
+  is_active boolean
+  indexes {
+    (user_id, stock_id) [unique]
+  }
+}
+
+Table long_term_score {         // [신규] 종목 장투 점수 (종목 단위, user_fit 제외)
+  id integer [pk]
+  stock_id integer
+  financial_score decimal
+  growth_score decimal
+  technical_score decimal
+  news_score decimal            [note: '데이터 없으면 50']
+  total_score decimal           [note: '종목 소계 (개인 궁합은 recommendation_cache서 결합)']
+  calculated_date date
+  indexes {
+    (stock_id, calculated_date) [unique]
+  }
+}
+
+Table long_term_score_history { // [선택] 장투 점수 이력 (30일 추세 카드용)
+  id integer [pk]
+  stock_id integer
+  total_score decimal
+  recorded_date date
+}
+
+Table holding_milestone {       // [신규] 보유 기념일 (30/90/180/365일 스냅샷)
+  id integer [pk]
+  user_id integer
+  stock_id integer
+  milestone_days smallint       [note: '30/90/180/365']
+  snapshot jsonb                [note: '그 시점 지표']
+  reached_at datetime
+  indexes {
+    (user_id, stock_id, milestone_days) [unique]
+  }
+}
+
+// ───────────────────────── 커뮤니티 도메인 ─────────────────────────
+
+Table community_post {          // [기존+수정] community_communitypost (종목 커뮤니티 전용)
+  id integer [pk]
+  user_id integer
+  stock_id integer              [note: '필수 — 모든 글이 종목에 속함 (STOCK 전용)']
+  category varchar              [note: 'QUESTION/REVIEW/ANALYSIS/SHARE = 질문/후기/분석/공유 (기존 post_type 대체)']
+  title varchar
+  body text
+  view_count integer
+  like_count integer            [note: '비정규화: 인기순 정렬용, 좋아요 시 ±1']
+  created_at datetime
+}
+
+Table comment {                 // [기존] community_comment
+  id integer [pk]
+  post_id integer
+  user_id integer
+  body text
+  created_at datetime
+}
+
+Table post_like {               // [기존] community_postlike
+  id integer [pk]
+  user_id integer
+  post_id integer
+  created_at datetime
+  indexes {
+    (user_id, post_id) [unique]
+  }
+}
+
+Table follow {                  // [신규] 팔로우 — 유저↔유저 다대다 (중개 테이블)
+  id integer [pk]
+  follower_id integer           [note: '팔로우 하는 사람']
+  following_id integer          [note: '팔로우 받는 사람']
+  created_at datetime
+  indexes {
+    (follower_id, following_id) [unique]
+  }
+}
+
+// 포트폴리오 공유(shared_portfolio / item) — 데모에서 제외, 모델에서 다루지 않음
+
+// ───────────────────────── 관계 (FK) ─────────────────────────
+
+// 사용자
+Ref: investment_profile.user_id - user.id
+Ref: investment_profile.signature_stock_id > stock.id
+Ref: user_preferred_sector.user_id > user.id
+Ref: user_goal.user_id > user.id
+Ref: user_goal.goal_id > goal.id
+
+// 종목
+Ref: stock_price.stock_id > stock.id
+Ref: stock_indicator.stock_id > stock.id
+Ref: financial_summary.stock_id > stock.id
+Ref: news_related_stock.news_id > stock_news.id
+Ref: news_related_stock.stock_id > stock.id
+Ref: stock_dna.stock_id > stock.id
+
+// 거래/보유
+Ref: account.user_id - user.id
+Ref: holding.user_id > user.id
+Ref: holding.stock_id > stock.id
+Ref: "order".user_id > user.id
+Ref: "order".account_id > account.id
+Ref: "order".stock_id > stock.id
+
+// 일기
+Ref: stock_diary.user_id > user.id
+Ref: stock_diary.stock_id > stock.id
+Ref: stock_diary.order_id > "order".id
+Ref: diary_review.diary_id - stock_diary.id
+
+// 추천/장투
+Ref: recommendation_cache.user_id > user.id
+Ref: recommendation_cache.stock_id > stock.id
+Ref: user_liked_stock.user_id > user.id
+Ref: user_liked_stock.stock_id > stock.id
+Ref: long_term_score.stock_id > stock.id
+Ref: long_term_score_history.stock_id > stock.id
+Ref: holding_milestone.user_id > user.id
+Ref: holding_milestone.stock_id > stock.id
+
+// 커뮤니티
+Ref: community_post.user_id > user.id
+Ref: community_post.stock_id > stock.id
+Ref: comment.post_id > community_post.id
+Ref: comment.user_id > user.id
+Ref: post_like.user_id > user.id
+Ref: post_like.post_id > community_post.id
+Ref: follow.follower_id  > user.id
+Ref: follow.following_id > user.id
