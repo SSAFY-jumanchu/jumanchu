@@ -161,14 +161,13 @@ Table stock_news {              // [기존] stocks_stocknews
   url varchar [unique]
   source varchar
   published_at datetime
-  sentiment_score decimal       [note: '[신규/나중] 뉴스 파이프라인 붙일 때, 그전엔 50중립']
 }
 
 Table news_related_stock {      // [기존] stocks_newsrelatedstock
   id integer [pk]
   news_id integer
   stock_id integer
-  relevance_score decimal       [note: '[신규/나중]']
+  relevance_score decimal       [note: '매칭 신뢰도(제목매칭 1.0 등)·정렬용']
   indexes {
     (news_id, stock_id) [unique]
   }
@@ -181,7 +180,6 @@ Table stock_dna {               // [신규/선택] 종목 성격 점수 (정규�
   value_score decimal           [note: 'pct(1/PBR)']
   growth_score decimal          [note: 'pct(net_profit_yoy)']
   stability decimal             [note: 'pct(1/beta)']
-  news_sentiment decimal        [note: '[나중] 뉴스 붙을 때']
   sector varchar
   calculated_date date
   indexes {
@@ -234,9 +232,11 @@ Table stock_diary {             // [기존] diary_stockdiary
   user_id integer
   stock_id integer
   order_id integer              [note: 'nullable (관심일기면 없음)']
-  action_type varchar           [note: 'BUY/SELL/WATCH']
-  reason_text text
-  confidence smallint           [note: '1~5']
+  action_type varchar           [note: 'BUY/SELL/WATCH (선택형)']
+  reason_category varchar       [note: '선택형: 장기성장성/실적개선/저평가/테마/뉴스호재/기술적반등/배당/분산 (reason_text·related_news 제거)']
+  confidence smallint           [note: '1~5 (별점 선택형)']
+  target_price decimal          [note: 'nullable, 목표가(목표% → 매수가 환산)']
+  stop_loss_price decimal       [note: 'nullable, 손절가']
   diary_date date
 }
 
@@ -244,6 +244,7 @@ Table diary_review {            // [기존] diary_diaryreview (1:1 diary)
   id integer [pk]
   diary_id integer [unique]
   actual_return decimal
+  judgment varchar              [note: '선택형: 성공/실패/보류']
   lesson text
   reviewed_at datetime
 }
@@ -345,6 +346,16 @@ Table post_like {               // [기존] community_postlike
   }
 }
 
+Table comment_like {            // [신규] 댓글 좋아요 (post_like와 동일 구조, 대댓글은 제외)
+  id integer [pk]
+  user_id integer
+  comment_id integer
+  created_at datetime
+  indexes {
+    (user_id, comment_id) [unique]
+  }
+}
+
 Table follow {                  // [신규] 팔로우 — 유저↔유저 다대다 (중개 테이블)
   id integer [pk]
   follower_id integer           [note: '팔로우 하는 사람']
@@ -405,5 +416,7 @@ Ref: comment.post_id > community_post.id
 Ref: comment.user_id > user.id
 Ref: post_like.user_id > user.id
 Ref: post_like.post_id > community_post.id
+Ref: comment_like.user_id > user.id
+Ref: comment_like.comment_id > comment.id
 Ref: follow.follower_id  > user.id
 Ref: follow.following_id > user.id

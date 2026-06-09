@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1200">
+<title>주만추 — 매매일기 목업</title>
+<style>
+  :root{
+    --accent:#315dff; --purple:#7d4ee8; --ink:#1f2a4d; --muted:#5a6a8a; --faint:#9aa8c4;
+    --line:rgba(150,175,235,.30); --glass:rgba(255,255,255,.55); --glass-border:rgba(255,255,255,.65);
+    --radius:16px; --rise:#e84057; --fall:#3b6fd4; --green:#0f9f6e; --amber:#e58b10;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Pretendard','Apple SD Gothic Neo',system-ui,-apple-system,sans-serif;
+    background:linear-gradient(135deg,#e9e4ff 0%,#dceeff 46%,#dff5ec 100%);color:var(--ink);min-height:100vh;padding:0 0 50px}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 18px}
+  .panel{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border:1px solid var(--glass-border);border-radius:var(--radius);box-shadow:0 8px 30px rgba(60,80,160,.08)}
+  .pad{padding:18px}
+  .eyebrow{font-size:12px;font-weight:800;color:var(--muted);margin:0 0 10px}
+  .logo-mini{border-radius:7px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0}
+
+  nav{background:rgba(255,255,255,.6);backdrop-filter:blur(10px);border-bottom:1px solid var(--glass-border);position:sticky;top:0;z-index:10}
+  .nav-in{max-width:1160px;margin:0 auto;display:flex;align-items:center;gap:22px;padding:12px 18px}
+  .logo{font-size:20px;font-weight:900;color:var(--accent);border:2px solid var(--accent);border-radius:8px;padding:2px 8px}
+  .nav-menu{display:flex;gap:20px;font-size:14px;font-weight:800;color:var(--muted)}
+  .nav-menu .on{color:var(--accent);background:rgba(49,93,255,.1);padding:4px 12px;border-radius:999px}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-weight:700}
+
+  .page-head{margin:20px 0 14px}
+  .page-head h1{font-size:24px;font-weight:900;margin:0}
+  .page-head .sub{font-size:13px;color:var(--muted);font-weight:700;margin-top:4px}
+
+  /* 대기 배너 */
+  .wait{display:flex;align-items:center;gap:12px;padding:14px 18px;margin-bottom:16px;border:1px solid rgba(229,139,16,.3);
+    background:linear-gradient(135deg,rgba(229,139,16,.12),rgba(229,139,16,.04))}
+  .wait .ic{font-size:20px}
+  .wait .t{font-size:14px;font-weight:900}
+  .wait .s{font-size:12px;color:var(--muted);font-weight:700;margin-top:1px}
+  .wait .go{margin-left:auto;display:flex;gap:8px}
+  .wait .go .chip{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.7);border:1px solid var(--glass-border);border-radius:999px;padding:6px 12px 6px 7px;font-size:12.5px;font-weight:800;cursor:pointer}
+  .wait .go .chip .logo-mini{width:22px;height:22px;font-size:10px}
+
+  .layout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;align-items:start}
+
+  /* 일기 리스트 */
+  .ph{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 8px}
+  .ph h2{font-size:15px;font-weight:900;margin:0}
+  .entry{padding:14px 18px;border-top:1px solid var(--line)}
+  .entry-top{display:flex;align-items:center;gap:10px}
+  .entry-top .logo-mini{width:30px;height:30px;font-size:12px}
+  .en{font-size:14.5px;font-weight:900}
+  .ed{font-size:11px;color:var(--faint);font-weight:700;margin-top:1px}
+  .badge{font-size:11px;font-weight:900;color:#fff;border-radius:6px;padding:2px 8px}
+  .rev-badge{margin-left:auto;font-size:10.5px;font-weight:900;padding:3px 9px;border-radius:999px}
+  .rev-done{background:rgba(15,159,110,.14);color:var(--green)}
+  .rev-wait{background:rgba(229,139,16,.14);color:var(--amber)}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .tag{font-size:11.5px;font-weight:800;padding:4px 10px;border-radius:999px;background:rgba(49,93,255,.1);color:var(--accent)}
+  .tag.muted{background:rgba(150,175,235,.18);color:var(--muted)}
+  .stars{color:var(--amber);font-size:13px;letter-spacing:1px}
+  .rev-box{margin-top:11px;padding:11px 12px;border-radius:10px;background:rgba(15,159,110,.07);border:1px solid rgba(15,159,110,.16);font-size:12px;line-height:1.55}
+  .rev-box b{color:var(--green)}
+
+  /* 작성 폼 (선택형) */
+  .field{margin-bottom:15px}
+  .flabel{font-size:12.5px;font-weight:900;margin-bottom:7px}
+  .opts{display:flex;flex-wrap:wrap;gap:7px}
+  .opt{font-size:12.5px;font-weight:800;padding:7px 13px;border-radius:999px;border:1px solid var(--glass-border);background:rgba(255,255,255,.55);color:var(--muted);cursor:pointer;user-select:none}
+  .opt.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .opt.sell.on{background:var(--fall);border-color:var(--fall)}
+  .opt.buy.on{background:var(--rise);border-color:var(--rise)}
+  .star-pick{font-size:24px;letter-spacing:3px;cursor:pointer;color:var(--faint)}
+  .star-pick .lit{color:var(--amber)}
+  .save{display:block;width:100%;margin-top:6px;border:0;border-radius:11px;padding:13px;background:var(--accent);color:#fff;font-size:14px;font-weight:900;cursor:pointer}
+  .note{font-size:11px;color:var(--faint);font-weight:700;margin-top:8px;text-align:center}
+  .review-ta{width:100%;min-height:64px;border:1px solid var(--glass-border);background:rgba(255,255,255,.6);border-radius:10px;padding:10px 12px;font-size:13px;font-family:inherit;resize:vertical;color:var(--ink)}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <span class="logo">주만추</span>
+    <div class="nav-menu"><span>홈</span><span>피드</span><span>주식 조회</span><span>보유 종목</span><span class="on">매매일기</span><span>장투 케어</span></div>
+    <div class="nav-right"><span class="logo-mini" style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple))">김</span> 김주만</div>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="page-head">
+    <h1>매매일기</h1>
+    <p class="sub">왜 샀는지 <b>고르기만</b> 하면 끝 — 나중에 결과로 복기하며 투자 습관을 만들어요.</p>
+  </div>
+
+  <!-- 작성 대기 -->
+  <section class="panel wait">
+    <span class="ic">📝</span>
+    <div>
+      <div class="t">작성 대기 1건</div>
+      <div class="s">매매했는데 아직 일기를 안 쓴 거래예요.</div>
+    </div>
+    <div class="go">
+      <span class="chip"><span class="logo-mini" style="background:#0a7">로</span>로보스타 · 매수 · 06.09 →</span>
+    </div>
+  </section>
+
+  <div class="layout">
+    <!-- 일기 리스트 -->
+    <section class="panel">
+      <div class="ph"><h2>나의 매매일기</h2><span style="font-size:12px;font-weight:800;color:var(--faint)">총 3건</span></div>
+      <div id="list"></div>
+    </section>
+
+    <!-- 작성 폼 (선택형) + 복기 -->
+    <div>
+      <section class="panel pad">
+        <p class="eyebrow">✍️ 새 매매일기 (로보스타 · 06.09) — 다 고르기만!</p>
+
+        <div class="field">
+          <div class="flabel">매매 유형</div>
+          <div class="opts" data-group="action">
+            <span class="opt buy on">매수</span><span class="opt sell">매도</span><span class="opt">관심</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="flabel">이유 (복수 선택)</div>
+          <div class="opts" data-group="reason" data-multi="1">
+            <span class="opt on">장기 성장성</span><span class="opt">실적 개선</span><span class="opt">저평가</span>
+            <span class="opt on">테마/모멘텀</span><span class="opt">뉴스 호재</span><span class="opt">기술적 반등</span>
+            <span class="opt">배당 매력</span><span class="opt">분산 목적</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="flabel">확신도</div>
+          <div class="star-pick" id="stars"><span data-n="1" class="lit">★</span><span data-n="2" class="lit">★</span><span data-n="3" class="lit">★</span><span data-n="4" class="lit">★</span><span data-n="5">★</span></div>
+        </div>
+
+        <div class="field">
+          <div class="flabel">목표 수익률</div>
+          <div class="opts" data-group="target"><span class="opt">+10%</span><span class="opt on">+20%</span><span class="opt">+30%</span><span class="opt">+50%</span></div>
+        </div>
+
+        <div class="field">
+          <div class="flabel">손절 라인</div>
+          <div class="opts" data-group="stop"><span class="opt">-5%</span><span class="opt on">-10%</span><span class="opt">-15%</span><span class="opt">-20%</span></div>
+        </div>
+
+        <button class="save">매매일기 저장</button>
+        <p class="note">자유 서술·뉴스 첨부 없이, 선택만으로 1초 작성</p>
+      </section>
+
+      <!-- 복기 (diary_review 유지) -->
+      <section class="panel pad" style="margin-top:16px">
+        <p class="eyebrow">🔍 복기 — 삼성전자 매수 (05.28)</p>
+        <div class="field" style="margin-bottom:11px">
+          <div class="flabel">실제 수익률 <span style="color:var(--rise)">+2.4%</span> · 판단은?</div>
+          <div class="opts" data-group="judge"><span class="opt on">보류</span><span class="opt">성공</span><span class="opt">실패</span></div>
+        </div>
+        <div class="field" style="margin-bottom:8px">
+          <div class="flabel">배운 점 (자유 서술)</div>
+          <textarea class="review-ta" placeholder="다음엔 분할매수 할 것 / 단기 변동성 견뎠어야…">단기 변동성에 흔들려 추가 매수를 못 했다. 다음엔 분할매수로 접근하자.</textarea>
+        </div>
+        <button class="save">복기 저장</button>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+const RISE='#e84057', FALL='#3b6fd4';
+const diaries=[
+  {logo:'로',lc:'#0a7',name:'로보스타',action:'매수',date:'2026.06.09',reasons:['장기 성장성','테마/모멘텀'],conf:4,target:'+20%',stop:'-10%',review:null},
+  {logo:'삼',lc:'#1428a0',name:'삼성전자',action:'매수',date:'2026.05.28',reasons:['저평가'],conf:3,target:'+15%',stop:'-10%',review:{ret:'+2.4%',judge:'보류',lesson:'단기 변동성에 흔들려 추가 매수를 못 했다. 다음엔 분할매수로 접근하자.'}},
+  {logo:'NV',lc:'#76b900',name:'NVIDIA',action:'매수',date:'2026.05.15',reasons:['실적 개선','테마/모멘텀'],conf:5,target:'+30%',stop:'-15%',review:{ret:'+8.2%',judge:'성공',lesson:'실적 모멘텀에 대한 확신이 맞았다. 비중을 더 실어도 좋았을 듯.'}},
+];
+const stars=n=>'★'.repeat(n)+'☆'.repeat(5-n);
+
+document.getElementById('list').innerHTML=diaries.map(d=>{
+  const bc=d.action==='매수'?RISE:FALL;
+  const tags=d.reasons.map(r=>`<span class="tag">${r}</span>`).join('')
+    +`<span class="tag muted">목표 ${d.target}</span><span class="tag muted">손절 ${d.stop}</span>`;
+  const rev=d.review
+    ? `<span class="rev-badge rev-done">복기 완료</span>`
+    : `<span class="rev-badge rev-wait">복기 대기</span>`;
+  const revBox=d.review
+    ? `<div class="rev-box">🔍 실제 <b>${d.review.ret}</b> · 판단 <b>${d.review.judge}</b><br>${d.review.lesson}</div>` : '';
+  return `<div class="entry">
+    <div class="entry-top">
+      <span class="logo-mini" style="background:${d.lc}">${d.logo}</span>
+      <div><div class="en">${d.name}</div><div class="ed">${d.date}</div></div>
+      <span class="badge" style="background:${bc};margin-left:6px">${d.action}</span>
+      ${rev}
+    </div>
+    <div class="tags">${tags}<span class="stars" style="margin-left:auto">${stars(d.conf)}</span></div>
+    ${revBox}
+  </div>`;
+}).join('');
+
+// 선택형 토글
+document.querySelectorAll('.opts').forEach(g=>{
+  g.addEventListener('click',e=>{
+    const o=e.target.closest('.opt'); if(!o)return;
+    if(g.dataset.multi){o.classList.toggle('on');}
+    else{g.querySelectorAll('.opt').forEach(x=>x.classList.remove('on')); o.classList.add('on');}
+  });
+});
+// 별점
+document.getElementById('stars').addEventListener('click',e=>{
+  const s=e.target.closest('[data-n]'); if(!s)return;
+  const n=+s.dataset.n;
+  document.querySelectorAll('#stars span').forEach(x=>x.classList.toggle('lit',+x.dataset.n<=n));
+});
+</script>
+</body>
+</html>

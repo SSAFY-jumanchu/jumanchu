@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1240">
+<title>주만추 — 장투 페이지 목업</title>
+<style>
+  :root{
+    --accent:#315dff; --purple:#7d4ee8; --ink:#1f2a4d; --muted:#5a6a8a; --faint:#9aa8c4;
+    --line:rgba(150,175,235,.30); --glass:rgba(255,255,255,.55); --glass-border:rgba(255,255,255,.65);
+    --radius:16px; --green:#0f9f6e; --amber:#e58b10; --red:#cf3d3d; --rise:#e84057; --fall:#3b6fd4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Pretendard','Apple SD Gothic Neo',system-ui,-apple-system,sans-serif;
+    background:linear-gradient(135deg,#e9e4ff 0%,#dceeff 46%,#dff5ec 100%);color:var(--ink);min-height:100vh;padding:0 0 50px}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 18px}
+  .panel{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border:1px solid var(--glass-border);border-radius:var(--radius);box-shadow:0 8px 30px rgba(60,80,160,.08)}
+  .pad{padding:18px}
+  .eyebrow{font-size:12px;font-weight:800;color:var(--muted);margin:0 0 8px}
+  .logo-mini{border-radius:7px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0}
+
+  nav{background:rgba(255,255,255,.6);backdrop-filter:blur(10px);border-bottom:1px solid var(--glass-border);position:sticky;top:0;z-index:10}
+  .nav-in{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:22px;padding:12px 18px}
+  .logo{font-size:20px;font-weight:900;color:var(--accent);border:2px solid var(--accent);border-radius:8px;padding:2px 8px}
+  .nav-menu{display:flex;gap:20px;font-size:14px;font-weight:800;color:var(--muted)}
+  .nav-menu .on{color:var(--accent);background:rgba(49,93,255,.1);padding:4px 12px;border-radius:999px}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-weight:700}
+
+  .page-head{margin:20px 0 14px}
+  .page-head h1{font-size:24px;font-weight:900;margin:0}
+  .page-head .sub{font-size:13px;color:var(--muted);font-weight:700;margin-top:4px}
+
+  .layout{display:grid;grid-template-columns:minmax(0,250px) minmax(0,1fr);gap:16px;align-items:start}
+
+  /* 좌: 종목 리스트 */
+  .lh{font-size:13px;font-weight:900;padding:14px 16px 8px}
+  .lrow{display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--line);cursor:pointer;transition:background .12s}
+  .lrow:hover{background:rgba(255,255,255,.4)}
+  .lrow.sel{background:rgba(49,93,255,.08);box-shadow:inset 3px 0 0 var(--accent)}
+  .lrow .logo-mini{width:28px;height:28px;font-size:11px}
+  .ln{font-size:13.5px;font-weight:900}
+  .lsub{font-size:10px;color:var(--faint);font-weight:700;margin-top:1px}
+  .lscore{margin-left:auto;text-align:right}
+  .lsc{font-size:17px;font-weight:900;line-height:1}
+  .lgrade{font-size:9.5px;font-weight:900;padding:1px 5px;border-radius:5px;color:#fff;margin-top:2px;display:inline-block}
+
+  /* 종합 hero */
+  .hero{display:flex;align-items:center;gap:18px;padding:18px 20px}
+  .ring{width:96px;height:96px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;color:#fff}
+  .ring .rs{font-size:31px;font-weight:900;line-height:1}
+  .ring .rg{font-size:12px;font-weight:900;opacity:.9}
+  .hero-name{font-size:18px;font-weight:900}
+  .hero-code{font-size:11px;color:var(--faint);font-weight:700}
+  .hero-label{font-size:15px;font-weight:900;margin-top:5px}
+  .hero-report{font-size:12.5px;line-height:1.6;color:var(--ink);margin-top:8px}
+
+  /* 3축 카드 */
+  .axes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:16px}
+  .axis{padding:15px}
+  .axis-head{display:flex;align-items:baseline;gap:7px}
+  .axis-name{font-size:13px;font-weight:900}
+  .axis-w{font-size:10px;font-weight:900;color:var(--muted);background:rgba(150,175,235,.2);padding:1px 6px;border-radius:5px}
+  .axis-score{margin-left:auto;font-size:21px;font-weight:900}
+  .axis-bar{height:7px;border-radius:5px;background:rgba(150,175,235,.2);margin:8px 0 12px;overflow:hidden}
+  .axis-bar div{height:100%;border-radius:5px}
+  .metric{margin:9px 0}
+  .metric .top{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px}
+  .metric .ml{color:var(--muted);font-weight:800}
+  .metric .mv{font-weight:900}
+  .mbar{height:5px;border-radius:4px;background:rgba(150,175,235,.18);margin-top:4px;overflow:hidden}
+  .mbar div{height:100%;border-radius:4px}
+  .axis-ai{font-size:11px;line-height:1.55;color:var(--ink);margin:12px 0 0;padding:10px 11px;border-radius:9px;background:linear-gradient(135deg,rgba(125,78,232,.09),rgba(49,93,255,.06))}
+  .axis-ai b{color:var(--purple)}
+
+  /* 매매일지 + 히스토리 */
+  .botgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-top:16px}
+  .di{padding:9px 2px;border-top:1px solid var(--line);display:flex;gap:9px;align-items:flex-start}
+  .di:first-of-type{border-top:0}
+  .di-badge{font-size:10px;font-weight:900;color:#fff;border-radius:5px;padding:2px 6px;flex-shrink:0;margin-top:1px}
+  .di-d{font-size:11px;color:var(--faint);font-weight:700}
+  .di-t{font-size:12px;font-weight:600;line-height:1.45;margin-top:1px}
+  .hist-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:800;padding:6px 0;border-top:1px solid var(--line)}
+  .hist-row:first-of-type{border-top:0}
+
+  .news-item{display:flex;gap:10px;align-items:baseline;padding:9px 0;border-top:1px solid var(--line)}
+  .news-item:first-of-type{border-top:0}
+  .news-t{font-size:13px;font-weight:700;line-height:1.4}
+  .news-s{font-size:11px;color:var(--faint);font-weight:700;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <span class="logo">주만추</span>
+    <div class="nav-menu"><span>홈</span><span>피드</span><span>주식 조회</span><span>보유 종목</span><span>매매일기</span><span class="on">장투 케어</span></div>
+    <div class="nav-right"><span class="logo-mini" style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple))">김</span> 김주만</div>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="page-head">
+    <h1>장투 페이지</h1>
+    <p class="sub">내가 산 종목, 계속 들고 갈 만한가요? — 재무 30% · 성장 40% · 궁합 30% 가중으로 점검해드려요.</p>
+  </div>
+
+  <div class="layout">
+    <section class="panel">
+      <div class="lh">보유 종목</div>
+      <div id="list"></div>
+    </section>
+    <div id="detail"></div>
+  </div>
+</div>
+
+<script>
+const GREEN='#0f9f6e', BLUE='#315dff', AMBER='#e58b10', RED='#cf3d3d';
+const sc=s=>s>=85?GREEN:s>=70?BLUE:s>=55?AMBER:RED;
+const gc=g=>g==='A'?GREEN:g.startsWith('B+')?BLUE:g==='B'?AMBER:RED;
+
+// axis: {name, w(가중치), score, metrics:[[label,value,level0-100]], ai}
+const holdings=[
+  {code:'000660',name:'SK하이닉스',logo:'SK',lc:'#e1331a',sector:'반도체 · KOSPI',
+   total:{score:86,grade:'B+',label:'장기 보유 강력 추천',report:'성장성(92)이 가중 40%로 종합을 끌어올렸습니다. 재무·궁합도 견조해 장기 보유 매력이 높으나, 포트 비중 38%는 분산 관점에서 관리가 필요합니다.'},
+   axes:[
+    {name:'재무',w:30,score:78,metrics:[['부채비율','22.4%',88],['ROE','26.78%',90],['영업이익률','32.1%',84],['유동비율','198.3%',78]],ai:'부채비율 업종 최저, 수익성 우수. <b>HBM 믹스 개선</b>으로 재무 체력 회복 중.'},
+    {name:'성장',w:40,score:92,metrics:[['매출성장률(YoY)','+48.2%',95],['순이익성장률(YoY)','+61.0%',96],['EPS 증가율','+58.4%',92]],ai:'AI발 HBM 수요로 매출·이익 <b>동반 급증</b>. 중장기 성장 모멘텀 최상위.'},
+    {name:'궁합',w:30,score:87,metrics:[['리스크 매칭','공격형',88],['섹터 매칭','전기전자',95],['기간 매칭','12개월',85],['경험 매칭','중급',80]],ai:'공격형 성향·반도체 선호와 잘 맞음. 비중 38%로 <b>분산 유의</b>.'},
+   ],
+   hist:[['3월',81],['4월',83],['5월',84],['6월',86]],
+   diary:[['매수','06.02','HBM 기대감에 3주 추가 매수했어요.'],['매수','04.12','첫 진입. 장기 보유 목표로 잡음.']],
+   news:[['브로드컴 쇼크에 반도체株 동반 약세','한국경제'],['SK하이닉스 외국인 매도 지속','연합뉴스'],['"HBM은 견조" 증권가 저가매수 의견','머니투데이']]},
+
+  {code:'005930',name:'삼성전자',logo:'삼',lc:'#1428a0',sector:'전기·전자 · KOSPI',
+   total:{score:80,grade:'B+',label:'장기 보유 추천',report:'재무 안정성과 궁합이 우수하나 성장성(68)이 가중 40%라 종합을 다소 누릅니다. 안정적 배당주 관점의 장기 보유에 적합합니다.'},
+   axes:[
+    {name:'재무',w:30,score:82,metrics:[['부채비율','26.8%',85],['ROE','8.57%',55],['영업이익률','14.2%',60],['유동비율','210.4%',82]],ai:'재무 안정성 높고 <b>배당 견조</b>. ROE는 회복 초입.'},
+    {name:'성장',w:40,score:68,metrics:[['매출성장률(YoY)','+12.3%',62],['순이익성장률(YoY)','+9.5%',60],['EPS 증가율','+11.0%',61]],ai:'완만한 성장. <b>HBM 진입 지연</b>으로 단기 성장성 제한적.'},
+    {name:'궁합',w:30,score:91,metrics:[['리스크 매칭','균형형',92],['섹터 매칭','전기전자',95],['기간 매칭','12개월',88],['경험 매칭','중급',85]],ai:'균형형 성향·1순위 섹터에 <b>완벽 부합</b>. 비중도 적정.'},
+   ],
+   hist:[['3월',77],['4월',78],['5월',79],['6월',80]],
+   diary:[['매수','05.28','저점이라 판단해 10주 매수.']],
+   news:[['반도체 투심 위축에 삼성전자 약세','서울경제'],['삼성 2nm 파운드리 진전 소식','전자신문']]},
+
+  {code:'NVDA',name:'NVIDIA',logo:'NV',lc:'#76b900',sector:'반도체 · NASDAQ',
+   total:{score:91,grade:'A',label:'장기 핵심 보유 추천',report:'재무·성장 모두 최상위로 장기 핵심 보유 매력이 매우 높습니다. 다만 고밸류·고변동성·환율을 감안한 분할 접근을 권장합니다.'},
+   axes:[
+    {name:'재무',w:30,score:95,metrics:[['부채비율','41.2%',75],['ROE','114.29%',100],['영업이익률','54.7%',100],['잉여현금흐름','$26.9B',98]],ai:'<b>업계 최고 수익성</b>. 잉여현금 역대 최대, 부채도 관리 가능.'},
+    {name:'성장',w:40,score:97,metrics:[['매출성장률(YoY)','+126%',100],['순이익성장률(YoY)','+205%',100],['데이터센터(YoY)','+427%',100]],ai:'AI 인프라 핵심 수혜. <b>데이터센터 매출 폭증</b>, 성장성 최상위.'},
+    {name:'궁합',w:30,score:82,metrics:[['리스크 매칭','고위험',75],['섹터 매칭','반도체',88],['기간 매칭','12개월',85],['환율 노출','USD',70]],ai:'성장 최상위나 <b>고밸류·고변동성·환율</b> 유의. 해외 핵심 보유 적합.'},
+   ],
+   hist:[['3월',87],['4월',88],['5월',90],['6월',91]],
+   diary:[['매수','05.15','실적 발표 전 5주 매수.']],
+   news:[['Blackwell GPU 수요 폭발','Bloomberg'],['NVIDIA 데이터센터 매출 신기록','Reuters']]},
+
+  {code:'AAPL',name:'Apple',logo:'A',lc:'#555',sector:'소비자가전 · NASDAQ',
+   total:{score:79,grade:'B',label:'장기 보유 적합',report:'안정적 현금 창출과 분산 효과가 강점이나 성장성(62)이 가중 40%라 종합을 누릅니다. 포트 방어·분산 목적의 장기 보유에 적합합니다.'},
+   axes:[
+    {name:'재무',w:30,score:88,metrics:[['부채비율','67.3%',62],['ROE','141.47%',100],['영업이익률','31.5%',92],['주주환원','$29B',95]],ai:'<b>자본효율 극대화</b>·안정적 이익. 부채는 자사주 매입 영향.'},
+    {name:'성장',w:40,score:62,metrics:[['매출성장률(YoY)','+6.2%',54],['순이익성장률(YoY)','+8.0%',58],['서비스 매출(YoY)','+17.2%',70]],ai:'하드웨어 성숙으로 <b>성장 둔화</b>, 서비스가 보완 중.'},
+    {name:'궁합',w:30,score:85,metrics:[['리스크 매칭','균형형',88],['섹터 매칭','해외주',80],['분산 효과','높음',92],['환율 노출','USD',72]],ai:'방어적 성장주로 균형형에 적합. <b>분산 효과 우수</b>, 환율 고려.'},
+   ],
+   hist:[['3월',83],['4월',82],['5월',80],['6월',79]],
+   diary:[['매수','04.30','WWDC 기대하며 8주 매수.']],
+   news:[['WWDC Siri AI 실망에 애플 하락','CNBC'],['애플 서비스 매출 성장 지속','Yahoo Finance']]},
+];
+
+let sel=0;
+
+function renderList(){
+  document.getElementById('list').innerHTML=holdings.map((h,i)=>`
+    <div class="lrow ${i===sel?'sel':''}" data-i="${i}">
+      <span class="logo-mini" style="background:${h.lc}">${h.logo}</span>
+      <div><div class="ln">${h.name}</div><div class="lsub">${h.sector}</div></div>
+      <div class="lscore"><div class="lsc" style="color:${sc(h.total.score)}">${h.total.score}</div><span class="lgrade" style="background:${gc(h.total.grade)}">${h.total.grade}</span></div>
+    </div>`).join('');
+}
+
+function renderDetail(){
+  const h=holdings[sel], t=h.total, g=gc(t.grade);
+  const axes=h.axes.map(a=>{
+    const c=sc(a.score);
+    const ms=a.metrics.map(m=>`
+      <div class="metric"><div class="top"><span class="ml">${m[0]}</span><span class="mv">${m[1]}</span></div>
+        <div class="mbar"><div style="width:${m[2]}%;background:${sc(m[2])}"></div></div></div>`).join('');
+    return `<section class="panel axis">
+      <div class="axis-head"><span class="axis-name">${a.name}</span><span class="axis-w">${a.w}%</span><span class="axis-score" style="color:${c}">${a.score}</span></div>
+      <div class="axis-bar"><div style="width:${a.score}%;background:${c}"></div></div>
+      ${ms}
+      <p class="axis-ai">🤖 ${a.ai}</p>
+    </section>`;
+  }).join('');
+
+  const maxh=Math.max(...h.hist.map(x=>x[1]));
+  const histRows=h.hist.map((x,i)=>{const prev=i?h.hist[i-1][1]:x[1],up=x[1]>=prev;
+    return `<div class="hist-row"><span>${x[0]}</span><span style="color:${sc(x[1])}">${x[1]}점 ${i?(up?'▲':'▼'):''}</span></div>`;}).join('');
+  const diary=h.diary.map(d=>`<div class="di"><span class="di-badge" style="background:${d[0]==='매수'?'var(--rise)':'var(--fall)'}">${d[0]}</span><div><div class="di-d">${d[1]}</div><div class="di-t">${d[2]}</div></div></div>`).join('');
+  const news=h.news.map(n=>`<div class="news-item"><span class="news-t">${n[0]}</span><span class="news-s">${n[1]}</span></div>`).join('');
+
+  document.getElementById('detail').innerHTML=`
+    <section class="panel hero" style="background:linear-gradient(135deg, ${g}1a, ${g}08)">
+      <div class="ring" style="background:linear-gradient(135deg, ${g}, ${g}cc)"><span class="rs">${t.score}</span><span class="rg">${t.grade}</span></div>
+      <div>
+        <div class="hero-name">${h.name} <span class="hero-code">${h.code}</span></div>
+        <div class="hero-label" style="color:${g}">${t.label}</div>
+        <p class="hero-report">🤖 ${t.report}</p>
+      </div>
+    </section>
+    <div class="axes">${axes}</div>
+    <div class="botgrid">
+      <section class="panel pad"><p class="eyebrow">📓 이 종목 매매일지</p>${diary}</section>
+      <section class="panel pad"><p class="eyebrow">📈 장투 점수 히스토리</p>${histRows}</section>
+    </div>
+    <section class="panel pad" style="margin-top:14px"><p class="eyebrow">📰 종목 관련 뉴스</p>${news}</section>`;
+}
+
+document.getElementById('list').addEventListener('click',e=>{
+  const row=e.target.closest('[data-i]');
+  if(row){sel=+row.dataset.i; renderList(); renderDetail();}
+});
+
+renderList(); renderDetail();
+</script>
+</body>
+</html>
