@@ -11,7 +11,7 @@ const navItems = [
   { to: '/community', label: '커뮤니티' },
 ]
 
-const user = { name: '김주만', initial: '김' }
+const user = { name: '김주만', badges: ['🚗', '🖥️'] }
 </script>
 
 <template>
@@ -35,8 +35,10 @@ const user = { name: '김주만', initial: '김' }
 
       <div class="user-area">
         <div class="user-greeting">
-          <div class="user-avatar">{{ user.initial }}</div>
-          <span class="user-welcome">환영합니다 <strong>{{ user.name }}</strong></span>
+          <span class="user-welcome">
+            환영합니다 <strong>{{ user.name }}님</strong>
+            <span v-for="b in user.badges" :key="b" class="user-badge" :title="b">{{ b }}</span>
+          </span>
         </div>
         <div class="user-actions">
           <button class="user-btn">로그아웃</button>
@@ -147,6 +149,14 @@ const user = { name: '김주만', initial: '김' }
 }
 
 .user-welcome strong { color: var(--ink); }
+
+.user-badge {
+  display: inline-block;
+  font-size: 14px;
+  margin-left: 3px;
+  line-height: 1;
+  vertical-align: middle;
+}
 
 .user-actions { display: flex; gap: 5px; }
 

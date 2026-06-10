@@ -66,6 +66,29 @@ const diaryTypeLabel = { buy: '매수', sell: '매도', hold: '홀딩' }
 
 function fmt(n) { return n.toLocaleString('ko-KR') }
 
+const swipeCard = {
+  name: '삼성바이오로직스',
+  code: '207940',
+  market: 'KOSPI',
+  sector: '바이오',
+  price: 1042000,
+  rate: 1.4,
+  score: 86,
+  gradient: 'linear-gradient(135deg, #1a3a6e 0%, #1e5fb5 45%, #6b21a8 100%)',
+  dna: { growth: 85, stability: 60, value: 45, volatility: 6 },
+  matchReason: '성장 선호와 바이오 모멘텀(성장 8x)이 잘 맞아요.',
+  interestedCount: 6.7,
+}
+
+function dnaPoints(dna) {
+  const cx = 50, cy = 50, r = 38
+  const top    = `${cx},${(cy - dna.growth / 100 * r).toFixed(1)}`
+  const right  = `${(cx + dna.stability / 100 * r).toFixed(1)},${cy}`
+  const bottom = `${cx},${(cy + dna.value / 100 * r).toFixed(1)}`
+  const left   = `${(cx - dna.volatility / 100 * r).toFixed(1)},${cy}`
+  return `${top} ${right} ${bottom} ${left}`
+}
+
 const watchlistNews = [
   { title: 'SK하이닉스, HBM3E 양산 확대...AI 수요 견조', source: '이데일리', time: '30분 전', ticker: 'SK하이닉스' },
   { title: '삼성전자, 파운드리 수주 회복세...2분기 기대감', source: '전자신문', time: '1시간 전', ticker: '삼성전자' },
@@ -135,52 +158,68 @@ const watchlistNews = [
       <!-- 오른쪽: 스와이핑 주식 추천 -->
       <section class="swipe-recommend-panel" aria-label="스와이핑 주식 추천">
         <div class="swipe-recommend-header">
-          <p class="eyebrow">AI 기반 추천</p>
-          <h2>스와이핑 주식 추천</h2>
+          <div class="swipe-rec-head-row">
+            <div>
+              <p class="eyebrow">AI 궁합 매칭</p>
+              <h2>오늘의 궁합 추천 ❤️</h2>
+            </div>
+            <span class="swipe-counter">스와이프 1 / 4</span>
+          </div>
+          <p class="swipe-sub">당신의 투자 성향과 잘 맞는 종목에요. 좌우로 스와이프해 관심 종목을 골라보세요.</p>
         </div>
 
         <div class="swipe-card-area">
-          <!-- 그라디언트 주식 카드 -->
-          <article
-            class="swipe-hero-card"
-            style="background: linear-gradient(135deg, #6d28d9 0%, #a855f7 45%, #db2777 100%)"
-          >
+          <!-- 궁합 추천 카드 -->
+          <article class="swipe-hero-card" :style="{ background: swipeCard.gradient }">
             <div class="swipe-hero-top">
-              <span class="swipe-hero-badge">KOSPI · 전기·전자</span>
+              <span class="swipe-hero-badge">{{ swipeCard.market }} · {{ swipeCard.sector }}</span>
               <div class="swipe-hero-score">
-                94
-                <span>점</span>
+                {{ swipeCard.score }}
+                <span>궁합점수</span>
               </div>
             </div>
-
             <div class="swipe-hero-body">
-              <h3 class="swipe-hero-name">SK하이닉스</h3>
-              <div class="swipe-hero-code">000660</div>
-
-              <div class="swipe-hero-prices">
-                <div class="swipe-price-box">
-                  <span>현재가</span>
-                  <strong>189,300원</strong>
+              <h3 class="swipe-hero-name">{{ swipeCard.name }}</h3>
+              <div class="swipe-hero-code">{{ swipeCard.code }}</div>
+              <div class="swipe-mid-row">
+                <div class="swipe-prices-stack">
+                  <div class="swipe-price-item">
+                    <span>현재가</span>
+                    <strong>{{ fmt(swipeCard.price) }}원</strong>
+                  </div>
+                  <div class="swipe-price-item">
+                    <span>등락률</span>
+                    <strong class="up-pill">+{{ swipeCard.rate }}%</strong>
+                  </div>
                 </div>
-                <div class="swipe-price-box">
-                  <span>등락률</span>
-                  <strong class="up-pill">+2.1%</strong>
+                <div class="dna-chart-area">
+                  <svg viewBox="0 0 100 100" class="dna-svg">
+                    <polygon points="50,10 90,50 50,90 10,50" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.22)" stroke-width="1"/>
+                    <polygon points="50,30 70,50 50,70 30,50" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="0.5" stroke-dasharray="2 2"/>
+                    <polygon :points="dnaPoints(swipeCard.dna)" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.75)" stroke-width="1.5"/>
+                    <text x="50" y="7" text-anchor="middle" font-size="7.5" fill="rgba(255,255,255,0.7)">성장</text>
+                    <text x="97" y="53" text-anchor="end" font-size="7.5" fill="rgba(255,255,255,0.7)">안정</text>
+                    <text x="50" y="100" text-anchor="middle" font-size="7.5" fill="rgba(255,255,255,0.7)">가치</text>
+                    <text x="3" y="53" text-anchor="start" font-size="7.5" fill="rgba(255,255,255,0.7)">변동</text>
+                  </svg>
+                  <span class="dna-label">Stock DNA</span>
                 </div>
               </div>
+              <div class="swipe-match-reason">✦ {{ swipeCard.matchReason }}</div>
             </div>
           </article>
 
           <!-- 소셜 증거 -->
           <div class="swipe-social">
             <span class="social-dot"></span>
-            <span>1,284명의 사용자가 좋아요!</span>
+            <span>{{ swipeCard.interestedCount }}명이 이 종목에 관심 갖았어요</span>
           </div>
 
           <!-- 스와이프 액션 버튼 -->
           <div class="swipe-action-row">
             <button class="swipe-btn pass-btn" aria-label="패스">✕</button>
             <button class="swipe-btn heart-btn" aria-label="관심 추가">♡</button>
-            <button class="swipe-btn like-btn" aria-label="관심 종목">→</button>
+            <button class="swipe-btn detail-btn" aria-label="상세 보기">↗</button>
           </div>
         </div>
       </section>
@@ -920,6 +959,100 @@ const watchlistNews = [
   cursor: pointer; transition: background 0.15s;
 }
 .diary-write-btn:hover { background: rgba(49,93,255,0.1); }
+
+.swipe-rec-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.swipe-counter {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(49,93,255,0.1);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+  border: 1px solid rgba(49,93,255,0.2);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.swipe-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 6px 0 0;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.swipe-mid-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.swipe-prices-stack {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.swipe-price-item {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.18);
+}
+
+.swipe-price-item span {
+  display: block;
+  color: rgba(255,255,255,0.6);
+  font-size: 11px;
+  font-weight: 900;
+  margin-bottom: 3px;
+}
+
+.swipe-price-item strong {
+  display: block;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.dna-chart-area {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.dna-svg { width: 88px; height: 88px; }
+
+.dna-label {
+  color: rgba(255,255,255,0.6);
+  font-size: 10px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.swipe-match-reason {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.18);
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.9);
+  line-height: 1.5;
+}
+
+.swipe-btn.detail-btn { color: var(--accent); border-color: rgba(49,93,255,0.3); }
 
 /* ===== 반응형 ===== */
 @media (max-width: 1100px) {

@@ -3,7 +3,7 @@ import { ref, computed, reactive } from 'vue'
 
 // ===== 카테고리 탭 =====
 const selectedCategory = ref('전체')
-const categories = ['전체', '팔로잉', '뉴스']
+const categories = ['전체', '종목토론', '포트폴리오', '팔로잉', '뉴스']
 
 // ===== 글쓰기 상태 =====
 const writeMode = ref(false)
@@ -20,6 +20,7 @@ const commentInputs = reactive({})
 const posts = ref([
   {
     id: 1,
+    post_type: 'FREE', stock: null,
     username: '국내주식토론', avatar: '국', userType: 'channel', color: '#315dff',
     time: '6시간전', category: '국내주식토론',
     title: '달러환율 금융위기수준까지상승',
@@ -34,6 +35,7 @@ const posts = ref([
   },
   {
     id: 2,
+    post_type: 'FREE', stock: null,
     username: '국내주식토론', avatar: '국', userType: 'channel', color: '#315dff',
     time: '5시간전', category: '국내주식토론',
     title: '코스피 변동성이 커지는 건 당연한 사실',
@@ -47,6 +49,7 @@ const posts = ref([
   },
   {
     id: 3,
+    post_type: 'FREE', stock: null,
     username: '짱짱맛플리', avatar: '짱', userType: 'user', color: '#7d4ee8',
     time: '6시간전(수정됨)', category: '뭐든해봐',
     title: '환율 1545원 돌파',
@@ -60,6 +63,7 @@ const posts = ref([
   },
   {
     id: 4,
+    post_type: 'STOCK', stock: { name: 'NVIDIA', ticker: 'NVDA' },
     username: 'NVDA장기홀더', avatar: 'N', userType: 'user', color: '#76b900',
     time: '3시간전', category: '미국주식',
     title: 'NVIDIA Blackwell 수요 예상치 초과 — Q2 가이던스 대폭 상향',
@@ -74,6 +78,7 @@ const posts = ref([
   },
   {
     id: 5,
+    post_type: 'STOCK', stock: { name: '삼성전자', ticker: '005930' },
     username: '삼전장기투자', avatar: '삼', userType: 'user', color: '#1428A0',
     time: '1시간전', category: '국내주식',
     title: '삼성전자 지금 추가 매수 타이밍일까요?',
@@ -87,6 +92,7 @@ const posts = ref([
   },
   {
     id: 6,
+    post_type: 'FREE', stock: null,
     username: '따박배당', avatar: '배', userType: 'user', color: '#0f9f6e',
     time: '30분전', category: '배당투자',
     title: '고배당주 포트폴리오 올해 수익률 공개 (+18.4%)',
@@ -100,6 +106,7 @@ const posts = ref([
   },
   {
     id: 7,
+    post_type: 'FREE', stock: null,
     username: '미국주식이야기', avatar: '미', userType: 'channel', color: '#e58b10',
     time: '2시간전', category: '미국주식이야기',
     title: '🇺🇸 오늘의 미국 시장 요약 (06/05)',
@@ -111,6 +118,69 @@ const posts = ref([
     ],
   },
 ])
+
+// ===== 공유 포트폴리오 (SharedPortfolio) =====
+const sharedPortfolios = ref([
+  {
+    id: 1,
+    user: '따박배당', avatar: '배', color: '#0f9f6e',
+    title: '고배당 장기 포트폴리오',
+    description: '배당재투자 전략으로 매년 15% 이상 수익 목표. KB금융·KT·한전 중심.',
+    is_public: true,
+    view_count: 1234,
+    time: '1일 전',
+    likes: 87,
+    items: [
+      { stock: 'KB금융',  ticker: '105560', weight: 25 },
+      { stock: 'KT',      ticker: '030200', weight: 20 },
+      { stock: '한국전력', ticker: '015760', weight: 20 },
+      { stock: 'JEPI',    ticker: 'JEPI',   weight: 20 },
+      { stock: '삼성전자', ticker: '005930', weight: 15 },
+    ],
+  },
+  {
+    id: 2,
+    user: 'NVDA장기홀더', avatar: 'N', color: '#76b900',
+    title: 'AI 반도체 집중 포트폴리오',
+    description: 'AI 시대 핵심 수혜주 집중 보유. 단기 변동성은 감수하되 3년 이상 홀드 전략.',
+    is_public: true,
+    view_count: 892,
+    time: '3일 전',
+    likes: 124,
+    items: [
+      { stock: 'NVIDIA',   ticker: 'NVDA',   weight: 40 },
+      { stock: 'AMD',      ticker: 'AMD',    weight: 25 },
+      { stock: 'TSMC',     ticker: 'TSM',    weight: 20 },
+      { stock: 'SK하이닉스', ticker: '000660', weight: 15 },
+    ],
+  },
+  {
+    id: 3,
+    user: '삼전장기투자', avatar: '삼', color: '#1428A0',
+    title: '코스피 블루칩 안정형',
+    description: '삼성전자 중심 국내 대형주 분산. 배당+성장 균형 잡힌 포트폴리오.',
+    is_public: true,
+    view_count: 445,
+    time: '5일 전',
+    likes: 56,
+    items: [
+      { stock: '삼성전자',      ticker: '005930', weight: 35 },
+      { stock: 'SK하이닉스',    ticker: '000660', weight: 20 },
+      { stock: 'NAVER',        ticker: '035420', weight: 20 },
+      { stock: 'LG에너지솔루션', ticker: '373220', weight: 15 },
+      { stock: '카카오',        ticker: '035720', weight: 10 },
+    ],
+  },
+])
+
+const likedPortfolios = reactive({})
+
+function togglePortfolioLike(id) {
+  const pf = sharedPortfolios.value.find(p => p.id === id)
+  if (!pf) return
+  if (likedPortfolios[id]) { delete likedPortfolios[id]; pf.likes-- }
+  else { likedPortfolios[id] = true; pf.likes++ }
+}
 
 // ===== 인기글 =====
 const popularPosts = [
@@ -125,6 +195,15 @@ const popularPosts = [
   { rank: 9, title: '어딜감히 떨어진다고 입을 놀리나!!', likes: 764, comments: 78 },
 ]
 
+// ===== 인기 종목 커뮤니티 바로가기 =====
+const trendingStocks = [
+  { name: '삼성전자', ticker: '005930', market: 'KOSPI', color: '#1428A0', postCount: 234 },
+  { name: 'SK하이닉스', ticker: '000660', market: 'KOSPI', color: '#0070c0', postCount: 187 },
+  { name: 'NVIDIA', ticker: 'NVDA', market: 'NASDAQ', color: '#76b900', postCount: 156 },
+  { name: '카카오', ticker: '035720', market: 'KOSPI', color: '#fee500', postCount: 98 },
+  { name: 'NAVER', ticker: '035420', market: 'KOSPI', color: '#03c75a', postCount: 76 },
+]
+
 // ===== 주제별 커뮤니티 =====
 const topicCommunities = [
   { icon: '🇺🇸', name: '미국주식이야기', members: '234.5K' },
@@ -135,9 +214,13 @@ const topicCommunities = [
 ]
 
 // ===== 필터링 =====
+const showPortfolios = computed(() => selectedCategory.value === '포트폴리오')
+
 const filteredPosts = computed(() => {
-  if (selectedCategory.value === '팔로잉') return posts.value.filter(p => followedUsers[p.username])
-  if (selectedCategory.value === '뉴스') return posts.value.filter(p => p.userType === 'channel')
+  if (selectedCategory.value === '팔로잉')  return posts.value.filter(p => followedUsers[p.username])
+  if (selectedCategory.value === '뉴스')    return posts.value.filter(p => p.userType === 'channel')
+  if (selectedCategory.value === '종목토론') return posts.value.filter(p => p.post_type === 'STOCK')
+  if (selectedCategory.value === '포트폴리오') return []
   return posts.value
 })
 
@@ -282,14 +365,89 @@ function koBarRect(vals, idx, w, h) {
       <!-- 피드 -->
       <div class="cm-feed">
 
+        <!-- 포트폴리오 탭 -->
+        <template v-if="showPortfolios">
+          <article
+            v-for="pf in sharedPortfolios"
+            :key="pf.id"
+            class="post-card panel pf-card"
+          >
+            <!-- 헤더 -->
+            <div class="post-header">
+              <div class="post-author">
+                <div class="post-avatar" :style="{ background: pf.color }">{{ pf.avatar }}</div>
+                <div class="post-author-info">
+                  <div class="post-author-name-row">
+                    <strong>{{ pf.user }}</strong>
+                    <span class="pf-badge">포트폴리오</span>
+                  </div>
+                  <div class="post-meta-row">
+                    <span class="post-time">{{ pf.time }}</span>
+                    <span class="post-dot">·</span>
+                    <span class="post-time">조회 {{ pf.view_count.toLocaleString() }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 본문 -->
+            <div class="post-body">
+              <h3 class="post-title">{{ pf.title }}</h3>
+              <p class="post-content">{{ pf.description }}</p>
+
+              <!-- 종목 구성 (SharedPortfolioItem) -->
+              <div class="pf-holdings">
+                <!-- 비율 바 -->
+                <div class="pf-bar">
+                  <div
+                    v-for="item in pf.items"
+                    :key="item.ticker"
+                    class="pf-bar-seg"
+                    :style="{ width: item.weight + '%', background: `hsl(${pf.items.indexOf(item) * 47 + 200}, 65%, 55%)` }"
+                    :title="`${item.stock} ${item.weight}%`"
+                  ></div>
+                </div>
+                <!-- 종목 칩 목록 -->
+                <div class="pf-item-list">
+                  <div
+                    v-for="(item, i) in pf.items"
+                    :key="item.ticker"
+                    class="pf-item-chip"
+                  >
+                    <span class="pf-chip-dot" :style="{ background: `hsl(${i * 47 + 200}, 65%, 55%)` }"></span>
+                    <span class="pf-chip-name">{{ item.stock }}</span>
+                    <span class="pf-chip-weight">{{ item.weight }}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 반응 바 -->
+            <div class="post-reactions">
+              <div class="reaction-left">
+                <button
+                  class="reaction-btn like-btn"
+                  :class="{ 'is-liked': likedPortfolios[pf.id] }"
+                  @click="togglePortfolioLike(pf.id)"
+                >
+                  <span class="like-icon">{{ likedPortfolios[pf.id] ? '♥' : '♡' }}</span>
+                  <span class="reaction-count">{{ pf.likes.toLocaleString() }}</span>
+                </button>
+              </div>
+              <button class="bookmark-btn">🔖</button>
+            </div>
+          </article>
+        </template>
+
         <!-- 팔로잉 탭에서 아무것도 없을 때 -->
-        <div v-if="filteredPosts.length === 0" class="empty-feed">
+        <div v-else-if="filteredPosts.length === 0" class="empty-feed">
           <span>👤</span>
           <p>팔로우한 채널의 글이 없습니다.<br>관심 있는 채널을 팔로우해보세요.</p>
         </div>
 
         <!-- 포스트 카드 -->
         <article
+          v-if="!showPortfolios"
           v-for="post in filteredPosts"
           :key="post.id"
           class="post-card panel"
@@ -324,6 +482,12 @@ function koBarRect(vals, idx, w, h) {
 
           <!-- 포스트 내용 -->
           <div class="post-body">
+            <!-- 종목 태그 (stock FK) -->
+            <div v-if="post.stock" class="post-stock-tag">
+              <span class="pst-dot">●</span>
+              <span class="pst-name">{{ post.stock.name }}</span>
+              <span class="pst-ticker">{{ post.stock.ticker }}</span>
+            </div>
             <h3 class="post-title">{{ post.title }}</h3>
             <p v-if="post.content" class="post-content" style="white-space: pre-line">{{ post.content }}</p>
 
@@ -515,6 +679,28 @@ function koBarRect(vals, idx, w, h) {
                   <span>💬 {{ item.comments }}</span>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 인기 종목 커뮤니티 바로가기 -->
+        <div class="panel sidebar-panel">
+          <div class="sidebar-head">
+            <h3>현재 인기종목 커뮤니티</h3>
+            <button class="text-btn">더보기 ›</button>
+          </div>
+          <div class="trending-stocks">
+            <div
+              v-for="s in trendingStocks"
+              :key="s.ticker"
+              class="trending-stock-item"
+            >
+              <div class="ts-logo" :style="{ background: s.color }">{{ s.name[0] }}</div>
+              <div class="ts-info">
+                <strong>{{ s.name }}</strong>
+                <span>{{ s.market }} · {{ s.postCount }}개 글</span>
+              </div>
+              <button class="ts-goto-btn">바로가기 →</button>
             </div>
           </div>
         </div>
@@ -1274,6 +1460,124 @@ function koBarRect(vals, idx, w, h) {
   border-color: rgba(49,93,255,0.22);
   color: var(--accent);
 }
+
+/* ===== 종목 태그 (stock FK) ===== */
+.post-stock-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(49,93,255,0.08);
+  border: 1px solid rgba(49,93,255,0.2);
+  margin-bottom: 8px;
+}
+.pst-dot { font-size: 8px; color: var(--accent); }
+.pst-name { font-size: 12px; font-weight: 900; color: var(--accent); }
+.pst-ticker { font-size: 11px; font-weight: 700; color: var(--muted); }
+
+/* ===== 포트폴리오 카드 ===== */
+.pf-badge {
+  font-size: 10px; font-weight: 900;
+  padding: 1px 7px; border-radius: 999px;
+  background: rgba(15,159,110,0.12);
+  color: #0f9f6e;
+}
+
+.pf-holdings { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+
+.pf-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  gap: 1px;
+}
+.pf-bar-seg { height: 100%; border-radius: 999px; transition: opacity 0.15s; }
+.pf-bar-seg:hover { opacity: 0.8; }
+
+.pf-item-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pf-item-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--glass-border);
+  font-size: 12px;
+}
+.pf-chip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.pf-chip-name { font-weight: 900; color: var(--ink); }
+.pf-chip-weight { font-weight: 700; color: var(--muted); }
+
+/* ===== 인기 종목 커뮤니티 ===== */
+.trending-stocks { display: flex; flex-direction: column; gap: 6px; }
+
+.trending-stock-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.trending-stock-item:hover { background: rgba(255,255,255,0.55); }
+
+.ts-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 900;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.ts-info { flex: 1; min-width: 0; }
+
+.ts-info strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ts-info span {
+  display: block;
+  font-size: 11px;
+  color: var(--faint);
+  font-weight: 700;
+  margin-top: 1px;
+}
+
+.ts-goto-btn {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(49,93,255,0.25);
+  background: rgba(49,93,255,0.07);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.ts-goto-btn:hover { background: rgba(49,93,255,0.14); }
 
 /* ===== 반응형 ===== */
 @media (max-width: 1100px) {

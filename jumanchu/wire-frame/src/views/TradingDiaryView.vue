@@ -1,17 +1,32 @@
 <script setup>
 import { ref, computed } from 'vue'
 
+// ── reason_category 선택지 ──────────────────────────────────
+const reasonCategories = ['장기성장성', '실적개선', '저평가', '테마', '뉴스호재', '기술적반등', '배당', '분산']
+
+// ── DiaryReview judgment 선택지 ─────────────────────────────
+const judgmentOptions = ['탁월한 판단', '적절한 판단', '보통', '아쉬운 판단', '잘못된 판단']
+
 // ── 더미 데이터 ──────────────────────────────────────────────
 const entries = ref([
-  { id: 1,  date: '2026-06-05', stock: '삼성전자', ticker: '005930', type: 'buy',  title: '오늘 매수 이유', body: 'HBM 수요 회복 소식에 반도체 섹터 전반 매수 진입. 목표가 35만원.' },
-  { id: 2,  date: '2026-06-05', stock: 'NVIDIA',   ticker: 'NVDA',    type: 'hold', title: 'NVDA 계속 보유', body: '실적 발표 앞두고 홀딩. 어닝 서프라이즈 기대감 있음.' },
-  { id: 3,  date: '2026-06-04', stock: 'SK하이닉스', ticker: '000660', type: 'sell', title: '단기 수익 실현', body: '목표가 도달해 5주 전량 매도. 수익 +87,500원.' },
-  { id: 4,  date: '2026-06-02', stock: '삼성전자', ticker: '005930', type: 'sell', title: '손절 결정', body: '예상과 다른 방향. 손절 -35,000원. 더 지켜볼 명분이 없다고 판단.' },
-  { id: 5,  date: '2026-05-30', stock: 'NAVER',    ticker: '035420', type: 'buy',  title: 'NAVER 신규 진입', body: '광고 매출 회복 전망. 8주 매수.' },
-  { id: 6,  date: '2026-05-22', stock: '삼성전자', ticker: '005930', type: 'sell', title: '분할 매도', body: '15주 분할 매도. 수익 +120,000원.' },
-  { id: 7,  date: '2026-05-20', stock: '카카오',   ticker: '035720', type: 'sell', title: '손절', body: '카카오 실적 부진 확인 후 전량 손절. -62,000원.' },
-  { id: 8,  date: '2026-05-15', stock: 'ALPHABET', ticker: 'GOOGL',  type: 'buy',  title: '구글 장기 보유 시작', body: 'AI 검색 광고 성장 기대. 1주 매수.' },
-  { id: 9,  date: '2026-06-10', stock: 'APPLE',    ticker: 'AAPL',   type: 'hold', title: 'WWDC 전 홀딩 전략', body: 'AI 기능 대거 공개 예정. 발표 후 추가 매수 여부 판단 예정.' },
+  { id: 1,  date: '2026-06-05', stock: '삼성전자', ticker: '005930', type: 'buy',  reason_category: '뉴스호재',   confidence: 4, target_price: 350000, stop_loss_price: 290000,
+    review: { judgment: '적절한 판단', lesson: 'HBM 수요 회복 뉴스에 빠르게 진입한 건 좋았지만 목표가 설정을 더 구체적으로 해야 했다.' } },
+  { id: 2,  date: '2026-06-05', stock: 'NVIDIA',   ticker: 'NVDA',    type: 'hold', reason_category: '장기성장성', confidence: 5, target_price: 250,    stop_loss_price: 180,
+    review: null },
+  { id: 3,  date: '2026-06-04', stock: 'SK하이닉스', ticker: '000660', type: 'sell', reason_category: '실적개선',   confidence: 3, target_price: null,   stop_loss_price: null,
+    review: { judgment: '탁월한 판단', lesson: '목표가 도달 시 분할 매도 전략이 효과적이었다.' } },
+  { id: 4,  date: '2026-06-02', stock: '삼성전자', ticker: '005930', type: 'sell', reason_category: '기술적반등',  confidence: 2, target_price: null,   stop_loss_price: 295000,
+    review: { judgment: '보통', lesson: '손절 기준을 미리 설정했더라면 더 빠르게 대응할 수 있었다.' } },
+  { id: 5,  date: '2026-05-30', stock: 'NAVER',    ticker: '035420', type: 'buy',  reason_category: '저평가',     confidence: 3, target_price: 290000, stop_loss_price: 230000,
+    review: null },
+  { id: 6,  date: '2026-05-22', stock: '삼성전자', ticker: '005930', type: 'sell', reason_category: '실적개선',   confidence: 4, target_price: null,   stop_loss_price: null,
+    review: null },
+  { id: 7,  date: '2026-05-20', stock: '카카오',   ticker: '035720', type: 'sell', reason_category: '기술적반등',  confidence: 2, target_price: null,   stop_loss_price: 55000,
+    review: { judgment: '아쉬운 판단', lesson: '실적 부진 시그널을 더 일찍 포착했어야 했다.' } },
+  { id: 8,  date: '2026-05-15', stock: 'ALPHABET', ticker: 'GOOGL',  type: 'buy',  reason_category: '장기성장성', confidence: 5, target_price: 220,    stop_loss_price: 155,
+    review: null },
+  { id: 9,  date: '2026-06-10', stock: 'APPLE',    ticker: 'AAPL',   type: 'hold', reason_category: '테마',       confidence: 4, target_price: 360,    stop_loss_price: 280,
+    review: null },
 ])
 
 // ── 캘린더 상태 ────────────────────────────────────────────
@@ -64,11 +79,25 @@ function isToday(day) {
   )
 }
 
-// ── 캘린더 날짜 선택 (하이라이트용만) ─────────────────────
+function isFuture(day) {
+  if (!day) return false
+  const cellDate = new Date(viewYear.value, viewMonth.value, day)
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  return cellDate > todayStart
+}
+
+// ── 선택된 일지 (우측 상세 패널) ──────────────────────────
+const selectedEntry = ref(null)
+
+function selectEntry(e) {
+  selectedEntry.value = selectedEntry.value?.id === e.id ? null : e
+}
+
+// ── 캘린더 날짜 선택 (오늘 이하만 선택 가능) ──────────────
 const selectedDate = ref(null)
 
 function selectDay(day) {
-  if (!day) return
+  if (!day || isFuture(day)) return
   const k = dateKey(day)
   selectedDate.value = selectedDate.value === k ? null : k
 }
@@ -80,7 +109,7 @@ const recentEntries = computed(() =>
 
 // ── 새 일지 작성 ───────────────────────────────────────────
 const showForm = ref(false)
-const form = ref({ stock: '', ticker: '', type: 'buy', title: '', body: '' })
+const form = ref({ stock: '', ticker: '', type: 'buy', reason_category: '', confidence: 0, target_price: '', stop_loss_price: '' })
 
 function openForm() {
   if (!selectedDate.value) selectedDate.value = dateKey(today.getDate())
@@ -89,11 +118,14 @@ function openForm() {
 }
 
 function submitForm() {
-  if (!form.value.stock || !form.value.title) return
+  if (!form.value.stock || !form.value.reason_category) return
   entries.value.push({
     id: Date.now(),
     date: selectedDate.value,
+    review: null,
     ...form.value,
+    target_price: form.value.target_price ? Number(form.value.target_price) : null,
+    stop_loss_price: form.value.stop_loss_price ? Number(form.value.stop_loss_price) : null,
   })
   showForm.value = false
 }
@@ -102,10 +134,6 @@ function submitForm() {
 const typeColor = { buy: '#315dff', sell: '#ef4444', hold: '#f59e0b' }
 const typeLabel = { buy: '매수', sell: '매도', hold: '홀딩' }
 
-function dotColors(day) {
-  const es = entriesByDate.value[dateKey(day)] ?? []
-  return [...new Set(es.map(e => typeColor[e.type]))]
-}
 </script>
 
 <template>
@@ -123,7 +151,7 @@ function dotColors(day) {
     <div class="diary-layout">
 
       <!-- ── 캘린더 ── -->
-      <div class="panel calendar-panel">
+      <div class="panel calendar-panel" style="min-width:0">
         <!-- 월 네비게이션 -->
         <div class="cal-nav">
           <button class="cal-nav-btn" @click="prevMonth">‹</button>
@@ -143,6 +171,7 @@ function dotColors(day) {
             :class="{
               'is-empty': !day,
               'is-today': day && isToday(day),
+              'is-future': day && isFuture(day),
               'has-entry': day && entriesByDate[dateKey(day)],
               'is-selected': day && selectedDate === dateKey(day),
               'is-sunday': idx % 7 === 0,
@@ -151,14 +180,18 @@ function dotColors(day) {
             @click="selectDay(day)"
           >
             <span v-if="day" class="cal-day-num">{{ day }}</span>
-            <!-- 종목 타입 닷 -->
-            <div v-if="day && dotColors(day).length" class="cal-dots">
+            <!-- 종목 칩 -->
+            <div v-if="day && entriesByDate[dateKey(day)]" class="cal-stocks">
               <span
-                v-for="(color, ci) in dotColors(day).slice(0, 3)"
-                :key="ci"
-                class="cal-dot"
-                :style="{ background: color }"
-              ></span>
+                v-for="e in entriesByDate[dateKey(day)].slice(0, 2)"
+                :key="e.id"
+                class="cal-stock-chip"
+                :style="{ background: typeColor[e.type] + '22', color: typeColor[e.type] }"
+              >{{ e.stock }}</span>
+              <span
+                v-if="entriesByDate[dateKey(day)].length > 2"
+                class="cal-stock-more"
+              >+{{ entriesByDate[dateKey(day)].length - 2 }}</span>
             </div>
           </div>
         </div>
@@ -172,15 +205,22 @@ function dotColors(day) {
         </div>
       </div>
 
-      <!-- ── 오른쪽 패널: 최근 작성 일지 목록 ── -->
+      <!-- ── 오른쪽 패널: 최근 작성 일지 목록 + 상세 ── -->
       <div class="diary-right">
+
+        <!-- 일지 목록 -->
         <div class="panel recent-panel">
           <div class="recent-header">
             <span class="recent-title">최근 작성 일지</span>
             <span class="recent-count">{{ recentEntries.length }}건</span>
           </div>
           <div class="entry-list">
-            <div v-for="e in recentEntries" :key="e.id" class="entry-card">
+            <div
+              v-for="e in recentEntries" :key="e.id"
+              class="entry-card"
+              :class="{ 'is-selected': selectedEntry?.id === e.id }"
+              @click="selectEntry(e)"
+            >
               <div class="entry-card-head">
                 <div class="entry-stock-info">
                   <span class="entry-type-badge" :style="{ background: typeColor[e.type] + '22', color: typeColor[e.type], borderColor: typeColor[e.type] + '55' }">
@@ -191,11 +231,76 @@ function dotColors(day) {
                 </div>
                 <span class="entry-date">{{ e.date }}</span>
               </div>
-              <div class="entry-title">{{ e.title }}</div>
-              <p class="entry-body">{{ e.body }}</p>
+              <div class="entry-bottom-row">
+                <span class="entry-reason-chip">{{ e.reason_category }}</span>
+                <span class="entry-confidence">{{ '★'.repeat(e.confidence) }}{{ '☆'.repeat(5 - e.confidence) }}</span>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- 선택된 일지 상세 패널 -->
+        <Transition name="slide-down">
+          <div v-if="selectedEntry" class="panel detail-panel">
+            <!-- 종목 정보 -->
+            <div class="detail-stock-card">
+              <div class="dsc-left">
+                <span class="dsc-type-badge" :style="{ background: typeColor[selectedEntry.type] + '22', color: typeColor[selectedEntry.type] }">
+                  {{ typeLabel[selectedEntry.type] }}
+                </span>
+                <strong class="dsc-name">{{ selectedEntry.stock }}</strong>
+                <span class="dsc-ticker">{{ selectedEntry.ticker }}</span>
+              </div>
+              <div class="dsc-date">{{ selectedEntry.date }}</div>
+            </div>
+
+            <!-- 별점 (confidence) -->
+            <div class="detail-row">
+              <span class="detail-label">확신도</span>
+              <span class="detail-confidence">
+                <span v-for="i in 5" :key="i" :class="i <= selectedEntry.confidence ? 'star-on' : 'star-off'">★</span>
+              </span>
+            </div>
+
+            <!-- reason_category -->
+            <div class="detail-row">
+              <span class="detail-label">매매 이유</span>
+              <span class="detail-reason-chip">{{ selectedEntry.reason_category }}</span>
+            </div>
+
+            <!-- 목표가 / 손절가 -->
+            <div class="detail-prices" v-if="selectedEntry.target_price || selectedEntry.stop_loss_price">
+              <div v-if="selectedEntry.target_price" class="detail-price-item is-target">
+                <span>목표가</span>
+                <strong>{{ typeof selectedEntry.target_price === 'number' && selectedEntry.target_price < 1000
+                  ? '$' + selectedEntry.target_price
+                  : '₩' + selectedEntry.target_price?.toLocaleString() }}</strong>
+              </div>
+              <div v-if="selectedEntry.stop_loss_price" class="detail-price-item is-stop">
+                <span>손절가</span>
+                <strong>{{ typeof selectedEntry.stop_loss_price === 'number' && selectedEntry.stop_loss_price < 1000
+                  ? '$' + selectedEntry.stop_loss_price
+                  : '₩' + selectedEntry.stop_loss_price?.toLocaleString() }}</strong>
+              </div>
+            </div>
+
+            <!-- 복기 (DiaryReview) -->
+            <div class="detail-review">
+              <div class="detail-review-head">복기</div>
+              <template v-if="selectedEntry.review">
+                <div class="detail-row">
+                  <span class="detail-label">판단</span>
+                  <span class="detail-judgment">{{ selectedEntry.review.judgment }}</span>
+                </div>
+                <p class="detail-lesson">{{ selectedEntry.review.lesson }}</p>
+              </template>
+              <div v-else class="detail-review-empty">
+                <p>아직 복기가 작성되지 않았습니다.</p>
+                <button class="write-review-btn">복기 작성하기</button>
+              </div>
+            </div>
+          </div>
+        </Transition>
       </div>
     </div>
 
@@ -230,19 +335,41 @@ function dotColors(day) {
               >{{ label }}</button>
             </div>
           </div>
-          <div class="form-field span2">
-            <label>제목</label>
-            <input v-model="form.title" placeholder="오늘의 투자 한 줄 요약" class="form-input" />
+          <div class="form-field">
+            <label>확신도</label>
+            <div class="type-btns">
+              <button
+                v-for="n in 5" :key="n"
+                class="type-btn"
+                :style="form.confidence >= n ? { color: '#f59e0b', borderColor: '#f59e0b', background: 'rgba(245,158,11,0.1)' } : {}"
+                @click="form.confidence = n"
+              >{{ '★'.repeat(n) }}</button>
+            </div>
           </div>
           <div class="form-field span2">
-            <label>내용</label>
-            <textarea v-model="form.body" placeholder="매수/매도 이유, 목표가, 느낀 점 등 자유롭게 기록하세요." class="form-textarea"></textarea>
+            <label>매매 이유</label>
+            <div class="reason-chips">
+              <button
+                v-for="cat in reasonCategories" :key="cat"
+                class="reason-chip-btn"
+                :class="{ active: form.reason_category === cat }"
+                @click="form.reason_category = cat"
+              >{{ cat }}</button>
+            </div>
+          </div>
+          <div class="form-field">
+            <label>목표가</label>
+            <input v-model="form.target_price" type="number" placeholder="예) 350000" class="form-input" />
+          </div>
+          <div class="form-field">
+            <label>손절가</label>
+            <input v-model="form.stop_loss_price" type="number" placeholder="예) 290000" class="form-input" />
           </div>
         </div>
 
         <div class="modal-actions">
           <button class="cancel-btn" @click="showForm = false">취소</button>
-          <button class="submit-btn" :disabled="!form.stock || !form.title" @click="submitForm">저장</button>
+          <button class="submit-btn" :disabled="!form.stock || !form.reason_category" @click="submitForm">저장</button>
         </div>
       </div>
     </div>
@@ -294,7 +421,7 @@ function dotColors(day) {
 /* ── 레이아웃 ── */
 .diary-layout {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 20px;
   align-items: start;
 }
@@ -333,19 +460,20 @@ function dotColors(day) {
 }
 
 .cal-cell {
-  aspect-ratio: 1;
+  min-height: 72px;
   border-radius: 8px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
   gap: 3px;
   cursor: pointer;
   transition: background 0.15s;
   position: relative;
-  padding: 4px 2px;
+  padding: 6px 4px;
 }
 .cal-cell.is-empty { cursor: default; pointer-events: none; }
+.cal-cell.is-future { cursor: not-allowed; opacity: 0.3; pointer-events: none; }
 .cal-cell:not(.is-empty):hover { background: rgba(255,255,255,0.6); }
 .cal-cell.is-today .cal-day-num {
   background: linear-gradient(135deg, var(--accent), var(--purple));
@@ -359,10 +487,20 @@ function dotColors(day) {
 .cal-cell.is-sunday .cal-day-num { color: var(--negative); }
 .cal-cell.is-saturday .cal-day-num { color: var(--accent); }
 
-.cal-day-num { font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1; }
+.cal-day-num { font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1; align-self: center; }
 
-.cal-dots { display: flex; gap: 2px; justify-content: center; }
-.cal-dot { width: 5px; height: 5px; border-radius: 50%; }
+.cal-stocks { display: flex; flex-direction: column; gap: 2px; width: 100%; margin-top: 2px; }
+.cal-stock-chip {
+  font-size: 9px;
+  font-weight: 900;
+  padding: 1px 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.cal-stock-more { font-size: 9px; font-weight: 700; color: var(--muted); padding-left: 2px; }
 
 .cal-legend {
   display: flex;
@@ -392,11 +530,15 @@ function dotColors(day) {
 
 .entry-list { display: flex; flex-direction: column; gap: 0; }
 .entry-card {
-  padding: 14px 0;
+  padding: 12px 8px;
   border-bottom: 1px solid var(--faint);
   display: flex; flex-direction: column; gap: 6px;
+  cursor: pointer; border-radius: 8px;
+  transition: background 0.15s;
 }
 .entry-card:last-child { border-bottom: none; }
+.entry-card:hover { background: rgba(255,255,255,0.5); }
+.entry-card.is-selected { background: rgba(49,93,255,0.07); border-color: rgba(49,93,255,0.2); }
 
 .entry-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .entry-stock-info { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
@@ -408,8 +550,84 @@ function dotColors(day) {
 }
 .entry-stock-name { font-size: 14px; font-weight: 900; color: var(--ink); }
 .entry-ticker { font-size: 11px; color: var(--muted); }
-.entry-title { font-size: 15px; font-weight: 900; color: var(--ink); }
-.entry-body { font-size: 13px; color: var(--muted); line-height: 1.65; margin: 0; }
+
+.entry-bottom-row { display: flex; align-items: center; justify-content: space-between; }
+.entry-reason-chip {
+  font-size: 11px; font-weight: 900;
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(49,93,255,0.08); color: var(--accent);
+}
+.entry-confidence { font-size: 12px; color: #f59e0b; letter-spacing: 1px; }
+
+/* ── 상세 패널 ── */
+.detail-panel { padding: 20px; display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }
+
+.detail-stock-card {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--faint);
+}
+.dsc-left { display: flex; align-items: center; gap: 8px; }
+.dsc-type-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 900; }
+.dsc-name { font-size: 16px; font-weight: 900; color: var(--ink); }
+.dsc-ticker { font-size: 12px; color: var(--muted); }
+.dsc-date { font-size: 12px; color: var(--muted); font-weight: 700; }
+
+.detail-row { display: flex; align-items: center; gap: 12px; }
+.detail-label { font-size: 12px; font-weight: 900; color: var(--muted); min-width: 60px; }
+.detail-confidence { display: flex; gap: 2px; }
+.star-on { color: #f59e0b; font-size: 18px; }
+.star-off { color: var(--faint); font-size: 18px; }
+.detail-reason-chip {
+  font-size: 13px; font-weight: 900;
+  padding: 4px 12px; border-radius: 999px;
+  background: rgba(49,93,255,0.1); color: var(--accent);
+}
+
+.detail-prices { display: flex; gap: 10px; }
+.detail-price-item {
+  flex: 1; padding: 10px 14px; border-radius: 8px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.detail-price-item span { font-size: 11px; font-weight: 700; color: var(--muted); }
+.detail-price-item strong { font-size: 15px; font-weight: 900; }
+.detail-price-item.is-target { background: rgba(0,102,204,0.07); }
+.detail-price-item.is-target strong { color: var(--accent); }
+.detail-price-item.is-stop { background: rgba(255,59,92,0.07); }
+.detail-price-item.is-stop strong { color: var(--negative); }
+
+.detail-review { border-top: 1px solid var(--faint); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.detail-review-head { font-size: 13px; font-weight: 900; color: var(--ink); }
+.detail-judgment {
+  font-size: 13px; font-weight: 900;
+  padding: 3px 10px; border-radius: 6px;
+  background: rgba(255,255,255,0.6); border: 1px solid var(--glass-border);
+}
+.detail-lesson { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+.detail-review-empty { text-align: center; padding: 16px 0; }
+.detail-review-empty p { font-size: 13px; color: var(--faint); margin: 0 0 10px; }
+.write-review-btn {
+  padding: 6px 16px; border-radius: 999px;
+  border: 1px solid rgba(49,93,255,0.3);
+  background: rgba(49,93,255,0.07); color: var(--accent);
+  font-size: 12px; font-weight: 900; cursor: pointer;
+}
+
+/* ── reason_category 칩 ── */
+.reason-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.reason-chip-btn {
+  padding: 5px 12px; border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255,255,255,0.5);
+  font-size: 12px; font-weight: 900; color: var(--muted);
+  cursor: pointer; transition: all 0.15s;
+}
+.reason-chip-btn:hover { background: rgba(255,255,255,0.8); color: var(--ink); }
+.reason-chip-btn.active {
+  background: rgba(49,93,255,0.1);
+  border-color: rgba(49,93,255,0.35);
+  color: var(--accent);
+}
 
 /* ── 모달 ── */
 .modal-backdrop {

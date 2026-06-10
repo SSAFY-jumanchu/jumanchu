@@ -1,33 +1,48 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import SparklineChart from '../components/SparklineChart.vue'
 
-const sortKey = ref('evalAmount')
+const router = useRouter()
+
+const marketFilter = ref('all')
+const filters = [
+  { key: 'all', label: '전체' },
+  { key: 'domestic', label: '국내' },
+  { key: 'overseas', label: '해외' },
+]
+
+const selectedCode = ref('000660')
 
 const holdings = [
   {
     code: '000660', name: 'SK하이닉스', market: 'KOSPI', sector: '전기·전자',
     qty: 15, avgPrice: 172000, currentPrice: 189300,
+    color: '#0070c0',
     sparkline: [68, 70, 67, 72, 74, 71, 75, 73, 76, 79, 78, 81],
   },
   {
     code: '005930', name: '삼성전자', market: 'KOSPI', sector: '전기·전자',
     qty: 40, avgPrice: 73500, currentPrice: 71200,
+    color: '#1428A0',
     sparkline: [82, 80, 78, 75, 77, 74, 72, 73, 70, 68, 66, 64],
   },
   {
     code: 'NVDA', name: 'NVIDIA', market: 'NASDAQ', sector: '반도체',
     qty: 8, avgPrice: 820, currentPrice: 1074,
+    color: '#76b900',
     sparkline: [55, 57, 56, 59, 61, 63, 62, 65, 67, 69, 71, 73],
   },
   {
     code: 'AAPL', name: 'Apple', market: 'NASDAQ', sector: 'IT·소비재',
     qty: 20, avgPrice: 185, currentPrice: 192,
+    color: '#555',
     sparkline: [50, 53, 52, 56, 58, 61, 60, 64, 66, 69, 71, 74],
   },
   {
     code: '035420', name: 'NAVER', market: 'KOSPI', sector: 'IT·소프트웨어',
     qty: 5, avgPrice: 195000, currentPrice: 214000,
+    color: '#03c75a',
     sparkline: [44, 48, 47, 52, 55, 58, 62, 65, 68, 72, 75, 79],
   },
 ]
@@ -36,29 +51,26 @@ function evalAmount(h) { return h.qty * h.currentPrice }
 function pnl(h) { return (h.currentPrice - h.avgPrice) * h.qty }
 function returnRate(h) { return ((h.currentPrice - h.avgPrice) / h.avgPrice) * 100 }
 function isKrw(h) { return h.market === 'KOSPI' || h.market === 'KOSDAQ' }
+function fmtRate(v) { return (v >= 0 ? '+' : '') + v.toFixed(2) + '%' }
 
-function fmtPrice(v, krw = true) {
-  return krw
-    ? v.toLocaleString('ko-KR') + '원'
-    : '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2 })
-}
-function fmtRate(v) {
-  return (v >= 0 ? '+' : '') + v.toFixed(2) + '%'
-}
-function fmtPnl(h) {
-  const v = pnl(h)
-  const prefix = v >= 0 ? '+' : ''
-  return isKrw(h) ? prefix + v.toLocaleString('ko-KR') + '원' : prefix + '$' + Math.abs(v).toLocaleString()
-}
-
-const totalEval = computed(() => holdings.reduce((sum, h) => sum + (isKrw(h) ? evalAmount(h) : evalAmount(h) * 1380), 0))
-const totalCost = computed(() => holdings.reduce((sum, h) => sum + (isKrw(h) ? h.qty * h.avgPrice : h.qty * h.avgPrice * 1380), 0))
+const totalEval = computed(() =>
+  holdings.reduce((sum, h) => sum + (isKrw(h) ? evalAmount(h) : evalAmount(h) * 1380), 0)
+)
+const totalCost = computed(() =>
+  holdings.reduce((sum, h) => sum + (isKrw(h) ? h.qty * h.avgPrice : h.qty * h.avgPrice * 1380), 0)
+)
 const totalPnl = computed(() => totalEval.value - totalCost.value)
 const totalReturn = computed(() => (totalPnl.value / totalCost.value) * 100)
 
-const sortedHoldings = computed(() => {
-  return [...holdings].sort((a, b) => evalAmount(b) - evalAmount(a))
+const filteredHoldings = computed(() => {
+  if (marketFilter.value === 'domestic') return holdings.filter(h => isKrw(h))
+  if (marketFilter.value === 'overseas') return holdings.filter(h => !isKrw(h))
+  return holdings
 })
+
+const selectedHolding = computed(() =>
+  holdings.find(h => h.code === selectedCode.value) ?? null
+)
 
 const marketGroups = computed(() => {
   const domestic = holdings.filter(h => isKrw(h))
@@ -71,326 +83,377 @@ const marketGroups = computed(() => {
     { label: '해외주식', amount: ovsTotal, pct: grand ? (ovsTotal / grand * 100) : 0, color: 'var(--purple)' },
   ]
 })
-
-const selectedCode = ref(null)
-function toggleDetail(code) {
-  selectedCode.value = selectedCode.value === code ? null : code
-}
 </script>
 
 <template>
-  <div>
-    <header class="topbar">
-      <div>
+  <div class="holdings-page">
+
+    <!-- 상단: 자산 요약 + 바로가기 -->
+    <div class="top-section">
+      <div class="asset-summary panel">
         <p class="eyebrow">가상 계좌 기준</p>
         <h1>보유 종목</h1>
-      </div>
-      <div class="top-actions">
-        <div class="market-state">
-          <span class="status-dot local"></span>
-          샘플 데이터
+        <div class="summary-grid">
+          <div class="summary-item">
+            <span>전체 총 평가액</span>
+            <strong>{{ Math.round(totalEval / 10000).toLocaleString() }}<small>만원</small></strong>
+          </div>
+          <div class="summary-item" :class="totalPnl >= 0 ? 'tone-up' : 'tone-down'">
+            <span>총 평가 손익</span>
+            <strong :class="totalPnl >= 0 ? 'is-up' : 'is-down'">
+              {{ totalPnl >= 0 ? '+' : '' }}{{ Math.round(totalPnl / 10000).toLocaleString() }}<small>만원</small>
+            </strong>
+            <em :class="totalPnl >= 0 ? 'is-up' : 'is-down'">({{ fmtRate(totalReturn) }})</em>
+          </div>
+          <div class="summary-item">
+            <span>총 투자금</span>
+            <strong>{{ Math.round(totalCost / 10000).toLocaleString() }}<small>만원</small></strong>
+          </div>
         </div>
       </div>
-    </header>
 
-    <!-- 요약 strip -->
-    <div class="summary-strip holdings-strip">
-      <div class="metric-tile tone-blue">
-        <span>총 평가금액</span>
-        <strong>{{ Math.round(totalEval / 10000).toLocaleString() }}<small style="font-size:16px;font-weight:700;"> 만원</small></strong>
-        <p>국내 + 해외(환율 1,380)</p>
-      </div>
-      <div class="metric-tile" :class="totalPnl >= 0 ? 'tone-green' : 'tone-red'">
-        <span>총 평가손익</span>
-        <strong :class="totalPnl >= 0 ? 'is-up' : 'is-down'">
-          {{ totalPnl >= 0 ? '+' : '' }}{{ Math.round(totalPnl / 10000).toLocaleString() }}<small style="font-size:16px;font-weight:700;"> 만원</small>
-        </strong>
-        <p :class="totalPnl >= 0 ? 'is-up' : 'is-down'">{{ fmtRate(totalReturn) }}</p>
-      </div>
-      <div class="metric-tile tone-purple">
-        <span>보유 종목 수</span>
-        <strong>{{ holdings.length }}<small style="font-size:16px;font-weight:700;"> 종목</small></strong>
-        <p>국내 {{ holdings.filter(h => isKrw(h)).length }} · 해외 {{ holdings.filter(h => !isKrw(h)).length }}</p>
-      </div>
-      <div class="metric-tile tone-amber">
-        <span>예수금 잔고</span>
-        <strong>8,432<small style="font-size:16px;font-weight:700;"> 만원</small></strong>
-        <p>주문 가능 금액</p>
+      <div class="shortcut-panel panel">
+        <p class="eyebrow">바로가기</p>
+        <div class="shortcuts">
+          <button class="shortcut-btn" @click="router.push('/trading-diary')">
+            <span class="sc-icon">📋</span>
+            <span class="sc-label">주문내역</span>
+          </button>
+          <button class="shortcut-btn" @click="router.push('/trading-diary')">
+            <span class="sc-icon">📖</span>
+            <span class="sc-label">매매일지</span>
+          </button>
+        </div>
       </div>
     </div>
 
+    <!-- 메인: 종목 목록 + 우측 패널 -->
     <div class="holdings-layout">
-      <!-- 왼쪽: 종목 리스트 -->
+
+      <!-- 왼쪽: 보유 종목 목록 -->
       <section class="panel holdings-panel" aria-label="보유 종목 목록">
         <div class="panel-head">
           <h2>보유 종목 목록</h2>
           <div class="segmented">
-            <button class="is-selected" type="button">전체</button>
-            <button type="button">국내</button>
-            <button type="button">해외</button>
+            <button
+              v-for="f in filters"
+              :key="f.key"
+              :class="{ 'is-selected': marketFilter === f.key }"
+              @click="marketFilter = f.key"
+              type="button"
+            >{{ f.label }}</button>
           </div>
         </div>
 
-        <div class="holdings-table">
-          <!-- 헤더 -->
-          <div class="holdings-row holdings-header">
-            <span>종목</span>
-            <span class="align-right">보유수량</span>
-            <span class="align-right">평균 단가</span>
-            <span class="align-right">현재가</span>
-            <span class="align-right">평가금액</span>
-            <span class="align-right">수익률</span>
-            <span class="align-right">추이</span>
-          </div>
-
-          <!-- 종목 행 -->
+        <div class="holdings-list">
           <div
-            v-for="h in sortedHoldings"
+            v-for="h in filteredHoldings"
             :key="h.code"
-            class="holdings-row holdings-data"
-            :class="{ 'is-expanded': selectedCode === h.code }"
-            @click="toggleDetail(h.code)"
+            class="holding-card"
+            :class="{ 'is-selected': selectedCode === h.code }"
+            @click="selectedCode = h.code"
           >
-            <div class="holding-name-cell">
-              <div class="holding-market-badge">{{ h.market }}</div>
-              <div>
-                <strong class="holding-name">{{ h.name }}</strong>
-                <span class="holding-code">{{ h.code }}</span>
-              </div>
+            <div class="hc-logo" :style="{ background: h.color }">{{ h.name[0] }}</div>
+            <div class="hc-info">
+              <strong class="hc-name">{{ h.name }}</strong>
+              <span class="hc-sub">
+                {{ h.market }} · {{ h.qty }}주 ·
+                평단 {{ isKrw(h) ? h.avgPrice.toLocaleString() + '원' : '$' + h.avgPrice }}
+              </span>
             </div>
-            <span class="align-right holding-qty">{{ h.qty.toLocaleString() }}주</span>
-            <span class="align-right holding-avg">{{ isKrw(h) ? h.avgPrice.toLocaleString() + '원' : '$' + h.avgPrice }}</span>
-            <span class="align-right holding-cur" :class="h.currentPrice > h.avgPrice ? 'is-up' : 'is-down'">
-              {{ isKrw(h) ? h.currentPrice.toLocaleString() + '원' : '$' + h.currentPrice }}
-            </span>
-            <span class="align-right holding-eval">{{ isKrw(h) ? evalAmount(h).toLocaleString() + '원' : '$' + evalAmount(h).toLocaleString() }}</span>
-            <span class="align-right holding-rate" :class="returnRate(h) >= 0 ? 'is-up' : 'is-down'">
-              {{ fmtRate(returnRate(h)) }}
-            </span>
-            <div class="align-right holding-spark">
-              <SparklineChart :values="h.sparkline" :width="72" :height="28" class="spark-mini" :class="returnRate(h) >= 0 ? 'spark-up-card' : 'spark-down-card'" />
+            <div class="hc-price-col">
+              <strong class="hc-price" :class="h.currentPrice > h.avgPrice ? 'is-up' : 'is-down'">
+                {{ isKrw(h) ? h.currentPrice.toLocaleString() + '원' : '$' + h.currentPrice }}
+              </strong>
+              <span class="hc-rate" :class="returnRate(h) >= 0 ? 'is-up' : 'is-down'">
+                {{ fmtRate(returnRate(h)) }}
+              </span>
             </div>
+            <SparklineChart
+              :values="h.sparkline"
+              :width="72"
+              :height="32"
+              class="hc-spark"
+              :class="returnRate(h) >= 0 ? 'spark-up' : 'spark-down'"
+            />
           </div>
         </div>
       </section>
 
-      <!-- 오른쪽: 자산 배분 -->
-      <aside class="panel allocation-panel" aria-label="자산 배분">
-        <div class="panel-head">
-          <h2>자산 배분</h2>
-        </div>
+      <!-- 오른쪽 패널 -->
+      <aside class="right-panel">
 
-        <!-- 시장별 비율 -->
-        <div class="alloc-section">
-          <p class="eyebrow">시장별</p>
-          <div class="alloc-bars">
-            <div v-for="g in marketGroups" :key="g.label" class="alloc-row">
-              <div class="alloc-row-head">
-                <span class="alloc-label">{{ g.label }}</span>
-                <span class="alloc-pct">{{ g.pct.toFixed(1) }}%</span>
-              </div>
-              <div class="bar-track">
-                <span :style="{ width: g.pct + '%', background: g.color }"></span>
-              </div>
+        <!-- 자산 구성 -->
+        <div class="panel alloc-card">
+          <p class="eyebrow">자산 구성 (국내/해외)</p>
+          <div class="alloc-bar-wrap">
+            <div class="alloc-bar">
+              <div
+                v-for="g in marketGroups"
+                :key="g.label"
+                class="alloc-seg"
+                :style="{ width: g.pct + '%', background: g.color }"
+              ></div>
+            </div>
+          </div>
+          <div class="alloc-legend">
+            <div v-for="g in marketGroups" :key="g.label" class="alloc-legend-row">
+              <span class="alloc-dot" :style="{ background: g.color }"></span>
+              <span class="alloc-label">{{ g.label }}</span>
+              <span class="alloc-amount">{{ Math.round(g.amount / 10000).toLocaleString() }}만원</span>
+              <span class="alloc-pct">{{ g.pct.toFixed(1) }}%</span>
             </div>
           </div>
         </div>
 
-        <!-- 종목별 비중 -->
-        <div class="alloc-section">
-          <p class="eyebrow">종목별 비중</p>
-          <div class="alloc-bars">
-            <div v-for="h in sortedHoldings" :key="h.code" class="alloc-row">
-              <div class="alloc-row-head">
-                <span class="alloc-label">{{ h.name }}</span>
-                <span class="alloc-pct">{{ ((evalAmount(h) * (isKrw(h) ? 1 : 1380)) / totalEval * 100).toFixed(1) }}%</span>
-              </div>
-              <div class="bar-track">
-                <span :style="{
-                  width: ((evalAmount(h) * (isKrw(h) ? 1 : 1380)) / totalEval * 100) + '%',
-                  background: 'linear-gradient(90deg, var(--accent), var(--purple))',
-                }"></span>
-              </div>
+        <!-- 선택 종목 상세 -->
+        <div class="panel holding-detail-card" v-if="selectedHolding">
+          <div class="hdc-head">
+            <div class="hdc-logo" :style="{ background: selectedHolding.color }">
+              {{ selectedHolding.name[0] }}
+            </div>
+            <div class="hdc-head-info">
+              <strong class="hdc-name">{{ selectedHolding.name }}</strong>
+              <span class="hdc-meta">{{ selectedHolding.code }} · {{ selectedHolding.market }}</span>
+            </div>
+            <button class="hdc-close" @click="selectedCode = null">✕</button>
+          </div>
+
+          <div class="hdc-price-block">
+            <strong class="hdc-price" :class="selectedHolding.currentPrice > selectedHolding.avgPrice ? 'is-up' : 'is-down'">
+              {{ isKrw(selectedHolding) ? '₩' : '$' }}{{ selectedHolding.currentPrice.toLocaleString() }}
+            </strong>
+            <span class="hdc-rate-badge" :class="returnRate(selectedHolding) >= 0 ? 'is-up' : 'is-down'">
+              {{ returnRate(selectedHolding) >= 0 ? '▲' : '▼' }}
+              {{ Math.abs(selectedHolding.currentPrice - selectedHolding.avgPrice).toLocaleString() }}원
+              ({{ fmtRate(returnRate(selectedHolding)) }})
+            </span>
+          </div>
+
+          <div class="hdc-metrics">
+            <div class="hdc-metric">
+              <span>보유 수량</span>
+              <strong>{{ selectedHolding.qty }}주</strong>
+            </div>
+            <div class="hdc-metric">
+              <span>평균 단가</span>
+              <strong>{{ selectedHolding.avgPrice.toLocaleString() }}원</strong>
+            </div>
+            <div class="hdc-metric">
+              <span>현재가</span>
+              <strong>{{ selectedHolding.currentPrice.toLocaleString() }}원</strong>
+            </div>
+            <div class="hdc-metric">
+              <span>평가 금액</span>
+              <strong>{{ evalAmount(selectedHolding).toLocaleString() }}원</strong>
+            </div>
+            <div class="hdc-metric">
+              <span>평가 손익</span>
+              <strong :class="pnl(selectedHolding) >= 0 ? 'is-up' : 'is-down'">
+                {{ pnl(selectedHolding) >= 0 ? '+' : '' }}{{ pnl(selectedHolding).toLocaleString() }}원
+              </strong>
+            </div>
+            <div class="hdc-metric">
+              <span>수익률</span>
+              <strong :class="returnRate(selectedHolding) >= 0 ? 'is-up' : 'is-down'">
+                {{ fmtRate(returnRate(selectedHolding)) }}
+              </strong>
             </div>
           </div>
+
+          <div class="hdc-action-btns">
+            <button class="hdc-buy-btn">매수</button>
+            <button class="hdc-sell-btn">매도</button>
+          </div>
+          <button
+            class="hdc-detail-link"
+            @click="router.push(`/stocks/${selectedHolding.code}`)"
+          >
+            종목 상세 보기 →
+          </button>
         </div>
 
-        <!-- 손익 요약 -->
-        <div class="alloc-section">
-          <p class="eyebrow">종목별 손익</p>
-          <div class="pnl-list">
-            <div v-for="h in sortedHoldings" :key="h.code" class="pnl-row">
-              <span class="pnl-name">{{ h.name }}</span>
-              <span class="pnl-val" :class="pnl(h) >= 0 ? 'is-up' : 'is-down'">{{ fmtPnl(h) }}</span>
-            </div>
-          </div>
+        <div class="panel holding-detail-empty" v-else>
+          <span>👆</span>
+          <p>종목을 클릭하면<br>상세 정보가 나타납니다</p>
         </div>
+
       </aside>
     </div>
+
   </div>
 </template>
 
 <style scoped>
-.topbar {
-  min-height: 72px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 20px;
-  margin-bottom: 16px;
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.52);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow), var(--glass-inset);
-}
+.holdings-page { display: flex; flex-direction: column; gap: 16px; }
 
-.top-actions { display: flex; align-items: center; gap: 12px; }
-
-.market-state {
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: var(--glass-blur-sm);
-  -webkit-backdrop-filter: var(--glass-blur-sm);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow), var(--glass-inset);
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.status-dot {
-  width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; display: inline-block;
-  background: var(--faint);
-}
-.status-dot.local { background: var(--accent); box-shadow: 0 0 0 3px rgba(49,93,255,0.2); }
-
-/* Summary strip */
-.summary-strip {
+/* ===== 상단 섹션 ===== */
+.top-section {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 18px;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  gap: 16px;
+  align-items: stretch;
 }
 
-.metric-tile {
-  border-radius: var(--radius);
-  background: var(--glass);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow), var(--glass-inset);
-  min-height: 120px;
-  padding: 16px;
+.asset-summary {
+  padding: 20px 24px;
 }
 
-.metric-tile.tone-blue { background: linear-gradient(145deg, rgba(49,93,255,.07) 0%, rgba(255,255,255,.62) 55%); }
-.metric-tile.tone-green { background: linear-gradient(145deg, rgba(15,159,110,.07) 0%, rgba(255,255,255,.62) 55%); }
-.metric-tile.tone-red { background: linear-gradient(145deg, rgba(207,61,61,.07) 0%, rgba(255,255,255,.62) 55%); }
-.metric-tile.tone-purple { background: linear-gradient(145deg, rgba(125,78,232,.07) 0%, rgba(255,255,255,.62) 55%); }
-.metric-tile.tone-amber { background: linear-gradient(145deg, rgba(184,120,0,.07) 0%, rgba(255,255,255,.62) 55%); }
+.asset-summary h1 {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--ink);
+  margin: 4px 0 16px;
+}
 
-.metric-tile > span {
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.summary-item > span {
   display: block;
-  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.summary-item strong {
+  display: block;
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.summary-item strong small {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--faint);
+  margin-left: 2px;
+}
+
+.summary-item em {
+  display: block;
+  font-style: normal;
   font-size: 13px;
   font-weight: 900;
-}
-.metric-tile.tone-green > span { color: var(--positive); }
-.metric-tile.tone-red > span { color: var(--negative); }
-.metric-tile.tone-purple > span { color: var(--purple); }
-.metric-tile.tone-amber > span { color: var(--warning); }
-
-.metric-tile strong {
-  display: block;
-  margin-top: 8px;
-  color: var(--ink);
-  font-size: 26px;
-  line-height: 1;
-  font-weight: 900;
+  margin-top: 4px;
 }
 
-.metric-tile p {
-  margin: 8px 0 0;
-  color: var(--text);
+.summary-item.tone-up strong { color: var(--positive); }
+.summary-item.tone-down strong { color: var(--negative); }
+
+/* 바로가기 패널 */
+.shortcut-panel {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.shortcut-panel .eyebrow { margin-bottom: 0; }
+
+.shortcuts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  flex: 1;
+}
+
+.shortcut-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 10px;
+  border-radius: var(--radius);
+  background: rgba(49, 93, 255, 0.06);
+  border: 1px solid rgba(49, 93, 255, 0.15);
+  cursor: pointer;
+  transition: background 0.18s;
+  flex: 1;
+}
+
+.shortcut-btn:hover { background: rgba(49, 93, 255, 0.12); }
+
+.sc-icon { font-size: 20px; }
+
+.sc-label {
   font-size: 12px;
-  line-height: 1.4;
-  font-weight: 700;
+  font-weight: 900;
+  color: var(--ink);
 }
 
-/* Layout */
+/* ===== 메인 레이아웃 ===== */
 .holdings-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 18px;
+  gap: 16px;
   align-items: start;
 }
 
-/* Holdings table */
+/* ===== 보유 종목 목록 ===== */
 .holdings-panel { padding: 20px; }
 
-.holdings-table { display: grid; gap: 2px; }
-
-.holdings-row {
-  display: grid;
-  grid-template-columns: minmax(160px, 2fr) 80px 100px 100px 110px 80px 80px;
+.panel-head {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: var(--radius);
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
-.holdings-header {
-  font-size: 11px;
+.panel-head h2 {
+  font-size: 16px;
   font-weight: 900;
-  color: var(--faint);
-  background: transparent;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--line);
+  color: var(--ink);
 }
 
-.holdings-data {
-  background: rgba(255,255,255,0.38);
+.holdings-list { display: flex; flex-direction: column; gap: 4px; }
+
+.holding-card {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto 80px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.38);
   border: 1px solid transparent;
   cursor: pointer;
   transition: background 0.16s, border-color 0.16s;
 }
 
-.holdings-data:hover {
-  background: rgba(255,255,255,0.62);
+.holding-card:hover {
+  background: rgba(255, 255, 255, 0.62);
   border-color: var(--glass-border);
 }
 
-.holdings-data.is-expanded {
-  background: rgba(49,93,255,0.06);
-  border-color: rgba(49,93,255,0.25);
+.holding-card.is-selected {
+  background: rgba(49, 93, 255, 0.06);
+  border-color: rgba(49, 93, 255, 0.25);
 }
 
-.holding-name-cell {
+.hc-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.holding-market-badge {
-  flex-shrink: 0;
-  padding: 3px 6px;
-  border-radius: 6px;
-  background: rgba(49,93,255,0.1);
-  color: var(--accent);
-  font-size: 10px;
+  justify-content: center;
+  font-size: 15px;
   font-weight: 900;
+  color: #fff;
+  flex-shrink: 0;
 }
 
-.holding-name {
+.hc-info { min-width: 0; }
+
+.hc-name {
   display: block;
   font-size: 14px;
   font-weight: 900;
@@ -400,27 +463,233 @@ function toggleDetail(code) {
   white-space: nowrap;
 }
 
-.holding-code {
+.hc-sub {
   display: block;
   font-size: 11px;
   color: var(--faint);
   font-weight: 700;
+  margin-top: 2px;
 }
 
-.align-right { text-align: right; }
+.hc-price-col { text-align: right; }
 
-.holding-qty, .holding-avg { color: var(--muted); font-size: 13px; font-weight: 700; }
-.holding-cur { font-size: 13px; font-weight: 900; }
-.holding-eval { font-size: 13px; font-weight: 900; color: var(--ink); }
-.holding-rate { font-size: 13px; font-weight: 900; }
+.hc-price {
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+}
 
-.holding-spark { display: flex; justify-content: flex-end; }
+.hc-rate {
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  margin-top: 2px;
+}
 
-.spark-mini { width: 72px; height: 28px; }
-.spark-up-card :deep(.sparkline-line) { stroke: var(--positive); }
-.spark-up-card :deep(.sparkline-fill) { fill: rgba(15,159,110,.1); }
-.spark-down-card :deep(.sparkline-line) { stroke: var(--negative); }
-.spark-down-card :deep(.sparkline-fill) { fill: rgba(207,61,61,.1); }
+.hc-spark { display: flex; justify-content: flex-end; }
+
+.spark-up :deep(.sparkline-line) { stroke: var(--positive); }
+.spark-up :deep(.sparkline-fill) { fill: rgba(15,159,110,0.1); }
+.spark-down :deep(.sparkline-line) { stroke: var(--negative); }
+.spark-down :deep(.sparkline-fill) { fill: rgba(207,61,61,0.1); }
+
+/* ===== 오른쪽 패널 ===== */
+.right-panel { display: flex; flex-direction: column; gap: 14px; }
+
+/* 자산 구성 */
+.alloc-card { padding: 16px 18px; }
+
+.alloc-bar-wrap { margin: 10px 0 12px; }
+
+.alloc-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  gap: 2px;
+}
+
+.alloc-seg { height: 100%; border-radius: inherit; opacity: 0.85; }
+
+.alloc-legend { display: flex; flex-direction: column; gap: 8px; }
+
+.alloc-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.alloc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.alloc-label { flex: 1; color: var(--ink); }
+.alloc-amount { color: var(--muted); white-space: nowrap; }
+.alloc-pct { color: var(--ink); font-weight: 900; min-width: 38px; text-align: right; white-space: nowrap; }
+
+/* 선택 종목 상세 */
+.holding-detail-card { padding: 0; overflow: hidden; }
+
+.hdc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hdc-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 900;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.hdc-head-info { flex: 1; min-width: 0; }
+
+.hdc-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.hdc-meta {
+  display: block;
+  font-size: 11px;
+  color: var(--faint);
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.hdc-close {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: rgba(255,255,255,0.5);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.hdc-close:hover { background: rgba(255,255,255,0.85); color: var(--ink); }
+
+.hdc-price-block {
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hdc-price {
+  display: block;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  margin-bottom: 4px;
+}
+
+.hdc-rate-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.hdc-metrics {
+  padding: 10px 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hdc-metric {
+  padding: 7px 4px;
+}
+
+.hdc-metric span {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+  margin-bottom: 3px;
+}
+
+.hdc-metric strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.hdc-action-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 12px 16px 6px;
+}
+
+.hdc-buy-btn,
+.hdc-sell-btn {
+  height: 36px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: opacity 0.18s;
+}
+
+.hdc-buy-btn {
+  background: rgba(49, 93, 255, 0.12);
+  border: 1px solid rgba(49, 93, 255, 0.3);
+  color: var(--accent);
+}
+
+.hdc-sell-btn {
+  background: rgba(207, 61, 61, 0.1);
+  border: 1px solid rgba(207, 61, 61, 0.3);
+  color: var(--negative);
+}
+
+.hdc-buy-btn:hover { opacity: 0.8; }
+.hdc-sell-btn:hover { opacity: 0.8; }
+
+.hdc-detail-link {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--accent);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-top: 1px solid var(--line);
+  transition: background 0.15s;
+}
+.hdc-detail-link:hover { background: rgba(49,93,255,0.05); }
+
+.holding-detail-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--faint);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+.holding-detail-empty span { font-size: 28px; display: block; margin-bottom: 8px; }
 
 /* Segmented control */
 .segmented {
@@ -445,6 +714,7 @@ function toggleDetail(code) {
   font-size: 13px;
   font-weight: 900;
   transition: background 0.18s, color 0.18s;
+  cursor: pointer;
 }
 
 .segmented button.is-selected {
@@ -453,62 +723,17 @@ function toggleDetail(code) {
   box-shadow: 0 2px 8px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9);
 }
 
-/* Allocation panel */
-.allocation-panel { padding: 20px; }
-
-.alloc-section { margin-bottom: 22px; }
-.alloc-section:last-child { margin-bottom: 0; }
-
-.alloc-bars { display: grid; gap: 10px; }
-
-.alloc-row-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 5px;
-}
-
-.alloc-label { color: var(--text); font-size: 12px; font-weight: 900; }
-.alloc-pct { color: var(--muted); font-size: 12px; font-weight: 900; }
-
-.bar-track {
-  height: 7px;
-  background: rgba(255,255,255,0.5);
-  border: 1px solid rgba(255,255,255,0.6);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.bar-track span {
-  height: 100%;
-  display: block;
-  border-radius: inherit;
-  opacity: 0.85;
-}
-
-.pnl-list { display: grid; gap: 6px; }
-
-.pnl-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(255,255,255,0.38);
-}
-
-.pnl-name { font-size: 13px; font-weight: 900; color: var(--ink); }
-.pnl-val { font-size: 13px; font-weight: 900; }
+.is-up { color: var(--positive); }
+.is-down { color: var(--negative); }
 
 @media (max-width: 1100px) {
+  .top-section { grid-template-columns: 1fr; }
   .holdings-layout { grid-template-columns: 1fr; }
+  .right-panel { display: grid; grid-template-columns: 1fr 1fr; }
 }
 
-@media (max-width: 900px) {
-  .summary-strip { grid-template-columns: repeat(2, 1fr); }
-  .holdings-row {
-    grid-template-columns: minmax(120px, 1.5fr) 60px 80px 80px 90px 70px;
-  }
-  .holding-spark { display: none; }
+@media (max-width: 800px) {
+  .summary-grid { grid-template-columns: 1fr 1fr; }
+  .right-panel { grid-template-columns: 1fr; }
 }
 </style>

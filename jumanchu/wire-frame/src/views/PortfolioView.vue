@@ -204,8 +204,7 @@ function getGrade(score) {
   if (score >= 90) return 'A'
   if (score >= 80) return 'B+'
   if (score >= 70) return 'B'
-  if (score >= 60) return 'C+'
-  if (score >= 50) return 'C'
+  if (score >= 60) return 'C'
   return 'D'
 }
 
@@ -229,35 +228,20 @@ const tradeJournal = [
   { date: '2026.04.15', code: '000660', name: 'SK하이닉스', side: 'BUY', qty: 2, price: 1930000 },
 ]
 
-// ===== 총점 히스토리 (8주) =====
-const scoreHistory = [
-  { week: '4/14', score: 74 },
-  { week: '4/21', score: 76 },
-  { week: '4/28', score: 73 },
-  { week: '5/05', score: 78 },
-  { week: '5/12', score: 80 },
-  { week: '5/19', score: 79 },
-  { week: '5/26', score: 82 },
-  { week: '6/02', score: 82 },
-]
-
-function buildHistoryPath(data, w, h) {
-  const scores = data.map(d => d.score)
-  const min = Math.min(...scores) - 5
-  const max = Math.max(...scores) + 5
-  const range = max - min
-  const n = data.length
-  const pts = data.map((d, i) => {
-    const x = (i / (n - 1)) * w
-    const y = h - 16 - ((d.score - min) / range) * (h - 32)
-    return { x: x.toFixed(1), y: y.toFixed(1) }
-  })
-  const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ')
-  const area = `${line} L${w},${h} L0,${h} Z`
-  return { line, area, pts }
+// ===== 종목별 월간 점수 히스토리 =====
+const monthlyHistory = {
+  '000660': [{ month: '3월', score: 81 }, { month: '4월', score: 83 }, { month: '5월', score: 84 }, { month: '6월', score: 86 }],
+  '005930': [{ month: '3월', score: 76 }, { month: '4월', score: 78 }, { month: '5월', score: 79 }, { month: '6월', score: 80 }],
+  'NVDA':   [{ month: '3월', score: 87 }, { month: '4월', score: 89 }, { month: '5월', score: 90 }, { month: '6월', score: 91 }],
+  'AAPL':   [{ month: '3월', score: 76 }, { month: '4월', score: 77 }, { month: '5월', score: 77 }, { month: '6월', score: 78 }],
+  '035420': [{ month: '3월', score: 69 }, { month: '4월', score: 70 }, { month: '5월', score: 70 }, { month: '6월', score: 71 }],
 }
+const selectedHistory = computed(() => monthlyHistory[selectedHolding.value.code] ?? [])
 
-const histPath = computed(() => buildHistoryPath(scoreHistory, 220, 100))
+// ===== 이 종목 매매일지 =====
+const selectedJournal = computed(() =>
+  tradeJournal.filter(j => j.code === selectedHolding.value.code)
+)
 
 // ===== 종목 관련 뉴스 =====
 const stockNews = [
@@ -308,12 +292,6 @@ const stockNews = [
   },
 ]
 
-// ===== 포트폴리오 종합 점수 =====
-const portfolioAvgScore = computed(() => {
-  const scores = holdings.map(h => h.scores.total.score)
-  return Math.round(scores.reduce((s, v) => s + v, 0) / scores.length)
-})
-
 // ===== 유틸 =====
 function fmtPrice(price, currency) {
   const isKrw = currency === 'KRW'
@@ -335,43 +313,40 @@ function fmtPrice(price, currency) {
       </div>
 
       <div class="pt-header-right">
-        <!-- 포트폴리오 종합 점수 -->
-        <div class="portfolio-score-pill">
-          <span class="psp-label">포트폴리오 종합 점수</span>
-          <strong class="psp-score" :style="{ color: getGradeColor(portfolioAvgScore) }">
-            {{ portfolioAvgScore }}점
-          </strong>
-          <span class="psp-grade" :style="{ color: getGradeColor(portfolioAvgScore) }">
-            {{ getGrade(portfolioAvgScore) }}
-          </span>
-        </div>
         <button class="report-gen-btn">
           <span>✦</span> LLM 리포트 재생성
         </button>
       </div>
     </header>
 
-    <!-- ===== 종목 선택 탭 ===== -->
-    <div class="stock-tab-bar">
-      <button
-        v-for="(h, i) in holdings"
-        :key="h.code"
-        class="stock-tab"
-        :class="{ 'is-active': selectedIdx === i }"
-        @click="selectedIdx = i"
-      >
-        <span class="tab-dot" :style="{ background: h.color }"></span>
-        {{ h.name }}
-        <span class="tab-score" :style="{ color: getGradeColor(h.scores.total.score) }">
-          {{ h.scores.total.score }}
-        </span>
-      </button>
-    </div>
-
-    <!-- ===== 메인 그리드 ===== -->
+    <!-- ===== 메인 그리드 (좌: 종목 목록 | 우: 상세) ===== -->
     <div class="pt-main-grid">
 
-      <!-- ===== 좌: LLM 리포트 ===== -->
+      <!-- ===== 좌: 보유 종목 목록 ===== -->
+      <div class="pt-col-list">
+        <div class="panel holding-list-panel">
+          <div class="holding-list-head">보유 종목</div>
+          <div
+            v-for="(h, i) in holdings"
+            :key="h.code"
+            class="holding-list-item"
+            :class="{ 'is-active': selectedIdx === i }"
+            @click="selectedIdx = i"
+          >
+            <div class="hli-dot" :style="{ background: h.color }">{{ h.name.slice(0, 1) }}</div>
+            <div class="hli-info">
+              <strong>{{ h.name }}</strong>
+              <span>{{ h.market }} · {{ h.code }}</span>
+            </div>
+            <div class="hli-score" :style="{ color: getGradeColor(h.scores.total.score) }">
+              <strong>{{ h.scores.total.score }}</strong>
+              <span>{{ getGrade(h.scores.total.score) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 우: 상세 ===== -->
       <div class="pt-col-main">
 
         <!-- 종목 요약 배너 -->
@@ -409,7 +384,7 @@ function fmtPrice(price, currency) {
                 {{ selectedHolding.scores.financial.score }}
               </span>
               <div>
-                <h3>기반 · Financial Score</h3>
+                <h3>재무 · 재무건전성 <span class="weight-tag">30%</span></h3>
                 <span class="score-grade-text" :style="{ color: getGradeColor(selectedHolding.scores.financial.score) }">
                   {{ getGrade(selectedHolding.scores.financial.score) }}등급
                 </span>
@@ -451,7 +426,7 @@ function fmtPrice(price, currency) {
                 {{ selectedHolding.scores.growth.score }}
               </span>
               <div>
-                <h3>성장성 · Growth Score</h3>
+                <h3>성장 · 성장성 <span class="weight-tag">40%</span></h3>
                 <span class="score-grade-text" :style="{ color: getGradeColor(selectedHolding.scores.growth.score) }">
                   {{ getGrade(selectedHolding.scores.growth.score) }}등급
                 </span>
@@ -493,7 +468,7 @@ function fmtPrice(price, currency) {
                 {{ selectedHolding.scores.userfit.score }}
               </span>
               <div>
-                <h3>적합도 · Userfit Score</h3>
+                <h3>궁합 · 사용자 적합도 <span class="weight-tag">30%</span></h3>
                 <span class="score-grade-text" :style="{ color: getGradeColor(selectedHolding.scores.userfit.score) }">
                   {{ getGrade(selectedHolding.scores.userfit.score) }}등급
                 </span>
@@ -614,78 +589,51 @@ function fmtPrice(price, currency) {
 
       </div>
 
-      <!-- ===== 우: 매매일지 + 히스토리 ===== -->
+      <!-- ===== 우: 이 종목 매매일지 + 월별 히스토리 ===== -->
       <div class="pt-col-side">
 
-        <!-- 매매일지 -->
+        <!-- 이 종목 매매일지 -->
         <div class="panel journal-panel">
           <div class="side-panel-head">
             <div>
               <p class="eyebrow">Trade Journal</p>
-              <h3>매매일지</h3>
+              <h3>이 종목 매매일지</h3>
             </div>
-            <button class="text-btn">+ 추가</button>
           </div>
-
-          <div class="journal-list">
-            <div v-for="(trade, i) in tradeJournal" :key="i" class="journal-row">
+          <div v-if="selectedJournal.length" class="journal-list">
+            <div v-for="(trade, i) in selectedJournal" :key="i" class="journal-row">
               <div class="journal-dot" :class="trade.side === 'BUY' ? 'is-buy' : 'is-sell'"></div>
               <div class="journal-info">
                 <div class="journal-top">
-                  <strong class="journal-name">{{ trade.name }}</strong>
                   <span class="journal-side" :class="trade.side === 'BUY' ? 'is-buy-text' : 'is-sell-text'">
                     {{ trade.side === 'BUY' ? '매수' : '매도' }}
                   </span>
-                </div>
-                <div class="journal-detail">
-                  <span>{{ trade.qty }}주</span>
-                  <span>@{{ trade.price.toLocaleString() }}</span>
+                  <span class="journal-detail-inline">{{ trade.qty }}주 · {{ trade.price.toLocaleString() }}원</span>
                 </div>
                 <span class="journal-date">{{ trade.date }}</span>
               </div>
             </div>
           </div>
+          <p v-else class="journal-empty">아직 이 종목의 매매일지가 없습니다.</p>
         </div>
 
-        <!-- 총점 히스토리 -->
+        <!-- 장투 점수 히스토리 (월별) -->
         <div class="panel history-panel">
           <div class="side-panel-head">
             <div>
               <p class="eyebrow">Score History</p>
-              <h3>총점 히스토리</h3>
+              <h3>장투 점수 히스토리</h3>
             </div>
           </div>
-
-          <!-- 히스토리 라인 차트 -->
-          <div class="history-chart-wrap">
-            <svg viewBox="0 0 220 100" preserveAspectRatio="none" class="history-svg">
-              <defs>
-                <linearGradient id="histGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="rgba(49,93,255,0.22)" />
-                  <stop offset="100%" stop-color="rgba(49,93,255,0)" />
-                </linearGradient>
-              </defs>
-              <line v-for="y in [25,50,75]" :key="y" x1="0" :y1="y" x2="220" :y2="y"
-                stroke="rgba(180,200,255,0.3)" stroke-width="1" />
-              <path :d="histPath.area" fill="url(#histGrad)" />
-              <path :d="histPath.line" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" />
-              <!-- 데이터 포인트 -->
-              <circle
-                v-for="(pt, i) in histPath.pts"
-                :key="i"
-                :cx="pt.x"
-                :cy="pt.y"
-                r="3"
-                fill="var(--accent)"
-              />
-            </svg>
-          </div>
-
-          <!-- 주별 점수 -->
-          <div class="history-labels">
-            <div v-for="item in scoreHistory" :key="item.week" class="history-label-item">
-              <span class="hl-week">{{ item.week }}</span>
-              <strong class="hl-score" :style="{ color: getGradeColor(item.score) }">{{ item.score }}</strong>
+          <div class="history-bar-chart">
+            <div v-for="item in selectedHistory" :key="item.month" class="history-bar-col">
+              <span class="hbc-score" :style="{ color: getGradeColor(item.score) }">{{ item.score }}</span>
+              <div class="hbc-bar-track">
+                <div class="hbc-bar-fill"
+                  :style="{ height: item.score + '%', background: getGradeColor(item.score) }">
+                </div>
+              </div>
+              <span class="hbc-month">{{ item.month }}</span>
             </div>
           </div>
         </div>
@@ -754,21 +702,6 @@ function fmtPrice(price, currency) {
 
 .pt-header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
-.portfolio-score-pill {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 18px;
-  border-radius: var(--radius);
-  background: rgba(255,255,255,0.62);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: var(--glass-blur-sm);
-  -webkit-backdrop-filter: var(--glass-blur-sm);
-}
-
-.psp-label { font-size: 12px; font-weight: 700; color: var(--muted); }
-.psp-score { font-size: 24px; font-weight: 900; letter-spacing: -0.5px; }
-.psp-grade { font-size: 14px; font-weight: 900; }
 
 .report-gen-btn {
   display: inline-flex;
@@ -789,56 +722,65 @@ function fmtPrice(price, currency) {
 
 .report-gen-btn:hover { opacity: 0.88; transform: translateY(-1px); }
 
-/* ===== 종목 탭 ===== */
-.stock-tab-bar {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.stock-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--glass-border);
-  background: rgba(255,255,255,0.52);
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: background 0.16s, color 0.16s, border-color 0.16s;
-}
-
-.stock-tab:hover { background: rgba(255,255,255,0.72); color: var(--ink); }
-
-.stock-tab.is-active {
-  background: rgba(255,255,255,0.88);
-  color: var(--ink);
-  border-color: rgba(49,93,255,0.25);
-  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-}
-
-.tab-dot {
-  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-}
-
-.tab-score {
-  font-size: 12px;
-  font-weight: 900;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(0,0,0,0.06);
-}
-
 /* ===== 메인 그리드 ===== */
 .pt-main-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) 280px;
+  grid-template-columns: 220px minmax(0, 1.8fr) 260px;
   gap: 16px;
   align-items: start;
 }
+
+/* ===== 좌측 종목 목록 ===== */
+.holding-list-panel { padding: 16px; }
+.holding-list-head { font-size: 12px; font-weight: 900; color: var(--muted); margin-bottom: 10px; }
+.holding-list-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 8px; border-radius: 8px;
+  cursor: pointer; transition: background 0.15s;
+}
+.holding-list-item:hover { background: rgba(255,255,255,0.55); }
+.holding-list-item.is-active { background: rgba(49,93,255,0.08); }
+
+.hli-dot {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 900; color: #fff; flex-shrink: 0;
+}
+.hli-info { flex: 1; min-width: 0; }
+.hli-info strong { display: block; font-size: 13px; font-weight: 900; color: var(--ink); }
+.hli-info span { font-size: 10px; color: var(--muted); font-weight: 700; }
+.hli-score { text-align: right; flex-shrink: 0; }
+.hli-score strong { display: block; font-size: 18px; font-weight: 900; line-height: 1; }
+.hli-score span { font-size: 11px; font-weight: 900; }
+
+/* ===== weight-tag ===== */
+.weight-tag {
+  font-size: 11px; font-weight: 700;
+  padding: 1px 6px; border-radius: 4px;
+  background: rgba(0,0,0,0.07); color: var(--muted);
+  vertical-align: middle; margin-left: 4px;
+}
+
+/* ===== 히스토리 바 차트 ===== */
+.history-bar-chart {
+  display: flex; gap: 12px; justify-content: space-around;
+  align-items: flex-end; height: 120px; padding: 0 8px;
+}
+.history-bar-col {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;
+}
+.hbc-score { font-size: 11px; font-weight: 900; }
+.hbc-bar-track {
+  width: 28px; height: 80px;
+  background: rgba(0,0,0,0.06); border-radius: 6px;
+  display: flex; align-items: flex-end; overflow: hidden;
+}
+.hbc-bar-fill { width: 100%; border-radius: 6px; transition: height 0.4s ease; }
+.hbc-month { font-size: 11px; color: var(--muted); font-weight: 700; }
+
+/* ===== 이 종목 매매일지 ===== */
+.journal-detail-inline { font-size: 11px; color: var(--muted); font-weight: 700; }
+.journal-empty { font-size: 12px; color: var(--faint); text-align: center; padding: 16px 0; margin: 0; }
 
 .pt-col-main { display: flex; flex-direction: column; gap: 14px; }
 .pt-col-side { display: flex; flex-direction: column; gap: 14px; }
