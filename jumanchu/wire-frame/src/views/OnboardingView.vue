@@ -30,7 +30,7 @@ const questions = [
   {
     id: 'q1',
     label: '투자 목적',
-    desc: '주식 추천에 영향을 미치는 첫 기준입니다.',
+    desc: '"첫인상이 관계의 방향을 결정하듯, 이 기준은 주식 선택의 출발점을 정의합니다."',
     options: [
       { score: 1, title: '안전한 보존', desc: '자산 보존과 생활비 보호가 가장 중요합니다.' },
       { score: 3, title: '합리적 초과수익', desc: '정기예금보다 약간 높은 수준의 안정적 이익을 기대합니다.' },
@@ -40,7 +40,7 @@ const questions = [
   {
     id: 'q2',
     label: '투자 경험',
-    desc: '이전 주식·펀드 투자 경험을 선택해주세요.',
+    desc: '지금까지의 투자 여정을 선택해주세요.',
     options: [
       { score: 1, title: '거의 없음', desc: '주식·펀드 투자 경험이 1년 미만입니다.' },
       { score: 3, title: '1~3년', desc: '중간 정도의 투자 경험이 있습니다.' },
@@ -50,7 +50,7 @@ const questions = [
   {
     id: 'q3',
     label: '손실 허용 범위',
-    desc: '원금 손실을 얼마나 감당할 수 있으신가요?',
+    desc: '허용 가능한 손실 범위를 선택해주세요.',
     options: [
       { score: 1, title: '10% 미만도 불안함', desc: '원금 손실은 절대 용납하기 어렵습니다.' },
       { score: 3, title: '10~20% 수준', desc: '단기 손실은 수용하나 장기 회복이 필요합니다.' },
@@ -60,7 +60,7 @@ const questions = [
   {
     id: 'q4',
     label: '자금 의존도',
-    desc: '이 투자 자금에 얼마나 의존하시나요?',
+    desc: '이 자금은 \'안정적인 연인\'인가요, \'가능성을 보는 썸\'인가요?',
     options: [
       { score: 1, title: '생활에 꼭 필요한 자금', desc: '이 자금이 없으면 생활이 곤란합니다.' },
       { score: 3, title: '없어도 되는 여유 자금', desc: '없어도 생활에 지장은 없으나 소중한 자금입니다.' },
@@ -70,7 +70,7 @@ const questions = [
   {
     id: 'q5',
     label: '투자 기간',
-    desc: '예정하신 투자 기간은 얼마나 되나요?',
+    desc: '이 인연을 어느 정도의 시간으로 생각하고 계신가요?',
     weighted: true,
     options: [
       { score: 1, title: '6개월 이내', desc: '단기간 내에 자금이 필요합니다.' },
@@ -81,7 +81,7 @@ const questions = [
   {
     id: 'q6',
     label: '시장 하락 반응',
-    desc: '투자 주식이 크게 하락했을 때 어떻게 하시겠어요?',
+    desc: '관계가 크게 흔들릴 때, 당신은 어떻게 하시겠어요?',
     options: [
       { score: 1, title: '즉시 매도', desc: '추가 손실을 막기 위해 빠르게 결정합니다.' },
       { score: 3, title: '관망 후 결정', desc: '상황을 지켜본 뒤 결정합니다.' },
@@ -182,7 +182,7 @@ function displayScore(q, score) {
 
       <!-- 헤더 -->
       <div class="ob-page-header">
-        <p class="eyebrow" style="text-align:center; font-size:13px;">회원가입 후 최초 로그인시 온보딩 설문 필수 진행</p>
+        <p class="eyebrow" style="text-align:center; font-size:13px;">김주만님 만의 주식투자 스타일 알아가기</p>
         <h1 class="ob-page-title">온보딩</h1>
       </div>
 
@@ -203,7 +203,7 @@ function displayScore(q, score) {
           <div class="ob-card-head">
             <span class="ob-tag">사전 설정</span>
             <h2 class="ob-card-title">관심 섹터 &amp; 선호 보유 기간</h2>
-            <p class="ob-card-desc">투자 추천에 반영될 나의 관심 영역을 선택해주세요.</p>
+            <p class="ob-card-desc">주만님과 잘 맞는 주식을 추천해드리기 위한 과정이에요. 관심 섹터와 선호 보유기간을 선택해주세요.</p>
           </div>
 
           <div class="ob-section">

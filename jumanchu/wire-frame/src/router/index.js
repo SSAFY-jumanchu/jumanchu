@@ -8,6 +8,7 @@ import OnboardingView from '../views/OnboardingView.vue'
 import HoldingsView from '../views/HoldingsView.vue'
 import StockDetailView from '../views/StockDetailView.vue'
 import MyPageView from '../views/MyPageView.vue'
+import TradingDiaryView from '../views/TradingDiaryView.vue'
 
 const routes = [
   { path: '/', name: 'home', component: HomeView },
@@ -18,6 +19,7 @@ const routes = [
   { path: '/portfolio', name: 'portfolio', component: PortfolioView },
   { path: '/community', name: 'community', component: CommunityView },
   { path: '/mypage', name: 'mypage', component: MyPageView },
+  { path: '/trading-diary', name: 'trading-diary', component: TradingDiaryView },
   { path: '/onboarding', name: 'onboarding', component: OnboardingView, meta: { skipGuard: true } },
 ]
 

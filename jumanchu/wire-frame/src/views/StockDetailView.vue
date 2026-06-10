@@ -141,6 +141,16 @@ const communityPosts = [
   { user: '반도체직업인', badge: null, time: '2시간', content: 'AI 서버 수요 폭발로 DRAM 업황은 계속 좋을 전망입니다.', likes: 45 },
 ]
 
+// ===== 일지 작성 =====
+const diaryText = ref('')
+const diarySaved = ref(false)
+
+function saveDiary() {
+  if (!diaryText.value.trim()) return
+  diarySaved.value = true
+  setTimeout(() => { diarySaved.value = false }, 2000)
+}
+
 // ===== 주문 패널 =====
 const orderSide = ref('BUY')
 const orderType = ref('limit')   // limit | market
@@ -452,52 +462,8 @@ function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
         </div>
       </div>
 
-      <!-- ===== 우: 개인/외국인/기관 + 주문 ===== -->
+      <!-- ===== 우: 주문 + 일지 + 개인/외국인/기관 ===== -->
       <div class="sd-col-right">
-
-        <!-- 개인/외국인/기관 -->
-        <div class="panel investor-panel">
-          <h3>개인·외국인·기관</h3>
-
-          <!-- 오늘 순매수 막대 -->
-          <div class="investor-summary">
-            <div class="inv-row" v-for="({ key, label, val }) in [
-              { key:'individual', label:'개인', val: investors.individual },
-              { key:'foreign', label:'외국인', val: investors.foreign },
-              { key:'institution', label:'기관', val: investors.institution },
-            ]" :key="key">
-              <span class="inv-label">{{ label }}</span>
-              <div class="inv-bar-track">
-                <div
-                  class="inv-bar"
-                  :class="val >= 0 ? 'is-buy' : 'is-sell'"
-                  :style="{
-                    width: invBarWidth(val, Math.max(Math.abs(investors.individual), Math.abs(investors.foreign), Math.abs(investors.institution))) + '%',
-                    [val >= 0 ? 'marginLeft' : 'marginRight']: val >= 0 ? '50%' : 'auto',
-                  }"
-                ></div>
-              </div>
-              <span class="inv-val" :class="val >= 0 ? 'is-up' : 'is-down'">{{ fmtInv(val) }}</span>
-            </div>
-          </div>
-
-          <!-- 날짜별 히스토리 -->
-          <div class="inv-history-head">
-            <span>일자</span>
-            <span>개인</span>
-            <span>외국인</span>
-            <span>기관</span>
-          </div>
-
-          <div class="inv-history-list">
-            <div v-for="(row, i) in investorHistory" :key="i" class="inv-history-row">
-              <span class="inv-date">{{ row.date }}</span>
-              <span :class="row.individual >= 0 ? 'is-up' : 'is-down'">{{ fmtInv(row.individual) }}</span>
-              <span :class="row.foreign >= 0 ? 'is-up' : 'is-down'">{{ fmtInv(row.foreign) }}</span>
-              <span :class="row.institution >= 0 ? 'is-up' : 'is-down'">{{ fmtInv(row.institution) }}</span>
-            </div>
-          </div>
-        </div>
 
         <!-- 주문 패널 -->
         <div class="panel order-panel">
@@ -585,6 +551,72 @@ function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
             <code>/orders/</code>로 분리합니다.
           </p>
         </div>
+
+        <!-- 일지 작성 -->
+        <div class="panel diary-inline-panel">
+          <div class="diary-inline-head">
+            <p class="eyebrow">매매 일기</p>
+            <h3>일지 작성</h3>
+          </div>
+          <textarea
+            v-model="diaryText"
+            class="diary-inline-textarea"
+            placeholder="이 종목에 대한 매수/매도 이유, 목표가, 오늘의 판단을 기록해두세요."
+          ></textarea>
+          <button
+            class="diary-inline-save-btn"
+            :class="{ 'is-saved': diarySaved }"
+            :disabled="!diaryText.trim()"
+            @click="saveDiary"
+          >
+            {{ diarySaved ? '✓ 저장됨' : '일지 저장' }}
+          </button>
+        </div>
+
+        <!-- 개인/외국인/기관 -->
+        <div class="panel investor-panel">
+          <h3>개인·외국인·기관</h3>
+
+          <!-- 오늘 순매수 막대 -->
+          <div class="investor-summary">
+            <div class="inv-row" v-for="({ key, label, val }) in [
+              { key:'individual', label:'개인', val: investors.individual },
+              { key:'foreign', label:'외국인', val: investors.foreign },
+              { key:'institution', label:'기관', val: investors.institution },
+            ]" :key="key">
+              <span class="inv-label">{{ label }}</span>
+              <div class="inv-bar-track">
+                <div
+                  class="inv-bar"
+                  :class="val >= 0 ? 'is-buy' : 'is-sell'"
+                  :style="{
+                    width: invBarWidth(val, Math.max(Math.abs(investors.individual), Math.abs(investors.foreign), Math.abs(investors.institution))) + '%',
+                    [val >= 0 ? 'marginLeft' : 'marginRight']: val >= 0 ? '50%' : 'auto',
+                  }"
+                ></div>
+              </div>
+              <span class="inv-val" :class="val >= 0 ? 'is-up' : 'is-down'">{{ fmtInv(val) }}</span>
+            </div>
+          </div>
+
+          <!-- 날짜별 히스토리 -->
+          <div class="inv-history-head">
+            <span>일자</span>
+            <span>개인</span>
+            <span>외국인</span>
+            <span>기관</span>
+          </div>
+
+          <div class="inv-history-list">
+            <div v-for="(row, i) in investorHistory" :key="i" class="inv-history-row">
+              <span class="inv-date">{{ row.date }}</span>
+              <span :class="row.individual >= 0 ? 'is-up' : 'is-down'">{{ fmtInv(row.individual) }}</span>
+              <span :class="row.foreign >= 0 ? 'is-up' : 'is-down'">{{ fmtInv(row.foreign) }}</span>
+              <span :class="row.institution >= 0 ? 'is-up' : 'is-down'">{{ fmtInv(row.institution) }}</span>
+            </div>
+          </div>
+        </div>
+
       </div>
 
     </div>
@@ -1371,6 +1403,52 @@ function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
   border-radius: 3px;
   color: var(--muted);
 }
+
+/* ===== 일지 작성 패널 ===== */
+.diary-inline-panel { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+.diary-inline-head { display: flex; flex-direction: column; gap: 2px; }
+.diary-inline-head h3 { font-size: 15px; font-weight: 900; color: var(--ink); margin: 0; }
+
+.diary-inline-textarea {
+  width: 100%;
+  min-height: 100px;
+  resize: vertical;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: rgba(255,255,255,0.55);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.18s;
+  font-family: inherit;
+}
+
+.diary-inline-textarea:focus { border-color: var(--accent); }
+
+.diary-inline-textarea::placeholder { color: var(--faint); font-weight: 700; }
+
+.diary-inline-save-btn {
+  width: 100%;
+  height: 40px;
+  border-radius: var(--radius);
+  border: 0;
+  background: rgba(49,93,255,0.12);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 0.18s, opacity 0.18s;
+  border: 1px solid rgba(49,93,255,0.22);
+}
+
+.diary-inline-save-btn:hover:not(:disabled) { background: rgba(49,93,255,0.2); }
+.diary-inline-save-btn:disabled { opacity: 0.4; cursor: default; }
+.diary-inline-save-btn.is-saved { background: rgba(16,185,129,0.14); border-color: rgba(16,185,129,0.3); color: #059669; }
 
 /* ===== 색상 ===== */
 .is-up   { color: var(--positive); }

@@ -7,6 +7,7 @@ const navItems = [
   { to: '/watchlist', label: '관심 종목' },
   { to: '/holdings', label: '보유 종목' },
   { to: '/portfolio', label: '장투 케어' },
+  { to: '/trading-diary', label: '매매 일기' },
   { to: '/community', label: '커뮤니티' },
 ]
 

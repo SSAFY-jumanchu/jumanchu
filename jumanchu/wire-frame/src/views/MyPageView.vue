@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, reactive } from 'vue'
 
-const activeSection = ref('info')
+const activeSection = ref('invest')
 
 const user = reactive({
   name: '김주만',
@@ -17,13 +17,11 @@ const user = reactive({
   following: 31,
 })
 
-const badges = [
-  { id: 1, icon: '🌱', name: '첫 만남', desc: '첫 투자를 완료했어요', earned: true },
-  { id: 2, icon: '📈', name: '수익왕', desc: '누적 수익 10% 달성', earned: true },
-  { id: 3, icon: '🔥', name: '연속 투자', desc: '30일 연속 로그인', earned: true },
-  { id: 4, icon: '💎', name: '장기투자자', desc: '1년 이상 종목 보유', earned: false },
-  { id: 5, icon: '🦅', name: '독수리눈', desc: '급등 전 선취매 5회', earned: false },
-  { id: 6, icon: '🏆', name: '수익 마스터', desc: '누적 수익 50% 달성', earned: false },
+// 프로필 헤더 아이콘 (와이어프레임 slide 9/10/11 공통 헤더)
+const headerBadges = [
+  { id: 1, icon: '🌱', name: '첫 만남' },
+  { id: 2, icon: '📈', name: '수익왕' },
+  { id: 3, icon: '🔥', name: '연속 투자' },
 ]
 
 const activities = [
@@ -75,11 +73,23 @@ const account = reactive({
 
 const profitPct = computed(() => ((account.monthProfit / account.totalInvested) * 100).toFixed(2))
 
-const sideMenu = [
-  { key: 'info',    label: '내 정보' },
-  { key: 'activity',label: '내 활동 내역' },
-  { key: 'trades',  label: '내 거래 내역' },
-  { key: 'account', label: '내 계좌 관리' },
+const holdings = [
+  { name:'삼성전자', qty:20, avg:310500, cur:317000, color:'#315dff' },
+  { name:'SK하이닉스', qty:10, avg:238000, cur:243000, color:'#7d4ee8' },
+  { name:'NVIDIA', qty:3, avg:1251000, cur:1285000, color:'#22c55e' },
+  { name:'NAVER', qty:8, avg:189500, cur:184000, color:'#f59e0b' },
+  { name:'APPLE', qty:2, avg:248000, cur:261000, color:'#06b6d4' },
+]
+
+const monthlyReturns = [
+  { label:'1월', val: 4.2 }, { label:'2월', val: -1.8 }, { label:'3월', val: 7.1 },
+  { label:'4월', val: 3.5 }, { label:'5월', val: 9.3 }, { label:'6월', val: 3.4 },
+]
+
+const tabs = [
+  { key: 'invest',  label: '내 투자' },
+  { key: 'profile', label: '프로필' },
+  { key: 'activity',label: '활동 내역' },
 ]
 
 function fmt(n) {
@@ -108,28 +118,28 @@ const isEditingInfo = ref(false)
         </div>
       </div>
       <div class="ph-badges-preview">
-        <span v-for="b in badges.filter(b => b.earned)" :key="b.id" class="badge-chip" :title="b.name">{{ b.icon }}</span>
+        <span v-for="b in headerBadges" :key="b.id" class="badge-chip" :title="b.name">{{ b.icon }}</span>
       </div>
       <div class="ph-actions">
-        <button class="ph-btn accent" @click="isEditingInfo = true; activeSection = 'info'">프로필 편집</button>
-        <button class="ph-btn" @click="activeSection = 'account'">내 계좌</button>
+        <button class="ph-btn accent" @click="isEditingInfo = true; activeSection = 'profile'">프로필 편집</button>
+        <button class="ph-btn" @click="activeSection = 'invest'">내 계좌</button>
       </div>
     </div>
 
     <!-- Body -->
     <div class="mypage-body">
 
-      <!-- Sidebar -->
+      <!-- Side Tab Box -->
       <aside class="mp-sidebar panel">
         <ul class="mp-menu">
           <li
-            v-for="item in sideMenu"
-            :key="item.key"
+            v-for="tab in tabs"
+            :key="tab.key"
             class="mp-menu-item"
-            :class="{ active: activeSection === item.key }"
-            @click="activeSection = item.key"
+            :class="{ active: activeSection === tab.key }"
+            @click="activeSection = tab.key"
           >
-            {{ item.label }}
+            {{ tab.label }}
           </li>
         </ul>
       </aside>
@@ -137,384 +147,324 @@ const isEditingInfo = ref(false)
       <!-- Content -->
       <div class="mp-content">
 
-        <!-- ========== 내 정보 ========== -->
-        <section v-if="activeSection === 'info'" class="mp-section">
-          <div class="section-header">
-            <h2>내 정보</h2>
-            <button class="edit-btn" @click="isEditingInfo = !isEditingInfo">
-              {{ isEditingInfo ? '저장' : '정보 수정' }}
-            </button>
+      <!-- ========== 내 투자 ========== -->
+      <section v-if="activeSection === 'invest'" class="mp-section">
+
+        <!-- 상단 3카드 -->
+        <div class="invest-cards">
+          <!-- Balance Card -->
+          <div class="panel acc-balance-card">
+            <div class="acc-label">기본계좌 · 주식</div>
+            <div class="acc-balance">{{ fmt(account.balance) }}<span class="acc-unit">원</span></div>
+            <div class="acc-actions">
+              <button class="acc-btn accent">채우기</button>
+              <button class="acc-btn">보내기</button>
+              <button class="acc-btn">환전</button>
+            </div>
+            <dl class="acc-dl">
+              <div class="acc-row">
+                <dt>총 주문 가능 금액</dt>
+                <dd>{{ fmt(account.orderable) }}원</dd>
+              </div>
+              <div class="acc-row sub">
+                <dt>🇰🇷 원화</dt>
+                <dd>{{ fmt(account.krw) }}원</dd>
+              </div>
+              <div class="acc-row sub">
+                <dt>🇺🇸 달러</dt>
+                <dd>${{ account.usd.toFixed(2) }}<span class="usd-krw"> ≈ {{ fmt(Math.round(account.usd * account.usdKrw)) }}원</span></dd>
+              </div>
+              <div class="acc-row divider">
+                <dt>총 투자 금액</dt>
+                <dd>{{ fmt(account.totalInvested) }}원</dd>
+              </div>
+            </dl>
           </div>
 
-          <div class="info-grid">
-            <!-- Personal Info Card -->
-            <div class="panel info-card">
-              <div class="info-card-title">기본 정보</div>
-              <dl class="info-dl">
-                <div class="info-row">
-                  <dt>이름</dt>
-                  <dd>
-                    <template v-if="!isEditingInfo">{{ user.name }}</template>
-                    <input v-else v-model="user.name" class="info-input" />
-                  </dd>
+          <!-- Profit Card -->
+          <div class="panel acc-profit-card">
+            <div class="acc-label">이달 수익</div>
+            <div class="acc-profit-num pos">+{{ fmt(account.monthProfit) }}원</div>
+            <div class="acc-profit-pct pos">+{{ profitPct }}%</div>
+            <dl class="acc-dl mt16">
+              <div class="acc-row">
+                <dt>판매수익</dt>
+                <dd :class="account.sellProfit >= 0 ? 'pos' : 'neg'">{{ signedFmt(account.sellProfit) }}원</dd>
+              </div>
+              <div class="acc-row">
+                <dt>배당금</dt>
+                <dd>{{ fmt(account.dividend) }}원</dd>
+              </div>
+              <div class="acc-row">
+                <dt>이자</dt>
+                <dd>{{ fmt(account.interest) }}원</dd>
+              </div>
+            </dl>
+          </div>
+
+          <!-- Holdings Summary -->
+          <div class="panel acc-holdings-card">
+            <div class="acc-label">보유 종목 현황</div>
+            <div class="holdings-list">
+              <div v-for="h in holdings" :key="h.name" class="holding-row">
+                <div class="hr-dot" :style="{ background: h.color }"></div>
+                <div class="hr-name">{{ h.name }}</div>
+                <div class="hr-qty">{{ h.qty }}주</div>
+                <div class="hr-pnl" :class="(h.cur - h.avg) >= 0 ? 'pos' : 'neg'">
+                  {{ ((h.cur - h.avg) / h.avg * 100).toFixed(1) }}%
                 </div>
-                <div class="info-row">
-                  <dt>닉네임</dt>
-                  <dd>
-                    <template v-if="!isEditingInfo">{{ user.nickname }}</template>
-                    <input v-else v-model="user.nickname" class="info-input" />
-                  </dd>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 수익분석 -->
+        <div class="panel acc-analysis-card">
+          <div class="acc-label">수익분석</div>
+          <div class="analysis-bars">
+            <div v-for="m in monthlyReturns" :key="m.label" class="ab-col">
+              <div class="ab-bar-wrap">
+                <div
+                  class="ab-bar"
+                  :class="m.val >= 0 ? 'pos-bar' : 'neg-bar'"
+                  :style="{ height: Math.abs(m.val) * 5 + 'px' }"
+                ></div>
+              </div>
+              <div class="ab-val" :class="m.val >= 0 ? 'pos' : 'neg'">{{ m.val > 0 ? '+' : '' }}{{ m.val }}%</div>
+              <div class="ab-label">{{ m.label }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 내 거래 내역 -->
+        <div class="section-header">
+          <h2>내 거래 내역</h2>
+          <div class="trade-filter-tabs">
+            <button
+              v-for="f in [{k:'all',l:'전체'},{k:'buy',l:'매수'},{k:'sell',l:'매도'}]"
+              :key="f.k"
+              class="filter-tab"
+              :class="{ active: tradeFilter === f.k }"
+              @click="tradeFilter = f.k"
+            >{{ f.l }}</button>
+          </div>
+        </div>
+
+        <div class="panel trade-table-wrap">
+          <table class="trade-table">
+            <thead>
+              <tr>
+                <th>날짜</th>
+                <th>종목</th>
+                <th>구분</th>
+                <th class="num">수량</th>
+                <th class="num">체결 단가</th>
+                <th class="num">총 금액</th>
+                <th class="num">손익</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="t in filteredTrades" :key="t.id">
+                <td class="trade-date">{{ t.date }}</td>
+                <td>
+                  <div class="trade-name">{{ t.name }}</div>
+                  <div class="trade-code">{{ t.code }}</div>
+                </td>
+                <td>
+                  <span class="side-badge" :class="t.side">
+                    {{ t.side === 'buy' ? '매수' : '매도' }}
+                  </span>
+                </td>
+                <td class="num">{{ t.qty }}주</td>
+                <td class="num">{{ fmt(t.price) }}원</td>
+                <td class="num">{{ fmt(t.total) }}원</td>
+                <td class="num" :class="t.pnl !== null ? (t.pnl >= 0 ? 'pos' : 'neg') : ''">
+                  <template v-if="t.pnl !== null">{{ signedFmt(t.pnl) }}원</template>
+                  <template v-else>—</template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Summary Row -->
+        <div class="trade-summary">
+          <div class="panel ts-card">
+            <div class="ts-label">총 매수 금액</div>
+            <div class="ts-value">{{ fmt(trades.filter(t=>t.side==='buy').reduce((a,t)=>a+t.total,0)) }}원</div>
+          </div>
+          <div class="panel ts-card">
+            <div class="ts-label">총 매도 금액</div>
+            <div class="ts-value">{{ fmt(trades.filter(t=>t.side==='sell').reduce((a,t)=>a+t.total,0)) }}원</div>
+          </div>
+          <div class="panel ts-card">
+            <div class="ts-label">실현 손익</div>
+            <div class="ts-value pos">
+              +{{ fmt(trades.filter(t=>t.pnl!==null).reduce((a,t)=>a+t.pnl,0)) }}원
+            </div>
+          </div>
+          <div class="panel ts-card">
+            <div class="ts-label">총 거래 횟수</div>
+            <div class="ts-value">{{ trades.length }}회</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 프로필 ========== -->
+      <section v-else-if="activeSection === 'profile'" class="mp-section">
+        <div class="section-header">
+          <h2>프로필</h2>
+          <button class="edit-btn" @click="isEditingInfo = !isEditingInfo">
+            {{ isEditingInfo ? '저장' : '정보 수정' }}
+          </button>
+        </div>
+
+        <div class="info-grid">
+          <!-- Personal Info Card -->
+          <div class="panel info-card">
+            <div class="info-card-title">기본 정보</div>
+            <dl class="info-dl">
+              <div class="info-row">
+                <dt>이름</dt>
+                <dd>
+                  <template v-if="!isEditingInfo">{{ user.name }}</template>
+                  <input v-else v-model="user.name" class="info-input" />
+                </dd>
+              </div>
+              <div class="info-row">
+                <dt>닉네임</dt>
+                <dd>
+                  <template v-if="!isEditingInfo">{{ user.nickname }}</template>
+                  <input v-else v-model="user.nickname" class="info-input" />
+                </dd>
+              </div>
+              <div class="info-row">
+                <dt>이메일</dt>
+                <dd>
+                  <template v-if="!isEditingInfo">{{ user.email }}</template>
+                  <input v-else v-model="user.email" class="info-input" />
+                </dd>
+              </div>
+              <div class="info-row">
+                <dt>휴대폰</dt>
+                <dd>
+                  <template v-if="!isEditingInfo">{{ user.phone }}</template>
+                  <input v-else v-model="user.phone" class="info-input" />
+                </dd>
+              </div>
+              <div class="info-row">
+                <dt>생년월일</dt>
+                <dd>{{ user.birthdate }}</dd>
+              </div>
+              <div class="info-row">
+                <dt>주소</dt>
+                <dd>
+                  <template v-if="!isEditingInfo">{{ user.address }}</template>
+                  <input v-else v-model="user.address" class="info-input" />
+                </dd>
+              </div>
+              <div class="info-row">
+                <dt>가입일</dt>
+                <dd>{{ user.joinDate }}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <!-- Invest Type Card -->
+          <div class="panel info-card">
+            <div class="info-card-title">투자 성향</div>
+            <div class="invest-type-badge">{{ user.investType }}</div>
+            <p class="invest-desc">안정성을 추구하면서 꾸준한 성장을 원하는 투자 유형이에요. 배당주와 우량 성장주를 균형 있게 담는 것을 권장해요.</p>
+            <div class="invest-bars">
+              <div class="ib-row"><span>안정성</span><div class="ib-track"><div class="ib-fill" style="width:62%; background:var(--accent)"></div></div><span>62</span></div>
+              <div class="ib-row"><span>성장성</span><div class="ib-track"><div class="ib-fill" style="width:78%; background:var(--purple)"></div></div><span>78</span></div>
+              <div class="ib-row"><span>리스크허용</span><div class="ib-track"><div class="ib-fill" style="width:45%; background:#22c55e"></div></div><span>45</span></div>
+            </div>
+            <button class="retest-btn">투자 성향 재검사</button>
+          </div>
+
+          <!-- Community Profile Card -->
+          <div class="panel info-card span2">
+            <div class="info-card-title">커뮤니티 프로필</div>
+            <div class="community-profile">
+              <div class="cp-avatar">김</div>
+              <div class="cp-details">
+                <div class="cp-name">{{ user.nickname }}</div>
+                <div class="cp-sub">주만추 멤버 · {{ user.joinDate }} 가입</div>
+                <div class="cp-stats">
+                  <span>글 <strong>{{ user.posts }}</strong></span>
+                  <span>팔로워 <strong>{{ user.followers }}</strong></span>
+                  <span>팔로잉 <strong>{{ user.following }}</strong></span>
+                  <span>받은 좋아요 <strong>294</strong></span>
                 </div>
-                <div class="info-row">
-                  <dt>이메일</dt>
-                  <dd>
-                    <template v-if="!isEditingInfo">{{ user.email }}</template>
-                    <input v-else v-model="user.email" class="info-input" />
-                  </dd>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 활동 내역 ========== -->
+      <section v-else-if="activeSection === 'activity'" class="mp-section">
+        <div class="section-header"><h2>활동 내역</h2></div>
+
+        <div class="activity-layout">
+          <div class="activity-main">
+            <!-- Posts -->
+            <div class="panel act-block">
+              <div class="act-block-title">작성한 글 ({{ myPosts.length }})</div>
+              <div class="post-list">
+                <div v-for="post in myPosts" :key="post.id" class="post-item">
+                  <div class="post-item-left">
+                    <span class="post-cat">{{ post.category }}</span>
+                    <span class="post-title">{{ post.title }}</span>
+                  </div>
+                  <div class="post-item-right">
+                    <span class="post-meta">♥ {{ post.likes }}</span>
+                    <span class="post-meta">💬 {{ post.comments }}</span>
+                    <span class="post-meta post-time">{{ post.time }}</span>
+                  </div>
                 </div>
-                <div class="info-row">
-                  <dt>휴대폰</dt>
-                  <dd>
-                    <template v-if="!isEditingInfo">{{ user.phone }}</template>
-                    <input v-else v-model="user.phone" class="info-input" />
-                  </dd>
+              </div>
+            </div>
+
+            <!-- Activity Stream -->
+            <div class="panel act-block">
+              <div class="act-block-title">최근 활동</div>
+              <div class="activity-list">
+                <div v-for="act in activities" :key="act.id" class="act-item" :class="act.type">
+                  <div class="act-icon">
+                    <span v-if="act.type === 'post'">✏️</span>
+                    <span v-else-if="act.type === 'comment'">💬</span>
+                    <span v-else>❤️</span>
+                  </div>
+                  <div class="act-body">
+                    <div class="act-content">{{ act.content }}</div>
+                    <div class="act-time">{{ act.time }}</div>
+                  </div>
+                  <div v-if="act.likes !== null" class="act-stats">
+                    <span>♥ {{ act.likes }}</span>
+                    <span v-if="act.comments !== null">💬 {{ act.comments }}</span>
+                  </div>
                 </div>
-                <div class="info-row">
-                  <dt>생년월일</dt>
-                  <dd>{{ user.birthdate }}</dd>
-                </div>
-                <div class="info-row">
-                  <dt>주소</dt>
-                  <dd>
-                    <template v-if="!isEditingInfo">{{ user.address }}</template>
-                    <input v-else v-model="user.address" class="info-input" />
-                  </dd>
-                </div>
-                <div class="info-row">
-                  <dt>가입일</dt>
-                  <dd>{{ user.joinDate }}</dd>
-                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stats Sidebar -->
+          <div class="activity-side">
+            <div class="panel act-stats-panel">
+              <div class="act-block-title">활동 통계</div>
+              <dl class="stats-dl">
+                <div class="stats-row"><dt>총 게시글</dt><dd>{{ user.posts }}개</dd></div>
+                <div class="stats-row"><dt>총 댓글</dt><dd>38개</dd></div>
+                <div class="stats-row"><dt>받은 좋아요</dt><dd>294개</dd></div>
+                <div class="stats-row"><dt>팔로워</dt><dd>{{ user.followers }}명</dd></div>
+                <div class="stats-row"><dt>팔로잉</dt><dd>{{ user.following }}명</dd></div>
               </dl>
             </div>
-
-            <!-- Invest Type Card -->
-            <div class="panel info-card">
-              <div class="info-card-title">투자 성향</div>
-              <div class="invest-type-badge">{{ user.investType }}</div>
-              <p class="invest-desc">안정성을 추구하면서 꾸준한 성장을 원하는 투자 유형이에요. 배당주와 우량 성장주를 균형 있게 담는 것을 권장해요.</p>
-              <div class="invest-bars">
-                <div class="ib-row"><span>안정성</span><div class="ib-track"><div class="ib-fill" style="width:62%; background:var(--accent)"></div></div><span>62</span></div>
-                <div class="ib-row"><span>성장성</span><div class="ib-track"><div class="ib-fill" style="width:78%; background:var(--purple)"></div></div><span>78</span></div>
-                <div class="ib-row"><span>리스크허용</span><div class="ib-track"><div class="ib-fill" style="width:45%; background:#22c55e"></div></div><span>45</span></div>
-              </div>
-              <button class="retest-btn">투자 성향 재검사</button>
-            </div>
-
-            <!-- Community Profile Card -->
-            <div class="panel info-card span2">
-              <div class="info-card-title">커뮤니티 프로필</div>
-              <div class="community-profile">
-                <div class="cp-avatar">김</div>
-                <div class="cp-details">
-                  <div class="cp-name">{{ user.nickname }}</div>
-                  <div class="cp-sub">주만추 멤버 · {{ user.joinDate }} 가입</div>
-                  <div class="cp-stats">
-                    <span>글 <strong>{{ user.posts }}</strong></span>
-                    <span>팔로워 <strong>{{ user.followers }}</strong></span>
-                    <span>팔로잉 <strong>{{ user.following }}</strong></span>
-                    <span>받은 좋아요 <strong>294</strong></span>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
-        </section>
-
-        <!-- ========== 내 활동 내역 ========== -->
-        <section v-else-if="activeSection === 'activity'" class="mp-section">
-          <div class="section-header"><h2>내 활동 내역</h2></div>
-
-          <div class="activity-layout">
-            <div class="activity-main">
-              <!-- Posts Tab -->
-              <div class="panel act-block">
-                <div class="act-block-title">작성한 글 ({{ myPosts.length }})</div>
-                <div class="post-list">
-                  <div v-for="post in myPosts" :key="post.id" class="post-item">
-                    <div class="post-item-left">
-                      <span class="post-cat">{{ post.category }}</span>
-                      <span class="post-title">{{ post.title }}</span>
-                    </div>
-                    <div class="post-item-right">
-                      <span class="post-meta">♥ {{ post.likes }}</span>
-                      <span class="post-meta">💬 {{ post.comments }}</span>
-                      <span class="post-meta post-time">{{ post.time }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Activity Stream -->
-              <div class="panel act-block">
-                <div class="act-block-title">최근 활동</div>
-                <div class="activity-list">
-                  <div v-for="act in activities" :key="act.id" class="act-item" :class="act.type">
-                    <div class="act-icon">
-                      <span v-if="act.type === 'post'">✏️</span>
-                      <span v-else-if="act.type === 'comment'">💬</span>
-                      <span v-else>❤️</span>
-                    </div>
-                    <div class="act-body">
-                      <div class="act-content">{{ act.content }}</div>
-                      <div class="act-time">{{ act.time }}</div>
-                    </div>
-                    <div v-if="act.likes !== null" class="act-stats">
-                      <span>♥ {{ act.likes }}</span>
-                      <span v-if="act.comments !== null">💬 {{ act.comments }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Badge Sidebar -->
-            <div class="activity-side">
-              <div class="panel badge-panel">
-                <div class="act-block-title">보유 배지 ({{ badges.filter(b=>b.earned).length }}/{{ badges.length }})</div>
-                <div class="badge-grid">
-                  <div
-                    v-for="b in badges"
-                    :key="b.id"
-                    class="badge-item"
-                    :class="{ earned: b.earned, locked: !b.earned }"
-                    :title="b.desc"
-                  >
-                    <div class="badge-icon">{{ b.icon }}</div>
-                    <div class="badge-name">{{ b.name }}</div>
-                    <div class="badge-desc">{{ b.desc }}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="panel act-stats-panel">
-                <div class="act-block-title">활동 통계</div>
-                <dl class="stats-dl">
-                  <div class="stats-row"><dt>총 게시글</dt><dd>{{ user.posts }}개</dd></div>
-                  <div class="stats-row"><dt>총 댓글</dt><dd>38개</dd></div>
-                  <div class="stats-row"><dt>받은 좋아요</dt><dd>294개</dd></div>
-                  <div class="stats-row"><dt>팔로워</dt><dd>{{ user.followers }}명</dd></div>
-                  <div class="stats-row"><dt>팔로잉</dt><dd>{{ user.following }}명</dd></div>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ========== 내 거래 내역 ========== -->
-        <section v-else-if="activeSection === 'trades'" class="mp-section">
-          <div class="section-header">
-            <h2>내 거래 내역</h2>
-            <div class="trade-filter-tabs">
-              <button
-                v-for="f in [{k:'all',l:'전체'},{k:'buy',l:'매수'},{k:'sell',l:'매도'}]"
-                :key="f.k"
-                class="filter-tab"
-                :class="{ active: tradeFilter === f.k }"
-                @click="tradeFilter = f.k"
-              >{{ f.l }}</button>
-            </div>
-          </div>
-
-          <div class="panel trade-table-wrap">
-            <table class="trade-table">
-              <thead>
-                <tr>
-                  <th>날짜</th>
-                  <th>종목</th>
-                  <th>구분</th>
-                  <th class="num">수량</th>
-                  <th class="num">체결 단가</th>
-                  <th class="num">총 금액</th>
-                  <th class="num">손익</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="t in filteredTrades" :key="t.id">
-                  <td class="trade-date">{{ t.date }}</td>
-                  <td>
-                    <div class="trade-name">{{ t.name }}</div>
-                    <div class="trade-code">{{ t.code }}</div>
-                  </td>
-                  <td>
-                    <span class="side-badge" :class="t.side">
-                      {{ t.side === 'buy' ? '매수' : '매도' }}
-                    </span>
-                  </td>
-                  <td class="num">{{ t.qty }}주</td>
-                  <td class="num">{{ fmt(t.price) }}원</td>
-                  <td class="num">{{ fmt(t.total) }}원</td>
-                  <td class="num" :class="t.pnl !== null ? (t.pnl >= 0 ? 'pos' : 'neg') : ''">
-                    <template v-if="t.pnl !== null">{{ signedFmt(t.pnl) }}원</template>
-                    <template v-else>—</template>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Summary Row -->
-          <div class="trade-summary">
-            <div class="panel ts-card">
-              <div class="ts-label">총 매수 금액</div>
-              <div class="ts-value">{{ fmt(trades.filter(t=>t.side==='buy').reduce((a,t)=>a+t.total,0)) }}원</div>
-            </div>
-            <div class="panel ts-card">
-              <div class="ts-label">총 매도 금액</div>
-              <div class="ts-value">{{ fmt(trades.filter(t=>t.side==='sell').reduce((a,t)=>a+t.total,0)) }}원</div>
-            </div>
-            <div class="panel ts-card">
-              <div class="ts-label">실현 손익</div>
-              <div class="ts-value pos">
-                +{{ fmt(trades.filter(t=>t.pnl!==null&&t.pnl>0).reduce((a,t)=>a+t.pnl,0) + trades.filter(t=>t.pnl!==null&&t.pnl<0).reduce((a,t)=>a+t.pnl,0)) }}원
-              </div>
-            </div>
-            <div class="panel ts-card">
-              <div class="ts-label">총 거래 횟수</div>
-              <div class="ts-value">{{ trades.length }}회</div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ========== 내 계좌 관리 ========== -->
-        <section v-else-if="activeSection === 'account'" class="mp-section">
-          <div class="section-header"><h2>내 계좌 관리</h2></div>
-
-          <div class="account-grid">
-            <!-- Balance Card -->
-            <div class="panel acc-balance-card">
-              <div class="acc-label">기본계좌 · 주식</div>
-              <div class="acc-balance">{{ fmt(account.balance) }}<span class="acc-unit">원</span></div>
-              <div class="acc-actions">
-                <button class="acc-btn accent">채우기</button>
-                <button class="acc-btn">보내기</button>
-                <button class="acc-btn">환전</button>
-              </div>
-              <dl class="acc-dl">
-                <div class="acc-row">
-                  <dt>총 주문 가능 금액</dt>
-                  <dd>{{ fmt(account.orderable) }}원</dd>
-                </div>
-                <div class="acc-row sub">
-                  <dt>🇰🇷 원화</dt>
-                  <dd>{{ fmt(account.krw) }}원</dd>
-                </div>
-                <div class="acc-row sub">
-                  <dt>🇺🇸 달러</dt>
-                  <dd>${{ account.usd.toFixed(2) }}<span class="usd-krw"> ≈ {{ fmt(Math.round(account.usd * account.usdKrw)) }}원</span></dd>
-                </div>
-                <div class="acc-row divider">
-                  <dt>총 투자 금액</dt>
-                  <dd>{{ fmt(account.totalInvested) }}원</dd>
-                </div>
-              </dl>
-            </div>
-
-            <!-- Profit Card -->
-            <div class="panel acc-profit-card">
-              <div class="acc-label">이달 수익</div>
-              <div class="acc-profit-num pos">+{{ fmt(account.monthProfit) }}원</div>
-              <div class="acc-profit-pct pos">+{{ profitPct }}%</div>
-              <dl class="acc-dl mt16">
-                <div class="acc-row">
-                  <dt>판매수익</dt>
-                  <dd :class="account.sellProfit >= 0 ? 'pos' : 'neg'">{{ signedFmt(account.sellProfit) }}원</dd>
-                </div>
-                <div class="acc-row">
-                  <dt>배당금</dt>
-                  <dd>{{ fmt(account.dividend) }}원</dd>
-                </div>
-                <div class="acc-row">
-                  <dt>이자</dt>
-                  <dd>{{ fmt(account.interest) }}원</dd>
-                </div>
-              </dl>
-            </div>
-
-            <!-- Holdings Summary -->
-            <div class="panel acc-holdings-card">
-              <div class="acc-label">보유 종목 현황</div>
-              <div class="holdings-list">
-                <div v-for="h in [
-                  { name:'삼성전자', qty:20, avg:310500, cur:317000, color:'#315dff' },
-                  { name:'SK하이닉스', qty:10, avg:238000, cur:243000, color:'#7d4ee8' },
-                  { name:'NVIDIA', qty:3, avg:1251000, cur:1285000, color:'#22c55e' },
-                  { name:'NAVER', qty:8, avg:189500, cur:184000, color:'#f59e0b' },
-                  { name:'APPLE', qty:2, avg:248000, cur:261000, color:'#06b6d4' },
-                ]" :key="h.name" class="holding-row">
-                  <div class="hr-dot" :style="{ background: h.color }"></div>
-                  <div class="hr-name">{{ h.name }}</div>
-                  <div class="hr-qty">{{ h.qty }}주</div>
-                  <div class="hr-pnl" :class="(h.cur - h.avg) >= 0 ? 'pos' : 'neg'">
-                    {{ ((h.cur - h.avg) / h.avg * 100).toFixed(1) }}%
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Profit Analysis -->
-            <div class="panel acc-analysis-card">
-              <div class="acc-label">수익분석</div>
-              <div class="analysis-bars">
-                <div v-for="m in [
-                  { label:'1월', val: 4.2 }, { label:'2월', val: -1.8 }, { label:'3월', val: 7.1 },
-                  { label:'4월', val: 3.5 }, { label:'5월', val: 9.3 }, { label:'6월', val: 3.4 }
-                ]" :key="m.label" class="ab-col">
-                  <div class="ab-bar-wrap">
-                    <div
-                      class="ab-bar"
-                      :class="m.val >= 0 ? 'pos-bar' : 'neg-bar'"
-                      :style="{ height: Math.abs(m.val) * 5 + 'px' }"
-                    ></div>
-                  </div>
-                  <div class="ab-val" :class="m.val >= 0 ? 'pos' : 'neg'">{{ m.val > 0 ? '+' : '' }}{{ m.val }}%</div>
-                  <div class="ab-label">{{ m.label }}</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Account Management -->
-            <div class="panel acc-manage-card span2">
-              <div class="acc-label">계좌 관리</div>
-              <div class="manage-list">
-                <div class="manage-item">
-                  <span>거래내역 받는 방법</span>
-                  <span class="manage-val">이메일</span>
-                  <button class="manage-btn">변경</button>
-                </div>
-                <div class="manage-item">
-                  <span>우편을 받는 방법</span>
-                  <span class="manage-val">이메일</span>
-                  <button class="manage-btn">변경</button>
-                </div>
-                <div class="manage-item">
-                  <span>해외납세 의무사항</span>
-                  <span class="manage-val">해당 없음</span>
-                  <button class="manage-btn">확인</button>
-                </div>
-                <div class="manage-item">
-                  <span>수수료 및 혜택</span>
-                  <span class="manage-val">우대 수수료 적용 중</span>
-                  <button class="manage-btn">상세</button>
-                </div>
-                <div class="manage-item danger">
-                  <span>계좌 탈퇴하기</span>
-                  <span class="manage-val muted">서비스 이용을 종료합니다</span>
-                  <button class="manage-btn danger">탈퇴</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+        </div>
+      </section>
 
       </div><!-- /mp-content -->
     </div><!-- /mypage-body -->
@@ -608,12 +558,12 @@ const isEditingInfo = ref(false)
 /* ---- Body Layout ---- */
 .mypage-body {
   display: grid;
-  grid-template-columns: 180px 1fr;
+  grid-template-columns: 160px 1fr;
   gap: 20px;
   align-items: start;
 }
 
-/* ---- Sidebar ---- */
+/* ---- Side Tab Box ---- */
 .mp-sidebar { padding: 12px 0; position: sticky; top: 80px; }
 .mp-menu { list-style: none; padding: 0; margin: 0; }
 .mp-menu-item {
@@ -655,7 +605,15 @@ const isEditingInfo = ref(false)
 }
 .edit-btn:hover { background: rgba(49,93,255,0.15); }
 
-/* ---- 내 정보 ---- */
+/* ---- 내 투자: 상단 3카드 ---- */
+.invest-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+/* ---- 프로필 ---- */
 .info-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -733,7 +691,7 @@ const isEditingInfo = ref(false)
 .cp-stats { display: flex; gap: 16px; margin-top: 8px; font-size: 13px; color: var(--muted); }
 .cp-stats strong { color: var(--ink); }
 
-/* ---- 내 활동 내역 ---- */
+/* ---- 활동 내역 ---- */
 .activity-layout { display: grid; grid-template-columns: 1fr 240px; gap: 16px; align-items: start; }
 .activity-main { display: flex; flex-direction: column; gap: 16px; }
 .activity-side { display: flex; flex-direction: column; gap: 16px; }
@@ -776,23 +734,6 @@ const isEditingInfo = ref(false)
 .act-content { font-size: 13px; color: var(--ink); line-height: 1.5; }
 .act-time { font-size: 11px; color: var(--muted); margin-top: 3px; }
 .act-stats { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-shrink: 0; padding-top: 2px; }
-
-.badge-panel { padding: 20px; }
-.badge-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.badge-item {
-  padding: 12px 10px;
-  border-radius: 10px;
-  text-align: center;
-  border: 1px solid var(--glass-border);
-  background: rgba(255,255,255,0.4);
-  transition: transform 0.15s;
-}
-.badge-item.earned { background: rgba(255,255,255,0.7); }
-.badge-item.locked { opacity: 0.4; filter: grayscale(1); }
-.badge-item:hover.earned { transform: translateY(-2px); }
-.badge-icon { font-size: 24px; margin-bottom: 4px; }
-.badge-name { font-size: 11px; font-weight: 800; color: var(--ink); }
-.badge-desc { font-size: 10px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
 
 .act-stats-panel { padding: 20px; }
 .stats-dl { display: flex; flex-direction: column; gap: 0; }
@@ -863,18 +804,11 @@ const isEditingInfo = ref(false)
 .ts-value { font-size: 16px; font-weight: 900; color: var(--ink); }
 .ts-value.pos { color: var(--positive); }
 
-/* ---- 내 계좌 관리 ---- */
-.account-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 16px;
-}
+/* ---- 계좌 카드 (내 투자 탭) ---- */
 .acc-balance-card,
 .acc-profit-card,
 .acc-holdings-card,
-.acc-analysis-card,
-.acc-manage-card { padding: 20px 24px; }
-.acc-manage-card.span2 { grid-column: span 2; }
+.acc-analysis-card { padding: 20px 24px; }
 
 .acc-label { font-size: 12px; font-weight: 800; color: var(--muted); margin-bottom: 8px; }
 .acc-balance {
@@ -947,30 +881,4 @@ const isEditingInfo = ref(false)
 .neg-bar { background: var(--negative); border-radius: 0 0 4px 4px; }
 .ab-val { font-size: 10px; font-weight: 700; }
 .ab-label { font-size: 11px; color: var(--muted); }
-
-.manage-list { display: flex; flex-direction: column; gap: 0; }
-.manage-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 0; border-bottom: 1px solid var(--faint);
-  font-size: 13px;
-}
-.manage-item:last-child { border-bottom: none; }
-.manage-item > span:first-child { flex: 1; font-weight: 700; color: var(--ink); }
-.manage-val { color: var(--muted); font-size: 12px; }
-.manage-val.muted { color: var(--muted); }
-.manage-item.danger > span:first-child { color: var(--negative); }
-.manage-btn {
-  height: 28px; padding: 0 12px; border-radius: 6px;
-  border: 1px solid var(--glass-border);
-  background: rgba(255,255,255,0.5);
-  font-size: 12px; font-weight: 700; color: var(--muted);
-  cursor: pointer; transition: all 0.15s;
-}
-.manage-btn:hover { background: rgba(255,255,255,0.8); color: var(--ink); }
-.manage-btn.danger {
-  border-color: rgba(239,68,68,0.3);
-  background: rgba(239,68,68,0.05);
-  color: var(--negative);
-}
-.manage-btn.danger:hover { background: rgba(239,68,68,0.12); }
 </style>

@@ -1,5 +1,8 @@
 <script setup>
 import SparklineChart from '../components/SparklineChart.vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const marketIndices = [
   {
@@ -44,6 +47,24 @@ const generalNews = [
   { title: 'S&P500 신고가 경신...나스닥도 동반 상승', source: '연합뉴스', time: '3시간 전', category: '해외' },
   { title: '코스피 2720선 회복, 외국인 선물 매수 전환', source: '서울경제', time: '4시간 전', category: '코스피' },
 ]
+
+const holdings = [
+  { name: '삼성전자', ticker: '005930', qty: 20, avg: 310500, cur: 317000, color: '#315dff' },
+  { name: 'SK하이닉스', ticker: '000660', qty: 10, avg: 238000, cur: 243000, color: '#7d4ee8' },
+  { name: 'NVIDIA',   ticker: 'NVDA',   qty: 3,  avg: 1251000, cur: 1285000, color: '#22c55e' },
+  { name: 'NAVER',    ticker: '035420', qty: 8,  avg: 189500, cur: 184000, color: '#f59e0b' },
+  { name: 'APPLE',    ticker: 'AAPL',   qty: 2,  avg: 248000, cur: 261000, color: '#06b6d4' },
+]
+
+const recentDiaries = [
+  { date: '2026-06-10', stock: 'APPLE',    ticker: 'AAPL',   type: 'hold', title: 'WWDC 전 홀딩 전략' },
+  { date: '2026-06-05', stock: '삼성전자', ticker: '005930', type: 'buy',  title: '오늘 매수 이유' },
+  { date: '2026-06-04', stock: 'SK하이닉스', ticker: '000660', type: 'sell', title: '단기 수익 실현' },
+]
+const diaryTypeColor = { buy: '#315dff', sell: '#ef4444', hold: '#f59e0b' }
+const diaryTypeLabel = { buy: '매수', sell: '매도', hold: '홀딩' }
+
+function fmt(n) { return n.toLocaleString('ko-KR') }
 
 const watchlistNews = [
   { title: 'SK하이닉스, HBM3E 양산 확대...AI 수요 견조', source: '이데일리', time: '30분 전', ticker: 'SK하이닉스' },
@@ -252,6 +273,60 @@ const watchlistNews = [
           </article>
         </div>
       </section>
+    </div>
+
+    <!-- ===== 섹션 4: 보유 종목 + 매매 일기 ===== -->
+    <div class="bottom-grid">
+
+      <!-- 보유 종목 -->
+      <section class="panel bottom-panel" aria-label="보유 종목">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">내 포트폴리오</p>
+            <h2>보유 종목</h2>
+          </div>
+          <button class="more-btn" @click="router.push('/holdings')">더보기 →</button>
+        </div>
+        <div class="holdings-list">
+          <div v-for="h in holdings" :key="h.ticker" class="holding-row">
+            <div class="hr-dot" :style="{ background: h.color }"></div>
+            <div class="hr-info">
+              <span class="hr-name">{{ h.name }}</span>
+              <span class="hr-ticker">{{ h.ticker }}</span>
+            </div>
+            <div class="hr-qty">{{ h.qty }}주</div>
+            <div class="hr-price">{{ fmt(h.cur) }}원</div>
+            <div class="hr-pnl" :class="h.cur >= h.avg ? 'is-up' : 'is-down'">
+              {{ h.cur >= h.avg ? '+' : '' }}{{ ((h.cur - h.avg) / h.avg * 100).toFixed(1) }}%
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 매매 일기 -->
+      <section class="panel bottom-panel" aria-label="매매 일기">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">나의 투자 기록</p>
+            <h2>매매 일기</h2>
+          </div>
+          <button class="more-btn" @click="router.push('/trading-diary')">더보기 →</button>
+        </div>
+        <div class="diary-list">
+          <div v-for="d in recentDiaries" :key="d.date + d.ticker" class="diary-row" @click="router.push('/trading-diary')">
+            <div class="diary-date">{{ d.date }}</div>
+            <div class="diary-info">
+              <span class="diary-type-badge" :style="{ background: diaryTypeColor[d.type] + '22', color: diaryTypeColor[d.type] }">
+                {{ diaryTypeLabel[d.type] }}
+              </span>
+              <span class="diary-stock">{{ d.stock }}</span>
+            </div>
+            <div class="diary-title">{{ d.title }}</div>
+          </div>
+        </div>
+        <button class="diary-write-btn" @click="router.push('/trading-diary')">+ 오늘 일지 작성</button>
+      </section>
+
     </div>
 
   </div>
@@ -796,6 +871,55 @@ const watchlistNews = [
   font-size: 12px;
   font-weight: 700;
 }
+
+/* ===== 섹션 4: 보유종목 + 매매일기 ===== */
+.bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.bottom-panel { display: flex; flex-direction: column; gap: 0; }
+
+.holdings-list { display: flex; flex-direction: column; }
+.holding-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid var(--faint);
+  font-size: 13px; cursor: pointer;
+  transition: background 0.15s;
+}
+.holding-row:last-child { border-bottom: none; }
+.holding-row:hover { background: rgba(255,255,255,0.4); border-radius: var(--radius); padding-left: 6px; }
+.hr-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.hr-info { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.hr-name { font-weight: 800; color: var(--ink); font-size: 13px; }
+.hr-ticker { font-size: 11px; color: var(--muted); }
+.hr-qty { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.hr-price { font-size: 13px; font-weight: 700; color: var(--ink); white-space: nowrap; min-width: 80px; text-align: right; }
+.hr-pnl { font-weight: 900; font-size: 13px; min-width: 50px; text-align: right; }
+.hr-pnl.is-up { color: var(--positive); }
+.hr-pnl.is-down { color: var(--negative); }
+
+.diary-list { display: flex; flex-direction: column; }
+.diary-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid var(--faint);
+  cursor: pointer; transition: background 0.15s;
+}
+.diary-row:last-child { border-bottom: none; }
+.diary-row:hover { background: rgba(255,255,255,0.4); border-radius: var(--radius); padding-left: 6px; }
+.diary-date { font-size: 11px; color: var(--muted); font-weight: 700; white-space: nowrap; min-width: 80px; }
+.diary-info { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.diary-type-badge { padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 900; }
+.diary-stock { font-size: 12px; font-weight: 800; color: var(--ink); white-space: nowrap; }
+.diary-title { flex: 1; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diary-write-btn {
+  margin-top: 14px; height: 34px; border-radius: 8px;
+  border: 1px dashed rgba(49,93,255,0.3);
+  background: rgba(49,93,255,0.04);
+  color: var(--accent); font-size: 13px; font-weight: 900;
+  cursor: pointer; transition: background 0.15s;
+}
+.diary-write-btn:hover { background: rgba(49,93,255,0.1); }
 
 /* ===== 반응형 ===== */
 @media (max-width: 1100px) {
