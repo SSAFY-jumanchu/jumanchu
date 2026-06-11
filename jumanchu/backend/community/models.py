@@ -102,3 +102,21 @@ class PostLike(models.Model):
 
     def __str__(self):
         return f"{self.user_id} likes {self.post_id}"
+
+
+class CommentLike(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="comment_likes"
+    )
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, related_name="likes")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "comment"], name="commentlike_user_comment_unique"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} likes comment {self.comment_id}"
