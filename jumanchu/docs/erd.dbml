@@ -286,9 +286,7 @@ Table long_term_score {         // [신규] 종목 장투 점수 (종목 단위,
   stock_id integer
   financial_score decimal
   growth_score decimal
-  technical_score decimal
-  news_score decimal            [note: '데이터 없으면 50']
-  total_score decimal           [note: '종목 소계 (개인 궁합은 recommendation_cache서 결합)']
+  total_score decimal           [note: '종목 소계 = 재무30+성장40 정규화 (궁합 30%는 recommendation_cache서 per-user 결합). technical/news 제외 — 장투점수_산정로직.md']
   calculated_date date
   indexes {
     (stock_id, calculated_date) [unique]

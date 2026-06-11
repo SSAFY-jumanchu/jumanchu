@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'portfolio',
     'diary',
     'community',
+    'recommend',
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
