@@ -64,6 +64,13 @@ class Order(models.Model):
     total_amount = models.DecimalField(max_digits=20, decimal_places=4)
     fee = models.DecimalField(max_digits=12, decimal_places=4, default=0)
     tax = models.DecimalField(max_digits=12, decimal_places=4, default=0)
+    realized_pnl = models.DecimalField(
+        max_digits=20,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="매도 실현손익 = (체결가-평균매입가)×수량, 매수는 NULL",
+    )
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     idempotency_key = models.CharField(max_length=64, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)

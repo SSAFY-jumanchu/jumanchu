@@ -80,3 +80,54 @@ class InvestmentProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} · {self.risk_type}"
+
+
+class Goal(models.Model):
+    """목표 마스터 — 시스템 시드(모든 유저 공통). 누적수익 목표 + 달성 뱃지."""
+
+    name = models.CharField(max_length=100)
+    target_amount = models.BigIntegerField(help_text="누적 수익 목표 금액")
+    badge_emoji = models.CharField(max_length=8)
+    badge_name = models.CharField(max_length=50)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order"]
+
+    def __str__(self):
+        return self.name
+
+
+class UserGoal(models.Model):
+    """유저별 목표 달성 기록 = 뱃지 획득 (닉네임 옆 표시)."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="goals")
+    goal = models.ForeignKey(Goal, on_delete=models.CASCADE, related_name="achievements")
+    achieved_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "goal"], name="usergoal_user_goal_unique"),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} achieved {self.goal_id}"
+
+
+class UserPreferredSector(models.Model):
+    """복수 관심 섹터 (1순위 1.0 / 2순위 0.6 / 3순위 0.3)."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="preferred_sectors")
+    sector = models.CharField(max_length=50)
+    weight = models.DecimalField(max_digits=4, decimal_places=2, help_text="순위 가중치")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "sector"], name="userpreferredsector_user_sector_unique"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} {self.sector}"
