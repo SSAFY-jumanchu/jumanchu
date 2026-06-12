@@ -1,0 +1,244 @@
+/* ============================================================
+   주만추 Design Preview — Claude Design 스타일 토큰 시스템
+   테마: light(화이트) / dark(다크) / paper(신문지)
+   html[data-theme]로 전환 — useTheme.js 참고
+   ============================================================ */
+
+:root {
+  --font-sans:
+    "Noto Sans KR", "Apple SD Gothic Neo", "Pretendard", -apple-system,
+    BlinkMacSystemFont, "Malgun Gothic", "Segoe UI", sans-serif;
+  --font-serif:
+    "Noto Serif KR", "Source Serif 4", Georgia, "Batang", "Nanum Myeongjo", serif;
+
+  --radius: 14px;
+}
+
+/* ----- 화이트 테마 (기본): Claude Design 크림 톤 ----- */
+:root,
+html[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #faf9f5;
+  --card: #ffffff;
+  --ink: #1f1d18;
+  --text: #3d3a33;
+  --muted: #73706a;
+  --faint: #a6a299;
+
+  --accent: #c15f3c;        /* 테라코타 — Claude 포인트 컬러 */
+  --positive: #0f9f6e;
+  --negative: #cf3d3d;
+  --warning: #a87a1f;
+  --purple: #7f6ba8;
+
+  /* 기존 와이어프레임 변수 계약 유지 — 유리감 대신 종이/카드 질감으로 매핑 */
+  --glass: #ffffff;
+  --glass-strong: #ffffff;
+  --glass-subtle: #f5f4ee;
+  --glass-border: #e8e6dd;
+  --glass-border-subtle: #efede4;
+  --glass-inset: inset 0 0 0 0 transparent;
+  --glass-shadow: 0 1px 2px rgba(31, 29, 24, 0.04), 0 6px 24px rgba(31, 29, 24, 0.04);
+  --glass-blur: none;
+  --glass-blur-sm: none;
+
+  --surface: var(--card);
+  --line: #e8e6dd;
+
+  /* 색상 치환 스크립트가 참조하는 보조 토큰 */
+  --overlay: #f5f4ee;       /* 흰색 반투명 배경의 대체 베이스 */
+  --line-tint: #c9c5b8;     /* 푸른빛 라인/보더의 대체 베이스 */
+
+  /* 신문지 배너(NewspaperSwipeBanner) 전용 */
+  --paper-bg: #f6f1e3;
+  --paper-ink: #2b2620;
+  --paper-line: #c8bda2;
+  --paper-accent: #9c2f23;
+  --paper-sheen: rgba(255, 255, 255, 0.25);
+  --paper-grain: rgba(0, 0, 0, 0.02);
+}
+
+/* ----- 다크 테마: Claude 다크 (따뜻한 차콜) ----- */
+html[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #262624;
+  --card: #30302e;
+  --ink: #f0eee6;
+  --text: #d6d3c9;
+  --muted: #a09d92;
+  --faint: #757268;
+
+  --accent: #d97757;
+  --positive: #34c08b;
+  --negative: #e8645f;
+  --warning: #d4a043;
+  --purple: #a795d4;
+
+  --glass: #30302e;
+  --glass-strong: #383836;
+  --glass-subtle: #2b2b29;
+  --glass-border: #44443f;
+  --glass-border-subtle: #3b3b37;
+  --glass-inset: inset 0 0 0 0 transparent;
+  --glass-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 28px rgba(0, 0, 0, 0.22);
+  --glass-blur: none;
+  --glass-blur-sm: none;
+
+  --surface: var(--card);
+  --line: #44443f;
+
+  --overlay: #45453f;
+  --line-tint: #56554d;
+
+  --paper-bg: #2e2c27;      /* 석간신문 느낌 */
+  --paper-ink: #ece5d3;
+  --paper-line: #57523f;
+  --paper-accent: #e0826a;
+  --paper-sheen: rgba(255, 255, 255, 0.045);
+  --paper-grain: rgba(0, 0, 0, 0.12);
+}
+
+/* ----- 신문지 테마: 빛바랜 신문 용지 ----- */
+html[data-theme='paper'] {
+  color-scheme: light;
+
+  --bg: #ece3cd;
+  --card: #f6efdd;
+  --ink: #221d15;
+  --text: #3a342a;
+  --muted: #6d6450;
+  --faint: #998d72;
+
+  --accent: #9c2f23;        /* 신문 빨강 */
+  --positive: #356b3c;
+  --negative: #9c2f23;
+  --warning: #8a6a1c;
+  --purple: #6b5a43;        /* 세피아 브라운 */
+
+  --glass: #f6efdd;
+  --glass-strong: #faf4e4;
+  --glass-subtle: #efe6d0;
+  --glass-border: #d4c7a8;
+  --glass-border-subtle: #ded2b6;
+  --glass-inset: inset 0 0 0 1px rgba(34, 29, 21, 0.04);
+  --glass-shadow: 0 1px 2px rgba(34, 29, 21, 0.08), 0 6px 20px rgba(34, 29, 21, 0.07);
+  --glass-blur: none;
+  --glass-blur-sm: none;
+
+  --surface: var(--card);
+  --line: #d4c7a8;
+
+  --overlay: #efe6d0;
+  --line-tint: #b9aa8a;
+
+  --paper-bg: #f3ecd8;
+  --paper-ink: #221d15;
+  --paper-line: #b9aa8a;
+  --paper-accent: #9c2f23;
+  --paper-sheen: rgba(255, 252, 240, 0.4);
+  --paper-grain: rgba(34, 29, 21, 0.025);
+}
+
+/* ============================================================ */
+
+:root {
+  font-family: var(--font-sans);
+  color: var(--text);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  min-height: 100%;
+  background: var(--bg);
+  transition: background 0.25s ease;
+}
+
+/* 신문지 테마: 종이 결 텍스처 */
+html[data-theme='paper'] {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(34, 29, 21, 0.018) 0px, transparent 1px, transparent 3px),
+    repeating-linear-gradient(90deg, rgba(34, 29, 21, 0.012) 0px, transparent 1px, transparent 4px),
+    radial-gradient(ellipse at 30% 10%, rgba(255, 252, 240, 0.55) 0%, transparent 60%);
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+
+#app { min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ===== LAYOUT ===== */
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-area {
+  flex: 1;
+  width: min(1480px, 100%);
+  margin: 0 auto;
+  padding: 24px 28px 56px;
+}
+
+/* ===== TYPOGRAPHY ===== */
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+h1, h2, h3, h4 { margin: 0; color: var(--ink); letter-spacing: -0.01em; }
+h1 { font-size: 28px; font-weight: 800; line-height: 1.25; }
+h2 { font-size: 19px; font-weight: 800; line-height: 1.3; }
+h3 { font-size: 15px; line-height: 1.3; }
+h4 { font-size: 14px; line-height: 1.4; font-weight: 700; }
+
+/* ===== PANEL — Claude Design 카드 ===== */
+.panel {
+  border-radius: var(--radius);
+  background: var(--card);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-inset);
+  padding: 20px;
+  min-width: 0;
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+/* 신문지 테마: 패널에 이중 괘선(신문 박스) 느낌 */
+html[data-theme='paper'] .panel {
+  border: 1px solid var(--paper-line);
+  box-shadow: inset 0 0 0 3px var(--card), inset 0 0 0 4px var(--paper-line), var(--glass-shadow);
+  border-radius: 6px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+/* ===== COLOR UTILS ===== */
+.is-up { color: var(--positive) !important; }
+.is-down { color: var(--negative) !important; }
+.is-up-text { color: var(--positive); }
+.is-down-text { color: var(--negative); }
