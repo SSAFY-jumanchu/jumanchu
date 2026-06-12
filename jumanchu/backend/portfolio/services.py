@@ -11,8 +11,9 @@ SCRUM-121. 핵심 학습: DB 트랜잭션(atomic / select_for_update / idempoten
 """
 from __future__ import annotations
 
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
+import requests
 from django.db import transaction
 
 from portfolio.models import Account, Holding, Order
@@ -52,6 +53,10 @@ class InsufficientHolding(TradeError):
     """매도 시 보유 수량 부족."""
 
 
+class PriceUnavailable(TradeError):
+    """KIS 현재가 조회 실패 (외부 API 오류). view에서 503으로 변환."""
+
+
 # ───────────────────────── 내부 헬퍼 ─────────────────────────
 
 
@@ -61,6 +66,19 @@ def _resolve_stock(stock_code: str) -> Stock:
     if stock is None:
         raise StockNotFound(stock_code)
     return stock
+
+
+def _current_price(stock: Stock) -> Decimal:
+    """KIS 현재가(Decimal). 외부 API 오류는 PriceUnavailable로 감싼다.
+
+    StockPriceView와 동일한 예외 집합을 잡아 도메인 예외로 변환 →
+    view는 KIS 라이브러리 예외를 몰라도 됨(503만 처리).
+    """
+    try:
+        return fetch_price(stock)["current"]
+    except (requests.HTTPError, requests.Timeout, RuntimeError, KeyError,
+            ValueError, InvalidOperation) as exc:
+        raise PriceUnavailable(stock.code) from exc
 
 
 def _holding_snapshot(
@@ -109,7 +127,7 @@ def preview_order(user, stock_code: str, side: str, quantity: int) -> dict:
     - 매도(SELL): 실현손익(realized_profit) + 실현 수익률(realized_profit_rate)
     """
     stock = _resolve_stock(stock_code)
-    price = fetch_price(stock)["current"]  # KIS 현재가(Decimal). 실패 시 raise → view 503
+    price = _current_price(stock)  # KIS 현재가(Decimal). 실패 시 PriceUnavailable → view 503
     total = price * quantity
     fee = _fee(total)
 

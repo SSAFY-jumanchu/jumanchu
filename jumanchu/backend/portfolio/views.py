@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from portfolio import serializers as s
+from portfolio import services
 
 
 def _stub():
@@ -21,7 +22,21 @@ class OrderPreviewView(APIView):
         responses={200: s.OrderPreviewResponseSerializer},
     )
     def post(self, request):
-        return _stub()
+        req = s.OrderPreviewRequestSerializer(data=request.data)
+        req.is_valid(raise_exception=True)
+        try:
+            result = services.preview_order(request.user, **req.validated_data)
+        except services.StockNotFound:
+            return Response(
+                {'detail': '해당 종목을 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except services.PriceUnavailable:
+            return Response(
+                {'detail': 'KIS 외부 API 오류', 'code': 'EXTERNAL_API_ERROR'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(s.OrderPreviewResponseSerializer(result).data)
 
 
 @extend_schema(tags=['Order'])
