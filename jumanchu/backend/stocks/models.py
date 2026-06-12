@@ -138,6 +138,9 @@ class StockNews(models.Model):
 class NewsRelatedStock(models.Model):
     news = models.ForeignKey(StockNews, on_delete=models.CASCADE, related_name="related_stocks")
     stock = models.ForeignKey(Stock, on_delete=models.CASCADE, related_name="related_news")
+    relevance_score = models.DecimalField(
+        max_digits=4, decimal_places=3, default=1, help_text="매칭 신뢰도(제목매칭 1.0 등)·정렬용"
+    )
 
     class Meta:
         constraints = [
