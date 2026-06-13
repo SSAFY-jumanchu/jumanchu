@@ -8,11 +8,7 @@ from rest_framework.views import APIView
 from diary.models import StockDiary
 from portfolio import serializers as s
 from portfolio import services
-from portfolio.models import Order
-
-
-def _stub():
-    return Response({'detail': 'Not implemented'}, status=status.HTTP_501_NOT_IMPLEMENTED)
+from portfolio.models import Account, Order
 
 
 def _as_int(value, default: int) -> int:
@@ -31,6 +27,14 @@ def _parse_date_safe(value):
         return parse_date(value)
     except ValueError:
         return None
+
+
+def _price_unavailable():
+    """KIS 현재가 조회 실패 → 503."""
+    return Response(
+        {'detail': 'KIS 외부 API 오류', 'code': 'EXTERNAL_API_ERROR'},
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
 
 
 @extend_schema(tags=['Order'])
@@ -178,7 +182,11 @@ class PortfolioSummaryView(APIView):
         responses={200: s.PortfolioSummaryResponseSerializer},
     )
     def get(self, request):
-        return _stub()
+        try:
+            result = services.portfolio_summary(request.user)
+        except services.PriceUnavailable:
+            return _price_unavailable()
+        return Response(s.PortfolioSummaryResponseSerializer(result).data)
 
 
 @extend_schema(tags=['Portfolio'])
@@ -196,7 +204,16 @@ class HoldingsListView(APIView):
         responses={200: s.HoldingsListResponseSerializer},
     )
     def get(self, request):
-        return _stub()
+        p = request.query_params
+        try:
+            result = services.holdings_list(
+                request.user,
+                sort=p.get('sort', 'value'),
+                order=p.get('order', 'desc'),
+            )
+        except services.PriceUnavailable:
+            return _price_unavailable()
+        return Response(s.HoldingsListResponseSerializer(result).data)
 
 
 @extend_schema(tags=['Portfolio'])
@@ -209,7 +226,21 @@ class HoldingDetailView(APIView):
         responses={200: s.HoldingDetailResponseSerializer},
     )
     def get(self, request, code: str):
-        return _stub()
+        try:
+            result = services.holding_detail(request.user, code)
+        except services.StockNotFound:
+            return Response(
+                {'detail': '해당 종목을 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except services.PriceUnavailable:
+            return _price_unavailable()
+        if result is None:
+            return Response(
+                {'detail': '보유하지 않은 종목입니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(s.HoldingDetailResponseSerializer(result).data)
 
 
 @extend_schema(tags=['Portfolio'])
@@ -221,7 +252,8 @@ class BalanceView(APIView):
         responses={200: s.BalanceResponseSerializer},
     )
     def get(self, request):
-        return _stub()
+        account = Account.objects.get(user=request.user)
+        return Response(s.BalanceResponseSerializer({'account': account}).data)
 
 
 @extend_schema(tags=['Portfolio'])
@@ -233,4 +265,8 @@ class AllocationView(APIView):
         responses={200: s.AllocationResponseSerializer},
     )
     def get(self, request):
-        return _stub()
+        try:
+            result = services.allocation(request.user)
+        except services.PriceUnavailable:
+            return _price_unavailable()
+        return Response(s.AllocationResponseSerializer(result).data)

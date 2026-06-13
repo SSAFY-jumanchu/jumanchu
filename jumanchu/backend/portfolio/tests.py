@@ -229,3 +229,63 @@ class ConcurrencyTests(TransactionTestCase):
         self.assertGreaterEqual(account.balance, Decimal("0"))           # 음수 절대 안 됨
         self.assertEqual(Order.objects.filter(user=user).count(), 1)     # 딱 1건만 체결
         self.assertEqual(account.balance, Decimal("19988"))              # 100000 - 80012
+
+
+class PortfolioReadTests(TestCase):
+    def setUp(self):
+        self.user = _make_user("reader")
+        self.account = Account.objects.create(user=self.user, balance=Decimal("50000000"))  # 현금 5천만
+        self.stock = _make_stock("A0001")
+        self.stock2 = _make_stock("B0002")
+        Holding.objects.create(
+            user=self.user, stock=self.stock, quantity=10, average_price=Decimal("70000")
+        )
+        Holding.objects.create(
+            user=self.user, stock=self.stock2, quantity=5, average_price=Decimal("100000")
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    @patch("portfolio.services._current_price", return_value=PRICE)
+    def test_summary(self, _):
+        resp = self.client.get(reverse("portfolio-summary"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["holdings_count"], 2)
+        # 평가액 10*80000 + 5*80000 = 1,200,000 / 투자원금 700000+500000 = 1,200,000 → 손익 0
+        self.assertEqual(Decimal(resp.data["total_current_value"]), Decimal("1200000"))
+        self.assertEqual(Decimal(resp.data["total_profit_loss"]), Decimal("0"))
+        # 총자산 = 현금 5천만 + 주식 120만
+        self.assertEqual(Decimal(resp.data["total_assets"]), Decimal("51200000"))
+
+    @patch("portfolio.services._current_price", return_value=PRICE)
+    def test_holdings_list_sorted_by_value_desc(self, _):
+        resp = self.client.get(reverse("portfolio-holdings"), {"sort": "value", "order": "desc"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["total_count"], 2)
+        # 평가액 큰 순: A0001(80만) > B0002(40만)
+        self.assertEqual(resp.data["items"][0]["stock"]["code"], "A0001")
+
+    def test_balance(self):
+        resp = self.client.get(reverse("portfolio-balance"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Decimal(resp.data["account"]["balance"]), Decimal("50000000"))
+
+    @patch("portfolio.services._current_price", return_value=PRICE)
+    def test_allocation_cash_and_stocks(self, _):
+        resp = self.client.get(reverse("portfolio-allocation"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.data["by_stock"]), 2)
+        # 현금 5천만 / 총자산 5120만 ≈ 97.7%
+        self.assertGreater(resp.data["cash_rate"], 95)
+
+    @patch("portfolio.services._current_price", return_value=PRICE)
+    def test_holding_detail_held(self, _):
+        resp = self.client.get(reverse("portfolio-holding-detail", kwargs={"code": "A0001"}))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["holding"]["quantity"], 10)
+
+    @patch("portfolio.services._current_price", return_value=PRICE)
+    def test_holding_detail_not_held_404(self, _):
+        _make_stock("Z9999")  # 종목은 있지만 미보유
+        resp = self.client.get(reverse("portfolio-holding-detail", kwargs={"code": "Z9999"}))
+        self.assertEqual(resp.status_code, 404)

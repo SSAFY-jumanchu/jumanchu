@@ -355,3 +355,144 @@ def order_result(order: Order) -> dict:
     account = Account.objects.get(user=order.user)
     holding = Holding.objects.filter(user=order.user, stock=order.stock).first()
     return _build_result(order, account.balance, holding)
+
+
+# ───────────────────────── 포트폴리오 조회 (읽기 전용) ─────────────────────────
+
+
+def _priced_holdings(user) -> list:
+    """유저 보유 종목을 현재가로 평가한 스냅샷 리스트(HoldingSerializer 모양)."""
+    holdings = Holding.objects.filter(user=user).select_related("stock")
+    return [
+        _holding_snapshot(
+            h.stock,
+            h.quantity,
+            h.average_price,
+            _current_price(h.stock),
+            first_acquired_at=h.first_acquired_at,
+            updated_at=h.updated_at,
+        )
+        for h in holdings
+    ]
+
+
+def _sum(items, key) -> Decimal:
+    """스냅샷 리스트에서 특정 키의 Decimal 합계."""
+    total = Decimal("0")
+    for it in items:
+        total += it[key]
+    return total
+
+
+def _pct(value, total) -> float:
+    """value / total 백분율. total이 0 이하면 0.0."""
+    return float(value / total * 100) if total > 0 else 0.0
+
+
+def portfolio_summary(user) -> dict:
+    """홈 위젯용 통합 조회 — 총 평가/손익 + 총자산 + 보유 미리보기(평가액 상위 5)."""
+    items = _priced_holdings(user)
+    total_invested = _sum(items, "total_invested")
+    total_current_value = _sum(items, "current_value")
+    total_profit_loss = total_current_value - total_invested
+    account = Account.objects.get(user=user)
+    preview = sorted(items, key=lambda h: h["current_value"], reverse=True)[:5]
+    return {
+        "account": account,
+        "total_invested": total_invested,
+        "total_current_value": total_current_value,
+        "total_profit_loss": total_profit_loss,
+        "total_profit_loss_rate": _pct(total_profit_loss, total_invested),
+        "total_assets": account.balance + total_current_value,
+        "holdings_count": len(items),
+        "holdings_preview": preview,
+        "generated_at": timezone.now(),
+    }
+
+
+_HOLDING_SORT_KEYS = {
+    "value": lambda h: h["current_value"],
+    "profit_loss": lambda h: h["profit_loss"],
+    "profit_loss_rate": lambda h: h["profit_loss_rate"],
+    "code": lambda h: h["stock"].code,
+}
+
+
+def holdings_list(user, sort: str = "value", order: str = "desc") -> dict:
+    """보유 종목 리스트 — 정렬(sort/order) + 합계."""
+    items = _priced_holdings(user)
+    keyfn = _HOLDING_SORT_KEYS.get(sort, _HOLDING_SORT_KEYS["value"])
+    items.sort(key=keyfn, reverse=(order != "asc"))
+    total_invested = _sum(items, "total_invested")
+    total_current_value = _sum(items, "current_value")
+    return {
+        "items": items,
+        "total_count": len(items),
+        "total_invested": total_invested,
+        "total_current_value": total_current_value,
+        "total_profit_loss": total_current_value - total_invested,
+        "generated_at": timezone.now(),
+    }
+
+
+def holding_detail(user, stock_code: str):
+    """특정 종목 보유 상세 — 평가 + 거래 수 + 최근 주문 + 일기 수.
+
+    종목 자체가 없으면 StockNotFound, 보유는 안 했으면 None(view에서 404).
+    """
+    from diary.models import StockDiary  # 지연 import(앱 간 순환 방지)
+
+    stock = _resolve_stock(stock_code)
+    holding = Holding.objects.filter(user=user, stock=stock).first()
+    if holding is None:
+        return None
+
+    snapshot = _holding_snapshot(
+        stock,
+        holding.quantity,
+        holding.average_price,
+        _current_price(stock),
+        first_acquired_at=holding.first_acquired_at,
+        updated_at=holding.updated_at,
+    )
+    orders = Order.objects.filter(user=user, stock=stock).order_by("-created_at")
+    return {
+        "holding": snapshot,
+        "transaction_count": orders.count(),
+        "recent_orders": list(orders[:10]),
+        "related_diaries_count": StockDiary.objects.filter(user=user, stock=stock).count(),
+    }
+
+
+def allocation(user) -> dict:
+    """자산 배분 — 섹터/종목별 비중 + 현금 비중 (모두 총자산 기준, 합 ≈ 100%)."""
+    items = _priced_holdings(user)
+    account = Account.objects.get(user=user)
+    total_value = _sum(items, "current_value")        # 주식 평가액 합
+    total_assets = total_value + account.balance       # 현금 포함
+
+    by_stock = [
+        {
+            "stock_code": h["stock"].code,
+            "stock_name": h["stock"].name,
+            "value": h["current_value"],
+            "rate": _pct(h["current_value"], total_assets),
+        }
+        for h in items
+    ]
+
+    sector_value: dict = {}
+    for h in items:
+        sec = h["stock"].sector or "기타"
+        sector_value[sec] = sector_value.get(sec, Decimal("0")) + h["current_value"]
+    by_sector = [
+        {"sector": sec, "value": val, "rate": _pct(val, total_assets)}
+        for sec, val in sector_value.items()
+    ]
+
+    return {
+        "total_value": total_value,
+        "by_sector": by_sector,
+        "by_stock": by_stock,
+        "cash_rate": _pct(account.balance, total_assets),
+    }
