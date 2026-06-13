@@ -10,6 +10,7 @@ api_v1_patterns = [
     path('auth/', include('accounts.urls')),
     path('', include('stocks.urls')),
     path('', include('portfolio.urls')),
+    path('', include('recommend.urls')),
 ]
 
 urlpatterns = [
