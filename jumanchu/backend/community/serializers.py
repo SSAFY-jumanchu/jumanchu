@@ -11,12 +11,13 @@ class PostSerializer(serializers.ModelSerializer):
     stock_code = serializers.CharField(source='stock.code', read_only=True, allow_null=True)
     stock_name = serializers.CharField(source='stock.name', read_only=True, allow_null=True)
     comment_count = serializers.IntegerField(read_only=True)
+    is_liked = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = CommunityPost
         fields = ['id', 'user_id', 'nickname', 'stock_code', 'stock_name',
                   'category', 'title', 'body', 'view_count', 'like_count',
-                  'comment_count', 'created_at']
+                  'comment_count', 'is_liked', 'created_at']
 
 
 class PostWriteSerializer(serializers.Serializer):
@@ -51,4 +52,19 @@ class CommentWriteSerializer(serializers.Serializer):
 
 class CommentListResponseSerializer(serializers.Serializer):
     items = CommentSerializer(many=True)
+    total = serializers.IntegerField()
+
+
+class LikeToggleResponseSerializer(serializers.Serializer):
+    liked = serializers.BooleanField()
+    like_count = serializers.IntegerField()
+
+
+class UserBriefSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+    nickname = serializers.CharField()
+
+
+class FollowListResponseSerializer(serializers.Serializer):
+    items = UserBriefSerializer(many=True)
     total = serializers.IntegerField()

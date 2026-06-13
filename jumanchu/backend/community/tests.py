@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from community.models import Comment, CommunityPost
+from community.models import Comment, CommunityPost, Follow
 from stocks.models import Stock
 
 User = get_user_model()
@@ -174,3 +174,83 @@ class CommentTests(TestCase):
         client2.force_authenticate(user=other)
         resp = client2.delete(reverse("comment-detail", kwargs={"id": comment.id}))
         self.assertEqual(resp.status_code, 403)
+
+
+class LikeFollowTests(TestCase):
+    def setUp(self):
+        self.user = _make_user()
+        self.stock = _make_stock("A0001")
+        self.post = _post(self.user, self.stock)
+        self.comment = Comment.objects.create(post=self.post, user=self.user, body="c")
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_post_like_toggle(self):
+        url = reverse("post-like", kwargs={"id": self.post.id})
+        r1 = self.client.post(url)
+        self.assertEqual(r1.status_code, 200)
+        self.assertTrue(r1.data["liked"])
+        self.assertEqual(r1.data["like_count"], 1)
+        r2 = self.client.post(url)  # 다시 누르면 취소
+        self.assertFalse(r2.data["liked"])
+        self.assertEqual(r2.data["like_count"], 0)
+
+    def test_post_like_missing_404(self):
+        r = self.client.post(reverse("post-like", kwargs={"id": 99999}))
+        self.assertEqual(r.status_code, 404)
+
+    def test_is_liked_in_detail(self):
+        self.client.post(reverse("post-like", kwargs={"id": self.post.id}))
+        r = self.client.get(reverse("post-detail", kwargs={"id": self.post.id}))
+        self.assertTrue(r.data["is_liked"])
+
+    def test_comment_like_toggle(self):
+        url = reverse("comment-like", kwargs={"id": self.comment.id})
+        r1 = self.client.post(url)
+        self.assertTrue(r1.data["liked"])
+        self.assertEqual(r1.data["like_count"], 1)
+        r2 = self.client.post(url)
+        self.assertFalse(r2.data["liked"])
+        self.assertEqual(r2.data["like_count"], 0)
+
+    def test_follow_and_unfollow(self):
+        target = _make_user("target")
+        r = self.client.post(reverse("follow", kwargs={"user_id": target.id}))
+        self.assertEqual(r.status_code, 204)
+        self.assertTrue(Follow.objects.filter(follower=self.user, following=target).exists())
+        r2 = self.client.delete(reverse("follow", kwargs={"user_id": target.id}))
+        self.assertEqual(r2.status_code, 204)
+        self.assertFalse(Follow.objects.filter(follower=self.user, following=target).exists())
+
+    def test_follow_self_400(self):
+        r = self.client.post(reverse("follow", kwargs={"user_id": self.user.id}))
+        self.assertEqual(r.status_code, 400)
+
+    def test_follow_missing_user_404(self):
+        r = self.client.post(reverse("follow", kwargs={"user_id": 99999}))
+        self.assertEqual(r.status_code, 404)
+
+    def test_unfollow_when_not_following_404(self):
+        target = _make_user("target")
+        r = self.client.delete(reverse("follow", kwargs={"user_id": target.id}))
+        self.assertEqual(r.status_code, 404)
+
+    def test_followers_and_following_lists(self):
+        target = _make_user("target")
+        self.client.post(reverse("follow", kwargs={"user_id": target.id}))
+        r = self.client.get(reverse("followers", kwargs={"user_id": target.id}))
+        self.assertEqual(r.data["total"], 1)
+        self.assertEqual(r.data["items"][0]["user_id"], self.user.id)
+        r2 = self.client.get(reverse("following", kwargs={"user_id": self.user.id}))
+        self.assertEqual(r2.data["total"], 1)
+        self.assertEqual(r2.data["items"][0]["user_id"], target.id)
+
+    def test_like_count_two_users(self):
+        url = reverse("post-like", kwargs={"id": self.post.id})
+        self.client.post(url)
+        other = _make_user("other2")
+        c2 = APIClient()
+        c2.force_authenticate(user=other)
+        c2.post(url)
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.like_count, 2)
