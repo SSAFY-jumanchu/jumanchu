@@ -11,6 +11,7 @@ api_v1_patterns = [
     path('', include('stocks.urls')),
     path('', include('portfolio.urls')),
     path('', include('recommend.urls')),
+    path('', include('diary.urls')),
 ]
 
 urlpatterns = [
