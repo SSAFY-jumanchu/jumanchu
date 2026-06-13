@@ -1,15 +1,36 @@
+from django.utils.dateparse import parse_date
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from diary.models import StockDiary
 from portfolio import serializers as s
 from portfolio import services
+from portfolio.models import Order
 
 
 def _stub():
     return Response({'detail': 'Not implemented'}, status=status.HTTP_501_NOT_IMPLEMENTED)
+
+
+def _as_int(value, default: int) -> int:
+    """쿼리 파라미터를 정수로. 비거나 형식 오류면 default."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_date_safe(value):
+    """YYYY-MM-DD → date. 비었거나 형식/값이 잘못되면 None (500 방지)."""
+    if not value:
+        return None
+    try:
+        return parse_date(value)
+    except ValueError:
+        return None
 
 
 @extend_schema(tags=['Order'])
@@ -49,7 +70,36 @@ class OrderListCreateView(APIView):
         responses={201: s.OrderCreateResponseSerializer},
     )
     def post(self, request):
-        return _stub()
+        req = s.OrderCreateRequestSerializer(data=request.data)
+        req.is_valid(raise_exception=True)
+        data = req.validated_data
+        run = services.execute_buy if data['side'] == Order.Side.BUY else services.execute_sell
+        try:
+            result = run(request.user, data['stock_code'], data['quantity'], data['idempotency_key'])
+        except services.StockNotFound:
+            return Response(
+                {'detail': '해당 종목을 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except services.InsufficientBalance as exc:
+            return Response(
+                {'detail': str(exc), 'code': 'INSUFFICIENT_BALANCE'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except services.InsufficientHolding as exc:
+            return Response(
+                {'detail': str(exc), 'code': 'INSUFFICIENT_HOLDING'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except services.PriceUnavailable:
+            return Response(
+                {'detail': 'KIS 외부 API 오류', 'code': 'EXTERNAL_API_ERROR'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(
+            s.OrderCreateResponseSerializer(result).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @extend_schema(
         operation_id='orders_list',
@@ -66,7 +116,30 @@ class OrderListCreateView(APIView):
         responses={200: s.OrderListResponseSerializer},
     )
     def get(self, request):
-        return _stub()
+        qs = Order.objects.filter(user=request.user).select_related('stock')
+        p = request.query_params
+        if p.get('side'):
+            qs = qs.filter(side=p['side'])
+        if p.get('stock_code'):
+            qs = qs.filter(stock__code=p['stock_code'])
+        if p.get('status'):
+            qs = qs.filter(status=p['status'])
+        date_from = _parse_date_safe(p.get('from'))
+        date_to = _parse_date_safe(p.get('to'))
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+        qs = qs.order_by('-created_at')
+
+        total = qs.count()
+        page = max(1, _as_int(p.get('page'), 1))
+        size = min(100, max(1, _as_int(p.get('size'), 20)))
+        start = (page - 1) * size
+        items = qs[start:start + size]
+
+        body = {'items': items, 'page': page, 'size': size, 'total': total}
+        return Response(s.OrderListResponseSerializer(body).data)
 
 
 @extend_schema(tags=['Order'])
@@ -79,7 +152,21 @@ class OrderDetailView(APIView):
         responses={200: s.OrderDetailResponseSerializer},
     )
     def get(self, request, id: int):
-        return _stub()
+        order = (
+            Order.objects.filter(id=id, user=request.user).select_related('stock').first()
+        )
+        if order is None:
+            return Response(
+                {'detail': '주문을 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        related_diary_id = (
+            StockDiary.objects.filter(order=order, user=request.user)
+            .values_list('id', flat=True)
+            .first()
+        )
+        body = {'order': order, 'stock': order.stock, 'related_diary_id': related_diary_id}
+        return Response(s.OrderDetailResponseSerializer(body).data)
 
 
 @extend_schema(tags=['Portfolio'])

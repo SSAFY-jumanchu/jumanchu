@@ -14,7 +14,8 @@ from __future__ import annotations
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 import requests
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from portfolio.models import Account, Holding, Order
 from stocks.models import Stock
@@ -183,3 +184,174 @@ def preview_order(user, stock_code: str, side: str, quantity: int) -> dict:
                 )
 
     return {"is_valid": not errors, "errors": errors, "preview": body}
+
+
+# ───────────────────────── execute (DB 변경) ─────────────────────────
+
+
+def execute_buy(user, stock_code: str, quantity: int, idempotency_key: str) -> dict:
+    """시장가 매수 — 잔액 차감 + 보유 갱신 + 주문 기록을 한 트랜잭션으로 처리.
+
+    반환: OrderCreateResponseSerializer 모양 dict {order, balance_after, holding_after}.
+    balance_after/holding_after는 트랜잭션 안(잠금 보유 중)에서 확정하므로,
+    같은 유저의 동시 매매가 끼어들어도 "이 주문 직후" 상태를 정확히 반영한다.
+
+    안전장치 3종:
+    - transaction.atomic : 잔액/보유/주문 변경이 all-or-nothing (중간 실패 시 전부 롤백)
+    - select_for_update  : Account 행을 잠가 동시 매수 race condition 방지
+    - idempotency_key    : 같은 주문 중복 요청 시 한 번만 체결 (선검사 + unique 제약)
+    """
+    # 멱등 선검사: 이미 처리된 주문이면 재처리하지 않고 현재 상태로 반환
+    existing = Order.objects.filter(idempotency_key=idempotency_key).first()
+    if existing is not None:
+        return order_result(existing)
+
+    stock = _resolve_stock(stock_code)
+    price = _current_price(stock)
+    total = price * quantity
+    fee = _fee(total)
+    need = total + fee
+
+    try:
+        with transaction.atomic():
+            account = Account.objects.select_for_update().get(user=user)  # 행 잠금
+            if account.balance < need:
+                raise InsufficientBalance(f"잔액 부족: 보유 {account.balance}, 필요 {need}")
+            account.balance -= need
+            account.save(update_fields=["balance", "updated_at"])
+
+            holding = (
+                Holding.objects.select_for_update().filter(user=user, stock=stock).first()
+            )
+            if holding is not None:
+                new_qty = holding.quantity + quantity
+                holding.average_price = _round_won(
+                    (holding.average_price * holding.quantity + total) / new_qty
+                )  # 가중평균(원 단위)
+                holding.quantity = new_qty
+                holding.save(update_fields=["quantity", "average_price", "updated_at"])
+            else:
+                holding = Holding.objects.create(
+                    user=user,
+                    stock=stock,
+                    quantity=quantity,
+                    average_price=_round_won(total / quantity),
+                )
+
+            order = Order.objects.create(
+                user=user,
+                account=account,
+                stock=stock,
+                side=Order.Side.BUY,
+                quantity=quantity,
+                price=price,
+                total_amount=total,
+                fee=fee,
+                tax=Decimal("0"),
+                realized_pnl=None,  # 매수는 실현손익 없음
+                status=Order.Status.FILLED,
+                executed_at=timezone.now(),
+                idempotency_key=idempotency_key,
+            )
+            # 잠금 보유 중(트랜잭션 안)에 응답 스냅샷 확정 → 동시 매매와 무관하게 정확
+            return _build_result(order, account.balance, holding)
+    except IntegrityError:
+        # 동시 요청이 같은 idempotency_key로 먼저 커밋 → 이 트랜잭션은 롤백됨
+        # (잔액/보유 변경도 함께 롤백되어 이중 체결 없음). 기존 주문을 반환.
+        existing = Order.objects.filter(idempotency_key=idempotency_key).first()
+        if existing is not None:
+            return order_result(existing)
+        raise
+
+
+def execute_sell(user, stock_code: str, quantity: int, idempotency_key: str) -> dict:
+    """시장가 매도 — 실현손익 계산 + 잔액 증가 + 보유 차감을 한 트랜잭션으로 처리.
+
+    반환은 execute_buy와 동일한 OrderCreateResponseSerializer 모양 dict.
+    안전장치(atomic / select_for_update / idempotency)와 락 순서(account→holding)도 동일.
+    """
+    existing = Order.objects.filter(idempotency_key=idempotency_key).first()
+    if existing is not None:
+        return order_result(existing)
+
+    stock = _resolve_stock(stock_code)
+    price = _current_price(stock)
+    total = price * quantity
+    fee = _fee(total)
+    proceeds = total - fee  # 매도 대금에서 수수료를 떼고 입금
+
+    try:
+        with transaction.atomic():
+            account = Account.objects.select_for_update().get(user=user)  # 락 순서: account 먼저
+            holding = (
+                Holding.objects.select_for_update().filter(user=user, stock=stock).first()
+            )
+            if holding is None or holding.quantity < quantity:
+                have = holding.quantity if holding is not None else 0
+                raise InsufficientHolding(f"보유 부족: 보유 {have}, 매도 {quantity}")
+
+            # 실현손익 = (체결가 - 평균매입가) × 수량 (ERD 정의, 수수료/세금 제외 gross)
+            realized = (price - holding.average_price) * quantity
+
+            account.balance += proceeds
+            account.save(update_fields=["balance", "updated_at"])
+
+            remaining = holding.quantity - quantity
+            if remaining == 0:
+                holding.delete()  # 다 팔면 보유 행 제거
+                holding = None    # 응답 holding_after = None
+            else:
+                holding.quantity = remaining  # 평균단가는 매도해도 불변
+                holding.save(update_fields=["quantity", "updated_at"])
+
+            order = Order.objects.create(
+                user=user,
+                account=account,
+                stock=stock,
+                side=Order.Side.SELL,
+                quantity=quantity,
+                price=price,
+                total_amount=total,
+                fee=fee,
+                tax=Decimal("0"),
+                realized_pnl=realized,
+                status=Order.Status.FILLED,
+                executed_at=timezone.now(),
+                idempotency_key=idempotency_key,
+            )
+            return _build_result(order, account.balance, holding)
+    except IntegrityError:
+        existing = Order.objects.filter(idempotency_key=idempotency_key).first()
+        if existing is not None:
+            return order_result(existing)
+        raise
+
+
+def _build_result(order: Order, balance_after, holding) -> dict:
+    """OrderCreateResponseSerializer 모양 dict.
+
+    현재가는 방금 체결가(order.price)를 써서 KIS 재호출을 피한다.
+    holding이 None이면(다 팔았거나 보유 없음) holding_after=None.
+    """
+    holding_after = None
+    if holding is not None:
+        holding_after = _holding_snapshot(
+            order.stock,
+            holding.quantity,
+            holding.average_price,
+            order.price,
+            first_acquired_at=holding.first_acquired_at,
+            updated_at=holding.updated_at,
+        )
+    return {"order": order, "balance_after": balance_after, "holding_after": holding_after}
+
+
+def order_result(order: Order) -> dict:
+    """멱등 재요청(이미 처리된 주문) 응답용 — 현재 DB 상태를 echo.
+
+    원래 체결 시점의 잔액은 따로 저장하지 않으므로, 재요청 시엔 현재 잔액/보유를 보여준다.
+    신규 체결 응답은 execute_buy/sell이 트랜잭션 안에서 _build_result로 직접 만든다.
+    """
+    account = Account.objects.get(user=order.user)
+    holding = Holding.objects.filter(user=order.user, stock=order.stock).first()
+    return _build_result(order, account.balance, holding)
