@@ -60,15 +60,11 @@ const filteredTrades = computed(() => {
 
 const account = reactive({
   balance: 10532800,
-  krw: 1247800,
-  usd: 6570.22,
-  usdKrw: 1383.5,
   totalInvested: 9285000,
   monthProfit: 318400,
   sellProfit: 110500,
   dividend: 24800,
   interest: 3200,
-  orderable: 1247800,
 })
 
 const profitPct = computed(() => ((account.monthProfit / account.totalInvested) * 100).toFixed(2))
@@ -152,7 +148,7 @@ const isEditingInfo = ref(false)
 
         <!-- 상단 3카드 -->
         <div class="invest-cards">
-          <!-- Balance Card -->
+          <!-- 기본계좌 + 수익분석 (한 카드) -->
           <div class="panel acc-balance-card">
             <div class="acc-label">기본계좌 · 주식</div>
             <div class="acc-balance">{{ fmt(account.balance) }}<span class="acc-unit">원</span></div>
@@ -161,24 +157,24 @@ const isEditingInfo = ref(false)
               <button class="acc-btn">보내기</button>
               <button class="acc-btn">환전</button>
             </div>
-            <dl class="acc-dl">
-              <div class="acc-row">
-                <dt>총 주문 가능 금액</dt>
-                <dd>{{ fmt(account.orderable) }}원</dd>
+
+            <!-- 수익분석 -->
+            <div class="acc-analysis">
+              <div class="acc-label">수익분석</div>
+              <div class="analysis-bars">
+                <div v-for="m in monthlyReturns" :key="m.label" class="ab-col">
+                  <div class="ab-bar-wrap">
+                    <div
+                      class="ab-bar"
+                      :class="m.val >= 0 ? 'pos-bar' : 'neg-bar'"
+                      :style="{ height: Math.abs(m.val) * 5 + 'px' }"
+                    ></div>
+                  </div>
+                  <div class="ab-val" :class="m.val >= 0 ? 'pos' : 'neg'">{{ m.val > 0 ? '+' : '' }}{{ m.val }}%</div>
+                  <div class="ab-label">{{ m.label }}</div>
+                </div>
               </div>
-              <div class="acc-row sub">
-                <dt>🇰🇷 원화</dt>
-                <dd>{{ fmt(account.krw) }}원</dd>
-              </div>
-              <div class="acc-row sub">
-                <dt>🇺🇸 달러</dt>
-                <dd>${{ account.usd.toFixed(2) }}<span class="usd-krw"> ≈ {{ fmt(Math.round(account.usd * account.usdKrw)) }}원</span></dd>
-              </div>
-              <div class="acc-row divider">
-                <dt>총 투자 금액</dt>
-                <dd>{{ fmt(account.totalInvested) }}원</dd>
-              </div>
-            </dl>
+            </div>
           </div>
 
           <!-- Profit Card -->
@@ -214,24 +210,6 @@ const isEditingInfo = ref(false)
                   {{ ((h.cur - h.avg) / h.avg * 100).toFixed(1) }}%
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 수익분석 -->
-        <div class="panel acc-analysis-card">
-          <div class="acc-label">수익분석</div>
-          <div class="analysis-bars">
-            <div v-for="m in monthlyReturns" :key="m.label" class="ab-col">
-              <div class="ab-bar-wrap">
-                <div
-                  class="ab-bar"
-                  :class="m.val >= 0 ? 'pos-bar' : 'neg-bar'"
-                  :style="{ height: Math.abs(m.val) * 5 + 'px' }"
-                ></div>
-              </div>
-              <div class="ab-val" :class="m.val >= 0 ? 'pos' : 'neg'">{{ m.val > 0 ? '+' : '' }}{{ m.val }}%</div>
-              <div class="ab-label">{{ m.label }}</div>
             </div>
           </div>
         </div>
@@ -320,6 +298,19 @@ const isEditingInfo = ref(false)
         </div>
 
         <div class="info-grid">
+          <!-- Invest Type Card -->
+          <div class="panel info-card">
+            <div class="info-card-title">투자 성향</div>
+            <div class="invest-type-badge">{{ user.investType }}</div>
+            <p class="invest-desc">안정성을 추구하면서 꾸준한 성장을 원하는 투자 유형이에요. 배당주와 우량 성장주를 균형 있게 담는 것을 권장해요.</p>
+            <div class="invest-bars">
+              <div class="ib-row"><span>안정성</span><div class="ib-track"><div class="ib-fill" style="width:62%; background:var(--accent)"></div></div><span>62</span></div>
+              <div class="ib-row"><span>성장성</span><div class="ib-track"><div class="ib-fill" style="width:78%; background:var(--purple)"></div></div><span>78</span></div>
+              <div class="ib-row"><span>리스크허용</span><div class="ib-track"><div class="ib-fill" style="width:45%; background:#22c55e"></div></div><span>45</span></div>
+            </div>
+            <button class="retest-btn">투자 성향 재검사</button>
+          </div>
+
           <!-- Personal Info Card -->
           <div class="panel info-card">
             <div class="info-card-title">기본 정보</div>
@@ -368,19 +359,6 @@ const isEditingInfo = ref(false)
                 <dd>{{ user.joinDate }}</dd>
               </div>
             </dl>
-          </div>
-
-          <!-- Invest Type Card -->
-          <div class="panel info-card">
-            <div class="info-card-title">투자 성향</div>
-            <div class="invest-type-badge">{{ user.investType }}</div>
-            <p class="invest-desc">안정성을 추구하면서 꾸준한 성장을 원하는 투자 유형이에요. 배당주와 우량 성장주를 균형 있게 담는 것을 권장해요.</p>
-            <div class="invest-bars">
-              <div class="ib-row"><span>안정성</span><div class="ib-track"><div class="ib-fill" style="width:62%; background:var(--accent)"></div></div><span>62</span></div>
-              <div class="ib-row"><span>성장성</span><div class="ib-track"><div class="ib-fill" style="width:78%; background:var(--purple)"></div></div><span>78</span></div>
-              <div class="ib-row"><span>리스크허용</span><div class="ib-track"><div class="ib-fill" style="width:45%; background:#22c55e"></div></div><span>45</span></div>
-            </div>
-            <button class="retest-btn">투자 성향 재검사</button>
           </div>
 
           <!-- Community Profile Card -->
@@ -613,6 +591,14 @@ const isEditingInfo = ref(false)
   align-items: start;
 }
 
+/* 기본계좌 카드 안에 들어간 수익분석 영역 */
+.acc-analysis {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.acc-analysis .acc-label { margin-bottom: 12px; }
+
 /* ---- 프로필 ---- */
 .info-grid {
   display: grid;
@@ -807,8 +793,7 @@ const isEditingInfo = ref(false)
 /* ---- 계좌 카드 (내 투자 탭) ---- */
 .acc-balance-card,
 .acc-profit-card,
-.acc-holdings-card,
-.acc-analysis-card { padding: 20px 24px; }
+.acc-holdings-card { padding: 20px 24px; }
 
 .acc-label { font-size: 12px; font-weight: 800; color: var(--muted); margin-bottom: 8px; }
 .acc-balance {
@@ -841,12 +826,8 @@ const isEditingInfo = ref(false)
   font-size: 13px;
 }
 .acc-row:last-child { border-bottom: none; }
-.acc-row.sub { padding-left: 12px; }
-.acc-row.sub dt { color: var(--muted); font-size: 12px; }
-.acc-row.divider { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
 .acc-row dt { color: var(--muted); }
 .acc-row dd { font-weight: 700; color: var(--ink); margin: 0; }
-.usd-krw { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 4px; }
 
 .acc-profit-num { font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; margin-bottom: 4px; }
 .acc-profit-pct { font-size: 14px; font-weight: 700; margin-bottom: 0; }

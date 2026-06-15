@@ -142,23 +142,16 @@ function prev() {
 
 const riskTypeMap = { 안정형: 'CONSERVATIVE', 중립형: 'MODERATE', 공격형: 'AGGRESSIVE' }
 const finishing = ref(false)
-const finishError = ref('')
 
-async function finish() {
+function finish() {
   finishing.value = true
-  finishError.value = ''
-  try {
-    await auth.submitOnboarding({
-      risk_type: riskTypeMap[riskResult.value.label],
-      preferred_period: selectedPeriod.value,
-      preferred_sector: selectedSectors.value[0] ?? '',
-    })
-    router.push('/')
-  } catch (e) {
-    finishError.value = e.response?.data?.detail ?? '온보딩 저장에 실패했습니다. 다시 시도해주세요.'
-  } finally {
-    finishing.value = false
-  }
+  // 와이어프레임: 백엔드 저장 없이 로컬 상태만 갱신하고 홈으로 이동
+  auth.completeOnboarding({
+    risk_type: riskTypeMap[riskResult.value.label],
+    preferred_period: selectedPeriod.value,
+    preferred_sector: selectedSectors.value[0] ?? '',
+  })
+  router.push('/')
 }
 
 function displayScore(q, score) {
@@ -191,7 +184,6 @@ function displayScore(q, score) {
           </div>
         </div>
 
-        <p v-if="finishError" style="color: var(--negative, #cf3d3d); font-size: 13px; font-weight: 700; text-align: center;">{{ finishError }}</p>
         <button class="primary-btn" :disabled="finishing" @click="finish">{{ finishing ? '저장 중…' : '주만추 시작하기 🎉' }}</button>
       </div>
     </div>

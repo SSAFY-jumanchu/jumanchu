@@ -1,5 +1,8 @@
 <script setup>
 import { ref, computed, reactive } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 // ===== 카테고리 탭 =====
 const selectedCategory = ref('전체')
@@ -125,14 +128,24 @@ const popularPosts = [
   { rank: 9, title: '어딜감히 떨어진다고 입을 놀리나!!', likes: 764, comments: 78 },
 ]
 
-// ===== 주제별 커뮤니티 =====
-const topicCommunities = [
-  { icon: '🇺🇸', name: '미국주식이야기', members: '234.5K' },
-  { icon: '🇰🇷', name: '국내주식토론', members: '189.2K' },
-  { icon: '💰', name: '따박따박배당투자', members: '87.3K' },
-  { icon: '📈', name: '주린이 질문방', members: '56.1K' },
-  { icon: '🔥', name: '코인이야기', members: '145.8K' },
+// ===== 현재 인기 종목 커뮤니티 =====
+const popularStockCommunities = [
+  { code: '005930', name: '삼성전자', logo: '삼', color: '#3b5bdb', members: '128.4K', hot: true },
+  { code: '000660', name: 'SK하이닉스', logo: 'SK', color: '#e3344f', members: '96.1K', hot: true },
+  { code: 'NVDA', name: 'NVIDIA', logo: 'N', color: '#76b900', members: '74.3K', hot: false },
+  { code: '035420', name: 'NAVER', logo: 'N', color: '#22c55e', members: '41.2K', hot: false },
 ]
+
+// ===== 최근 조회한 주식 커뮤니티 =====
+const recentStockCommunities = [
+  { code: '000660', name: 'SK하이닉스', logo: 'SK', color: '#e3344f', time: '방금' },
+  { code: 'AAPL', name: 'Apple', logo: 'A', color: '#333a45', time: '10분 전' },
+  { code: '005930', name: '삼성전자', logo: '삼', color: '#3b5bdb', time: '1시간 전' },
+]
+
+function goStockCommunity(code) {
+  router.push(`/stocks/${code}`)
+}
 
 // ===== 필터링 =====
 const filteredPosts = computed(() => {
@@ -519,43 +532,51 @@ function koBarRect(vals, idx, w, h) {
           </div>
         </div>
 
-        <!-- 주제별 커뮤니티 -->
+        <!-- 현재 인기 종목 커뮤니티 -->
         <div class="panel sidebar-panel">
           <div class="sidebar-head">
-            <h3>주제별 커뮤니티</h3>
-            <button class="text-btn">더보기 ›</button>
+            <span>🔥</span>
+            <h3>인기 종목 커뮤니티</h3>
           </div>
-
-          <div class="topic-list">
-            <div
-              v-for="topic in topicCommunities"
-              :key="topic.name"
-              class="topic-item"
+          <div class="stock-comm-list">
+            <button
+              v-for="s in popularStockCommunities"
+              :key="s.code"
+              type="button"
+              class="stock-comm-item"
+              @click="goStockCommunity(s.code)"
             >
-              <span class="topic-icon">{{ topic.icon }}</span>
-              <div class="topic-info">
-                <strong>{{ topic.name }}</strong>
-                <span>멤버 {{ topic.members }}</span>
+              <span class="stock-comm-logo" :style="{ background: s.color }">{{ s.logo }}</span>
+              <div class="stock-comm-info">
+                <strong>{{ s.name }}<span v-if="s.hot" class="hot-tag">HOT</span></strong>
+                <span>토론방 멤버 {{ s.members }}</span>
               </div>
-              <button
-                class="topic-join-btn"
-                :class="{ 'is-joined': followedUsers[topic.name] }"
-                @click="toggleFollow(topic.name)"
-              >
-                {{ followedUsers[topic.name] ? '참여중' : '참여' }}
-              </button>
-            </div>
+              <span class="stock-comm-go">→</span>
+            </button>
           </div>
         </div>
 
-        <!-- 실시간 태그 -->
+        <!-- 최근 조회한 주식 커뮤니티 -->
         <div class="panel sidebar-panel">
           <div class="sidebar-head">
-            <h3>실시간 태그</h3>
+            <span>🕘</span>
+            <h3>최근 조회한 주식</h3>
           </div>
-          <div class="tag-cloud">
-            <span v-for="tag in ['#환율', '#달러', '#삼성전자', '#NVIDIA', '#코스피폭락', '#외국인순매도', '#HBM', '#배당주', '#반도체', '#AI주식']"
-              :key="tag" class="tag-chip">{{ tag }}</span>
+          <div class="stock-comm-list">
+            <button
+              v-for="s in recentStockCommunities"
+              :key="s.code + s.time"
+              type="button"
+              class="stock-comm-item"
+              @click="goStockCommunity(s.code)"
+            >
+              <span class="stock-comm-logo" :style="{ background: s.color }">{{ s.logo }}</span>
+              <div class="stock-comm-info">
+                <strong>{{ s.name }}</strong>
+                <span>{{ s.time }} 조회 · 토론방 가기</span>
+              </div>
+              <span class="stock-comm-go">→</span>
+            </button>
           </div>
         </div>
 
@@ -1208,72 +1229,49 @@ function koBarRect(vals, idx, w, h) {
   color: var(--faint);
 }
 
-/* 주제별 커뮤니티 */
-.topic-list { display: flex; flex-direction: column; gap: 6px; }
+/* 종목 커뮤니티 바로가기 */
+.stock-comm-list { display: flex; flex-direction: column; gap: 4px; }
 
-.topic-item {
+.stock-comm-item {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 8px 6px;
+  border: 0;
+  background: transparent;
   border-radius: var(--radius);
   cursor: pointer;
+  text-align: left;
   transition: background 0.14s;
 }
 
-.topic-item:hover { background: var(--surface-soft); }
+.stock-comm-item:hover { background: var(--surface-soft); }
 
-.topic-icon { font-size: 18px; flex-shrink: 0; }
+.stock-comm-logo {
+  width: 32px; height: 32px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 12px; font-weight: 900; flex-shrink: 0;
+}
 
-.topic-info { flex: 1; min-width: 0; }
-.topic-info strong { display: block; font-size: 13px; font-weight: 900; color: var(--ink); }
-.topic-info span { font-size: 11px; font-weight: 700; color: var(--faint); }
+.stock-comm-info { flex: 1; min-width: 0; }
+.stock-comm-info strong {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 900; color: var(--ink);
+}
+.stock-comm-info span { font-size: 11px; font-weight: 700; color: var(--faint); }
 
-.topic-join-btn {
-  padding: 4px 12px;
+.hot-tag {
+  padding: 1px 6px;
   border-radius: 999px;
-  border: 1px solid rgba(49,93,255,0.3);
-  background: rgba(49,93,255,0.07);
-  color: var(--accent);
-  font-size: 11px;
+  background: rgba(255,59,92,0.12);
+  color: #ff3b5c;
+  font-size: 9px;
   font-weight: 900;
-  cursor: pointer;
-  transition: background 0.16s;
-  white-space: nowrap;
 }
 
-.topic-join-btn:hover { background: rgba(49,93,255,0.14); }
-
-.topic-join-btn.is-joined {
-  background: var(--surface-soft);
-  border-color: var(--glass-border);
-  color: var(--muted);
-}
-
-/* 태그 클라우드 */
-.tag-cloud {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tag-chip {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--surface-soft);
-  border: 1px solid var(--glass-border);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--muted);
-  cursor: pointer;
-  transition: background 0.14s, color 0.14s;
-}
-
-.tag-chip:hover {
-  background: rgba(49,93,255,0.08);
-  border-color: rgba(49,93,255,0.22);
-  color: var(--accent);
-}
+.stock-comm-go { color: var(--faint); font-size: 15px; font-weight: 900; flex-shrink: 0; }
+.stock-comm-item:hover .stock-comm-go { color: var(--accent); }
 
 /* ===== 반응형 ===== */
 @media (max-width: 1100px) {

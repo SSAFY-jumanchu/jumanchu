@@ -22,8 +22,8 @@ const routes = [
   { path: '/community', name: 'community', component: CommunityView },
   { path: '/mypage', name: 'mypage', component: MyPageView },
   { path: '/trading-diary', name: 'trading-diary', component: TradingDiaryView },
-  { path: '/onboarding', name: 'onboarding', component: OnboardingView, meta: { skipGuard: true } },
-  { path: '/login', name: 'login', component: LoginView, meta: { skipGuard: true } },
+  { path: '/onboarding', name: 'onboarding', component: OnboardingView },
+  { path: '/login', name: 'login', component: LoginView },
 ]
 
 const router = createRouter({
@@ -32,18 +32,10 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 })
 
-// 미로그인 → 로그인 / 온보딩 미완료(서버 기준) → 온보딩 강제 진행
-router.beforeEach(async (to) => {
+// 프로토타입 모드: 로그인 강제 없음 — 남아 있는 세션이 있으면 복원만 한다.
+router.beforeEach(async () => {
   const auth = useAuthStore()
   await auth.init()
-
-  if (to.meta.skipGuard) {
-    if (to.name === 'login' && auth.isAuthenticated) return { name: 'home' }
-    if (to.name === 'onboarding' && !auth.isAuthenticated) return { name: 'login' }
-    return
-  }
-  if (!auth.isAuthenticated) return { name: 'login' }
-  if (!auth.hasCompletedOnboarding) return { name: 'onboarding' }
 })
 
 export default router

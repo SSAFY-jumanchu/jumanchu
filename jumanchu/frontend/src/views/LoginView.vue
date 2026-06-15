@@ -20,24 +20,10 @@ const form = ref({
   agree_terms: false,
 })
 
-async function submit() {
-  errorMsg.value = ''
-  loading.value = true
-  try {
-    if (mode.value === 'login') {
-      await auth.login(form.value.email, form.value.password)
-    } else {
-      await auth.signup({ ...form.value })
-    }
-    router.push(auth.hasCompletedOnboarding ? '/' : '/onboarding')
-  } catch (e) {
-    const data = e.response?.data
-    errorMsg.value =
-      data?.detail ??
-      (data ? Object.values(data).flat().join(' ') : '서버에 연결할 수 없습니다.')
-  } finally {
-    loading.value = false
-  }
+function submit() {
+  // 와이어프레임: 이메일/비밀번호 검증 없이 즉시 로그인 → 온보딩 설문으로 이동
+  auth.mockLogin(mode.value === 'signup' ? form.value.nickname || undefined : undefined)
+  router.push(auth.hasCompletedOnboarding ? '/' : '/onboarding')
 }
 </script>
 
@@ -51,11 +37,11 @@ async function submit() {
       <form class="login-form" @submit.prevent="submit">
         <label class="field">
           <span>이메일</span>
-          <input v-model="form.email" type="email" required placeholder="you@example.com" />
+          <input v-model="form.email" type="email" placeholder="you@example.com" />
         </label>
         <label class="field">
           <span>비밀번호</span>
-          <input v-model="form.password" type="password" required minlength="8" placeholder="8자 이상" />
+          <input v-model="form.password" type="password" placeholder="와이어프레임 — 입력 없이 로그인 가능" />
         </label>
 
         <template v-if="mode === 'signup'">

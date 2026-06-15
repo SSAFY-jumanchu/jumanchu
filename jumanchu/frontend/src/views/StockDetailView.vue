@@ -1,11 +1,8 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { stocksApi, portfolioApi } from '../api'
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 
 const router = useRouter()
-const route = useRoute()
-const stockCode = route.params.code || '005930'
 
 // 초기값은 와이어프레임 목업(삼성전자) — onMounted에서 실데이터로 교체
 const stock = ref({
@@ -69,8 +66,8 @@ const chartPeriods = ['3분', '일', '주', '월', '년']
 const selectedPeriod = ref('일')
 
 // ===== 상단 탭 =====
-const mainTabs = ['차트', '호가', '종목정보', '뉴스·공시', '거래현황', '커뮤니티']
-const selectedTab = ref('차트')
+const mainTabs = ['종목 홈', '종목정보', '뉴스', '커뮤니티']
+const selectedTab = ref('종목 홈')
 
 // ===== 호가 데이터 =====
 const asks = ref([
@@ -146,15 +143,30 @@ const communityPosts = [
   { user: '반도체직업인', badge: null, time: '2시간', content: 'AI 서버 수요 폭발로 DRAM 업황은 계속 좋을 전망입니다.', likes: 45 },
 ]
 
-// ===== 일지 작성 =====
-const diaryText = ref('')
-const diarySaved = ref(false)
+// ===== 물타기(평단) 시뮬레이션 =====
+const avgSide = ref('BUY') // BUY=매수 물타기, SELL=매도
+const holdQty = ref(20)
+const holdAvg = ref(310500)
+const addPrice = ref(317000)
+const addQty = ref(10)
 
-function saveDiary() {
-  if (!diaryText.value.trim()) return
-  diarySaved.value = true
-  setTimeout(() => { diarySaved.value = false }, 2000)
-}
+const simResult = computed(() => {
+  const hQty = Math.max(0, holdQty.value || 0)
+  const hAvg = Math.max(0, holdAvg.value || 0)
+  const aQty = Math.max(0, addQty.value || 0)
+  const aPrice = Math.max(0, addPrice.value || 0)
+  const cur = stock.value.price
+  if (avgSide.value === 'BUY') {
+    const totalQty = hQty + aQty
+    const newAvg = totalQty ? (hQty * hAvg + aQty * aPrice) / totalQty : 0
+    const pnl = (cur - newAvg) * totalQty
+    const pnlPct = newAvg ? ((cur - newAvg) / newAvg) * 100 : 0
+    return { totalQty, newAvg, pnl, pnlPct }
+  }
+  const totalQty = Math.max(0, hQty - aQty)
+  const realized = Math.min(aQty, hQty) * (aPrice - hAvg)
+  return { totalQty, newAvg: hAvg, realized }
+})
 
 // ===== 주문 패널 =====
 const orderSide = ref('BUY')
@@ -172,113 +184,145 @@ function setQtyPct(pct) {
   orderQty.value = Math.floor((balance.value * pct) / orderPrice.value)
 }
 
-// 주문: POST /orders/preview/ 검증 → POST /orders/ 체결 (시장가 즉시 체결 모델)
-async function submitOrder() {
-  if (orderQty.value < 1 || ordering.value) return
-  ordering.value = true
-  orderMsg.value = null
-  try {
-    const payload = {
-      stock_code: stock.value.code,
-      side: orderSide.value,
-      quantity: orderQty.value,
-    }
-    const { data: previewRes } = await portfolioApi.previewOrder(payload)
-    if (!previewRes.is_valid) {
-      orderMsg.value = { ok: false, text: previewRes.errors?.join(' ') || '주문이 불가능합니다.' }
-      return
-    }
-    const { data } = await portfolioApi.createOrder({
-      ...payload,
-      idempotency_key: crypto.randomUUID(),
-    })
-    balance.value = Number(data.balance_after)
-    orderQty.value = 0
-    orderMsg.value = {
-      ok: true,
-      text: `${orderSide.value === 'BUY' ? '매수' : '매도'} 체결 완료 (잔고 ₩${fmt(balance.value)})`,
-    }
-  } catch (e) {
-    const d = e.response?.data
-    orderMsg.value = {
-      ok: false,
-      text: d?.detail ?? (e.response?.status === 401 ? '로그인이 필요합니다.' : '주문 처리에 실패했습니다.'),
-    }
-  } finally {
-    ordering.value = false
+// 와이어프레임: 백엔드 없이 로컬에서 체결 시뮬레이션 (잔고만 가감)
+function submitOrder() {
+  if (orderQty.value < 1) return
+  const cost = orderTotal.value + orderFee.value
+  if (orderSide.value === 'BUY' && cost > balance.value) {
+    orderMsg.value = { ok: false, text: '잔고가 부족합니다.' }
+    return
   }
+  balance.value += orderSide.value === 'BUY' ? -cost : orderTotal.value - orderFee.value
+  orderMsg.value = {
+    ok: true,
+    text: `${orderSide.value === 'BUY' ? '매수' : '매도'} 체결 완료 (잔고 ₩${fmt(balance.value)})`,
+  }
+  orderQty.value = 0
 }
 
-// ===== 실데이터 로드 =====
-onMounted(async () => {
-  // 종목 기본 정보 + 현재가/지표/차트/호가는 각각 실패해도 나머지는 유지
-  try {
-    const { data } = await stocksApi.detail(stockCode)
-    const s = data.stock
-    stock.value = {
-      ...stock.value,
-      code: s.code, name: s.name, market: s.market, sector: s.sector,
-      currency: s.currency,
-      marketCap: s.market_cap ? fmtCompact(Number(s.market_cap)) : '-',
+// ===== 종목정보 탭 데이터 =====
+const stockInfo = {
+  fullName: 'SAMSUNG ELECTRONICS CO LTD',
+  ceo: '한종희',
+  listedDate: '1975년 6월 11일',
+  founded: '1969년 설립',
+  shares: '5,969,782,550주',
+  sharesAsOf: '26년 6월 14일 기준',
+  realValue: '198조 4,500억원',
+  desc: '메모리·시스템 반도체, 스마트폰, 가전, 디스플레이를 설계·제조하는 글로벌 종합 전자 기업',
+  bizIcon: '💻',
+  bizName: '반도체 · 전자',
+  bizRank: '국내 시가총액 1위',
+}
+
+const valuation = [
+  { k: 'PER', v: '14.2배' },
+  { k: 'PSR', v: '1.4배' },
+  { k: 'PBR', v: '1.18배' },
+]
+const earningsMetrics = [
+  { k: 'EPS', v: '22,324원' },
+  { k: 'BPS', v: '268,500원' },
+  { k: 'ROE', v: '8.57%' },
+]
+const dividendMetrics = [
+  { k: '횟수', v: '4번' },
+  { k: '주당 배당금', v: '1,444원' },
+  { k: '수익률', v: '1.8%' },
+]
+const financials = [
+  { k: '부채비율', v: '24.8%' },
+  { k: '유동비율', v: '258.3%' },
+  { k: '이자보상비율', v: '3,210%' },
+]
+
+const profitDesc = '2026년 1분기 삼성전자의 순이익은 11조원으로 직전 분기 대비 +10.0% 더 높아요.'
+const profitability = [
+  { label: '24 9월', revenue: 79, profit: 9, margin: 11.4 },
+  { label: '24 12월', revenue: 75, profit: 7, margin: 9.3 },
+  { label: '25 3월', revenue: 71, profit: 6, margin: 8.5 },
+  { label: '25 6월', revenue: 74, profit: 8, margin: 10.8 },
+  { label: '25 9월', revenue: 82, profit: 10, margin: 12.2 },
+  { label: '25 12월', revenue: 86, profit: 11, margin: 12.8 },
+]
+const profChart = computed(() => {
+  const data = profitability
+  const maxRev = Math.max(...data.map(d => d.revenue))
+  const maxMargin = Math.max(...data.map(d => d.margin))
+  const W = 600, base = 175, top = 20
+  const groupW = W / data.length
+  const barW = groupW * 0.24
+  const span = base - top
+  const bars = data.map((d, i) => {
+    const cx = i * groupW + groupW / 2
+    const revH = (d.revenue / maxRev) * span
+    const profH = (d.profit / maxRev) * span
+    return {
+      label: d.label,
+      revX: cx - barW - 2, revY: base - revH, revH,
+      profX: cx + 2, profY: base - profH, profH,
+      barW,
+      lineX: cx, lineY: base - (d.margin / maxMargin) * span,
     }
-  } catch (e) {
-    console.warn('종목 정보 로드 실패 — 목업 유지', e)
-  }
-
-  try {
-    const { data } = await stocksApi.price(stockCode)
-    const p = data.price
-    stock.value = {
-      ...stock.value,
-      price: Number(p.current), open: Number(p.open),
-      high: Number(p.high), low: Number(p.low),
-      prevClose: Number(p.prev_close), volume: p.volume,
-    }
-    orderPrice.value = Number(p.current)
-  } catch (e) {
-    console.warn('현재가 로드 실패 — 목업 유지', e)
-  }
-
-  try {
-    const { data } = await stocksApi.financials(stockCode)
-    const ind = data.indicator
-    if (ind) {
-      stock.value = {
-        ...stock.value,
-        per: ind.per, pbr: ind.pbr, eps: ind.eps,
-        roe: ind.roe, beta: ind.beta,
-        high52w: Number(ind.high_52w), low52w: Number(ind.low_52w),
-      }
-    }
-  } catch (e) {
-    console.warn('재무 지표 로드 실패 — 목업 유지', e)
-  }
-
-  try {
-    const { data } = await stocksApi.chart(stockCode, { period: '1d', interval: '5m' })
-    if (data.candles?.length) {
-      intradayPrices.value = data.candles.map((c) => Number(c.close))
-    }
-  } catch (e) {
-    console.warn('차트 로드 실패 — 목업 유지', e)
-  }
-
-  try {
-    const { data } = await stocksApi.orderbook(stockCode)
-    const ob = data.orderbook
-    if (ob.asks?.length) asks.value = [...ob.asks.map((a) => ({ price: Number(a.price), qty: a.quantity }))].reverse()
-    if (ob.bids?.length) bids.value = ob.bids.map((b) => ({ price: Number(b.price), qty: b.quantity }))
-  } catch (e) {
-    console.warn('호가 로드 실패 — 목업 유지', e)
-  }
-
-  try {
-    const { data } = await portfolioApi.balance()
-    balance.value = Number(data.account.balance)
-  } catch (e) {
-    console.warn('잔고 로드 실패 — 기본값 유지', e)
-  }
+  })
+  const linePath = bars.map((b, i) => `${i === 0 ? 'M' : 'L'}${b.lineX.toFixed(1)},${b.lineY.toFixed(1)}`).join(' ')
+  return { bars, linePath }
 })
+
+const peers = [
+  { rank: 1, name: 'TSMC', per: '28.4배', cap: '1,120조', price: '180,000원' },
+  { rank: 2, name: 'NVIDIA', per: '52.1배', cap: '3,200조', price: '1,285,000원' },
+  { rank: 3, name: 'SK하이닉스', per: '12.8배', cap: '145조', price: '189,300원' },
+  { rank: 4, name: '마이크론', per: '15.6배', cap: '180조', price: '120,000원' },
+  { rank: '-', name: '산업 중앙값', per: '18.2배', cap: '-', price: '-', median: true },
+  { rank: 5, name: '삼성전자', per: '14.2배', cap: '237.1조', price: '317,000원', isMe: true },
+]
+
+const targetPrice = {
+  desc: '애널리스트들이 1년 후 삼성전자의 목표 주가가 388,000원으로 지금보다 +22.4% 상승할 것으로 예상했어요.',
+  high: { price: 420000, pct: 32.5 },
+  avg: { price: 388000, pct: 22.4 },
+  low: { price: 345000, pct: 8.8 },
+}
+
+// ===== 뉴스 탭 =====
+const stockNews = [
+  { ticker: 'SK하이닉스', title: 'SK하이닉스, HBM3E 양산 확대...AI 수요 견조', source: '이데일리', time: '30분 전', category: '뉴스' },
+  { ticker: '삼성전자', title: '삼성전자, 파운드리 수주 회복세...2분기 기대감', source: '전자신문', time: '1시간 전', category: '뉴스' },
+  { ticker: 'NVDA', title: 'NVIDIA 실적 서프라이즈...관련 국내주 수혜', source: 'Bloomberg', time: '2시간 전', category: '뉴스' },
+  { ticker: 'AAPL', title: '애플 WWDC AI 기능 대거 공개 예정', source: '디지털데일리', time: '3시간 전', category: '뉴스' },
+  { ticker: '삼성전자', title: '삼성전자, 26년 1분기 영업이익 컨센서스 상회', source: '한국경제', time: '5시간 전', category: '공시' },
+  { ticker: '삼성전자', title: '외국인 5거래일 연속 순매수...반도체 대형주 집중', source: '연합뉴스', time: '6시간 전', category: '뉴스' },
+  { ticker: '삼성전자', title: '삼성전자 분기 배당 1,444원 결정 공시', source: '전자공시', time: '1일 전', category: '공시' },
+]
+const newsFilter = ref('전체')
+const newsFiltered = computed(() =>
+  newsFilter.value === '전체' ? stockNews : stockNews.filter(n => n.category === newsFilter.value),
+)
+
+// ===== 커뮤니티 탭 (피드) =====
+const communitySort = ref('인기순')
+const newPostText = ref('')
+const communityFeed = ref([
+  { author: '노나먹어보자', avatar: '노', title: '210대 뚫으면 털어야겠다', likes: 11, comments: 1, reposts: 0, time: '3분', followed: false },
+  { author: '고전적인고릴라3', avatar: '고', title: '와 아직도 마이나스다^^', likes: 8, comments: 4, reposts: 0, time: '4분', followed: false },
+  { author: 'Rubyruby777', avatar: 'R', badge: '1억대 자산가', title: '200 고고', likes: 5, comments: 0, reposts: 0, time: '7분', followed: false },
+  { author: '마멜조아', avatar: '마', title: '파멸적 상승 ㄱㄱ', sub: '샌디스크처럼 ㄱㄱ', likes: 5, comments: 0, reposts: 0, time: '4분', followed: false },
+  { author: '오니돌마미', avatar: '오', title: '삼전기 상치는 거 보신 적 있으신가요?', sub: '보고 싶어서 ㅎㅎ', likes: 4, comments: 0, reposts: 0, time: '6분', followed: false },
+  { author: '존버왕', avatar: '존', title: '7만전자 가즈아 🚀', likes: 9, comments: 3, reposts: 1, time: '12분', followed: false },
+  { author: '반도체신봉자', avatar: '반', badge: '고수', title: 'HBM 매출 본격화되면 우상향 각이에요', sub: '실적 발표가 기대됩니다', likes: 21, comments: 6, reposts: 2, time: '20분', followed: false },
+])
+function addPost() {
+  const text = newPostText.value.trim()
+  if (!text) return
+  communityFeed.value.unshift({ author: '김주만', avatar: '김', title: text, likes: 0, comments: 0, reposts: 0, time: '방금', followed: false })
+  newPostText.value = ''
+}
+const popularPosts = [
+  { title: 'HBM 양산 확대...삼성도 수혜 받을까?', likes: 34 },
+  { title: '삼성전자 vs SK하이닉스 비교 분석', likes: 21 },
+  { title: '배당주로 삼성전자 모아가는 중입니다', likes: 18 },
+]
 
 // ===== 유틸 =====
 function fmt(v) { return v.toLocaleString('ko-KR') }
@@ -352,9 +396,14 @@ function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
       </nav>
     </header>
 
-    <!-- ===== 3컬럼 메인 그리드 ===== -->
-    <div class="sd-grid">
+    <!-- ===== 메인 그리드 (탭에 따라 전환) ===== -->
+    <div class="sd-grid" :class="{
+      'is-info': selectedTab === '종목정보' || selectedTab === '뉴스',
+      'is-community': selectedTab === '커뮤니티',
+    }">
 
+      <!-- ===== 종목 홈: 차트/호가/시세 ===== -->
+      <template v-if="selectedTab === '종목 홈'">
       <!-- ===== 좌: 차트 + 종토방 ===== -->
       <div class="sd-col-left">
 
@@ -368,11 +417,6 @@ function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
                 :class="{ 'is-active': selectedPeriod === p }"
                 @click="selectedPeriod = p"
               >{{ p }}</button>
-            </div>
-            <div class="chart-tools">
-              <span>보조지표</span>
-              <span>그리기</span>
-              <span>종목비교</span>
             </div>
           </div>
 
@@ -576,9 +620,265 @@ function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
           </div>
         </div>
       </div>
+      </template>
 
-      <!-- ===== 우: 주문 + 일지 + 개인/외국인/기관 ===== -->
+      <!-- ===== 종목정보 탭 ===== -->
+      <div v-else-if="selectedTab === '종목정보'" class="sd-col-info">
+
+        <!-- 주요 정보 -->
+        <div class="panel info-block">
+          <div class="info-block-head">
+            <div>
+              <h3 class="info-name">{{ stock.name }}<span class="info-name-sub">{{ stock.market }} · {{ stock.code }}</span></h3>
+              <p class="info-source">출처: 연합인포맥스 및 기업 IR자료</p>
+            </div>
+            <button class="info-home-link" type="button">↗ 홈페이지</button>
+          </div>
+          <p class="info-desc">{{ stockInfo.desc }}</p>
+          <div class="info-facts">
+            <div class="fact"><dt>시가총액</dt><dd>{{ stock.marketCap }}원</dd></div>
+            <div class="fact"><dt>실제 기업 가치</dt><dd>{{ stockInfo.realValue }}</dd></div>
+            <div class="fact"><dt>기업명</dt><dd>{{ stockInfo.fullName }}</dd></div>
+            <div class="fact"><dt>대표이사</dt><dd>{{ stockInfo.ceo }}</dd></div>
+            <div class="fact"><dt>상장일</dt><dd>{{ stockInfo.listedDate }} <small>{{ stockInfo.founded }}</small></dd></div>
+            <div class="fact"><dt>발행주식수</dt><dd>{{ stockInfo.shares }} <small>{{ stockInfo.sharesAsOf }}</small></dd></div>
+          </div>
+        </div>
+
+        <!-- 주요 사업 -->
+        <div class="panel info-block">
+          <h3 class="info-section-title">주요 사업</h3>
+          <div class="biz-row">
+            <div class="biz-icon">{{ stockInfo.bizIcon }}</div>
+            <div class="biz-info">
+              <strong class="biz-name">{{ stockInfo.bizName }}</strong>
+              <span class="biz-rank">{{ stockInfo.bizRank }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 투자 지표 -->
+        <div class="panel info-block">
+          <h3 class="info-section-title">투자 지표 <span class="info-section-sub">14:02 기준</span></h3>
+          <div class="metric-cards">
+            <div class="metric-card">
+              <div class="metric-card-title">가치평가</div>
+              <div v-for="m in valuation" :key="m.k" class="metric-line"><span>{{ m.k }}</span><strong>{{ m.v }}</strong></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-card-title">수익</div>
+              <div v-for="m in earningsMetrics" :key="m.k" class="metric-line"><span>{{ m.k }}</span><strong>{{ m.v }}</strong></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-card-title">배당 <span class="metric-card-sub">최근 12개월</span></div>
+              <div v-for="m in dividendMetrics" :key="m.k" class="metric-line"><span>{{ m.k }}</span><strong>{{ m.v }}</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 재무 -->
+        <div class="panel info-block">
+          <h3 class="info-section-title">재무</h3>
+          <div class="fin-cards">
+            <div v-for="f in financials" :key="f.k" class="fin-card">
+              <div class="fin-k">{{ f.k }}</div>
+              <div class="fin-v">{{ f.v }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 수익성 -->
+        <div class="panel info-block">
+          <h3 class="info-section-title">수익성 <span class="info-section-sub">매출·순이익 성장률</span></h3>
+          <p class="info-section-desc">{{ profitDesc }}</p>
+          <div class="prof-chart-wrap">
+            <svg viewBox="0 0 600 200" class="prof-svg">
+              <line v-for="g in [25, 75, 125, 175]" :key="g" x1="0" :y1="g" x2="600" :y2="g" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 4" />
+              <template v-for="(b, i) in profChart.bars" :key="i">
+                <rect :x="b.revX" :y="b.revY" :width="b.barW" :height="b.revH" rx="2" fill="rgba(49,93,255,0.35)" />
+                <rect :x="b.profX" :y="b.profY" :width="b.barW" :height="b.profH" rx="2" fill="rgba(49,93,255,0.9)" />
+              </template>
+              <path :d="profChart.linePath" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+              <circle v-for="(b, i) in profChart.bars" :key="'c' + i" :cx="b.lineX" :cy="b.lineY" r="3.5" fill="#f59e0b" />
+            </svg>
+            <div class="prof-axis">
+              <span v-for="b in profChart.bars" :key="b.label">{{ b.label }}</span>
+            </div>
+          </div>
+          <div class="prof-legend">
+            <span><i class="dot rev"></i>매출</span>
+            <span><i class="dot prof"></i>순이익</span>
+            <span><i class="dot line"></i>순이익률</span>
+          </div>
+        </div>
+
+        <!-- 동종 업계 순위 -->
+        <div class="panel info-block">
+          <h3 class="info-section-title">동종 업계 순위 <span class="info-section-sub">반도체</span></h3>
+          <p class="info-section-desc">PER이 낮을수록 같은 이익 대비 저평가 구간일 수 있어요.</p>
+          <table class="peer-table">
+            <thead>
+              <tr><th>순위</th><th>종목</th><th class="num">PER</th><th class="num">시가총액</th><th class="num">주가</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in peers" :key="p.name" :class="{ 'is-me': p.isMe, 'is-median': p.median }">
+                <td class="peer-rank">{{ p.rank }}</td>
+                <td class="peer-name">{{ p.name }}</td>
+                <td class="num">{{ p.per }}</td>
+                <td class="num">{{ p.cap }}</td>
+                <td class="num">{{ p.price }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 예상 목표 주가 -->
+        <div class="panel info-block">
+          <h3 class="info-section-title">예상 목표 주가</h3>
+          <p class="info-section-desc">{{ targetPrice.desc }}</p>
+          <div class="target-list">
+            <div class="target-row high">
+              <span class="target-tag">최고</span>
+              <span class="target-price">{{ fmt(targetPrice.high.price) }}원</span>
+              <span class="target-pct">+{{ targetPrice.high.pct }}%</span>
+            </div>
+            <div class="target-row avg">
+              <span class="target-tag">평균</span>
+              <span class="target-price">{{ fmt(targetPrice.avg.price) }}원</span>
+              <span class="target-pct">+{{ targetPrice.avg.pct }}%</span>
+            </div>
+            <div class="target-row low">
+              <span class="target-tag">최저</span>
+              <span class="target-price">{{ fmt(targetPrice.low.price) }}원</span>
+              <span class="target-pct">+{{ targetPrice.low.pct }}%</span>
+            </div>
+          </div>
+          <div class="target-current">현재가 <strong>₩{{ fmt(stock.price) }}</strong></div>
+        </div>
+
+      </div>
+
+      <!-- ===== 뉴스 탭 ===== -->
+      <div v-else-if="selectedTab === '뉴스'" class="sd-col-info">
+        <div class="panel info-block">
+          <div class="news-head">
+            <h3 class="info-section-title" style="margin:0">{{ stock.name }} 뉴스 · 공시</h3>
+            <div class="news-filter">
+              <button
+                v-for="f in ['전체', '뉴스', '공시']"
+                :key="f"
+                :class="{ 'is-active': newsFilter === f }"
+                @click="newsFilter = f"
+              >{{ f }}</button>
+            </div>
+          </div>
+          <div class="news-list">
+            <article v-for="(n, i) in newsFiltered" :key="i" class="news-row">
+              <div class="news-row-meta">
+                <span class="news-chip">{{ n.ticker }}</span>
+                <span class="news-cat" :class="{ 'is-disclosure': n.category === '공시' }">{{ n.category }}</span>
+                <span class="news-time">{{ n.time }}</span>
+              </div>
+              <h4 class="news-row-title">{{ n.title }}</h4>
+              <span class="news-row-source">{{ n.source }}</span>
+            </article>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 커뮤니티 탭 (피드) ===== -->
+      <div v-else class="sd-col-community">
+
+        <!-- 작성 박스 -->
+        <div class="panel comm-composer">
+          <div class="comm-avatar">김</div>
+          <input
+            v-model="newPostText"
+            class="comm-composer-input"
+            placeholder="지금 무슨 생각을 하고 있나요?"
+            @keyup.enter="addPost"
+          />
+          <div class="comm-composer-tools">
+            <span title="이미지">🖼️</span>
+            <span title="목록">☰</span>
+            <span title="게시" @click="addPost">↻</span>
+          </div>
+        </div>
+
+        <!-- 정렬 -->
+        <button class="comm-sort" type="button" @click="communitySort = communitySort === '인기순' ? '최신순' : '인기순'">
+          {{ communitySort }} ↕
+        </button>
+
+        <!-- 피드 -->
+        <div class="panel feed-panel">
+          <div class="feed-list">
+            <div v-for="(p, i) in communityFeed" :key="i" class="feed-post">
+              <div class="feed-avatar-col">
+                <div class="comm-avatar">{{ p.avatar }}</div>
+                <span class="feed-holder">주주</span>
+              </div>
+              <div class="feed-body">
+                <div class="feed-head">
+                  <div>
+                    <div class="feed-author-line">
+                      <strong>{{ p.author }}</strong>
+                      <span v-if="p.badge" class="comm-badge">{{ p.badge }}</span>
+                    </div>
+                    <div class="feed-time">{{ p.time }}</div>
+                  </div>
+                  <button class="feed-follow" :class="{ 'is-following': p.followed }" @click="p.followed = !p.followed">
+                    {{ p.followed ? '팔로잉' : '팔로우' }}
+                  </button>
+                </div>
+                <p class="feed-title">{{ p.title }}</p>
+                <p v-if="p.sub" class="feed-sub">{{ p.sub }}</p>
+                <div class="feed-actions">
+                  <button class="feed-act"><span>♡</span>{{ p.likes }}</button>
+                  <button class="feed-act"><span>💬</span>{{ p.comments }}</button>
+                  <button class="feed-act"><span>↻</span>{{ p.reposts || '' }}</button>
+                  <button class="feed-act"><span>↗</span></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 우: 주문 / 커뮤니티 사이드바 ===== -->
       <div class="sd-col-right">
+
+        <!-- 커뮤니티 사이드바 -->
+        <template v-if="selectedTab === '커뮤니티'">
+          <div class="panel comm-stock-card">
+            <p class="eyebrow">이 글의 종목</p>
+            <div class="comm-stock-head">
+              <strong class="comm-stock-name">{{ stock.name }}</strong>
+              <span class="comm-stock-code">{{ stock.code }} · {{ stock.market }}</span>
+            </div>
+            <div class="comm-stock-price">₩{{ fmt(stock.price) }}</div>
+            <div class="comm-stock-change" :class="change >= 0 ? 'is-up' : 'is-down'">
+              ▲ {{ fmt(Math.abs(change)) }} ({{ change >= 0 ? '+' : '' }}{{ changeRate.toFixed(2) }}%)
+            </div>
+            <button class="comm-stock-btn" type="button" @click="selectedTab = '종목 홈'">종목 상세 보기 →</button>
+          </div>
+
+          <div class="panel comm-popular">
+            <p class="eyebrow">{{ stock.name }} 인기글</p>
+            <div class="comm-popular-list">
+              <div v-for="(p, i) in popularPosts" :key="i" class="comm-popular-item">
+                <span class="comm-popular-rank">{{ i + 1 }}</span>
+                <div class="comm-popular-info">
+                  <span class="comm-popular-title">{{ p.title }}</span>
+                  <span class="comm-popular-like">♡ {{ p.likes }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 주문/시뮬/수급 (그 외 탭) -->
+        <template v-else>
 
         <!-- 주문 패널 -->
         <div class="panel order-panel">
@@ -671,25 +971,61 @@ function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
           </p>
         </div>
 
-        <!-- 일지 작성 -->
-        <div class="panel diary-inline-panel">
-          <div class="diary-inline-head">
-            <p class="eyebrow">매매 일기</p>
-            <h3>일지 작성</h3>
+        <!-- 평단 시뮬레이션 (물타기) -->
+        <div class="panel sim-panel">
+          <p class="eyebrow">매수·매도 시뮬레이션</p>
+          <h3>물타기 · 평단 계산기</h3>
+
+          <div class="sim-side-tabs">
+            <button :class="{ 'is-on': avgSide === 'BUY' }" @click="avgSide = 'BUY'">매수</button>
+            <button :class="{ 'is-on-sell': avgSide === 'SELL' }" @click="avgSide = 'SELL'">매도</button>
           </div>
-          <textarea
-            v-model="diaryText"
-            class="diary-inline-textarea"
-            placeholder="이 종목에 대한 매수/매도 이유, 목표가, 오늘의 판단을 기록해두세요."
-          ></textarea>
-          <button
-            class="diary-inline-save-btn"
-            :class="{ 'is-saved': diarySaved }"
-            :disabled="!diaryText.trim()"
-            @click="saveDiary"
-          >
-            {{ diarySaved ? '✓ 저장됨' : '일지 저장' }}
-          </button>
+
+          <div class="sim-grid">
+            <label class="sim-field">
+              <span>보유 수량</span>
+              <input v-model.number="holdQty" type="number" min="0" />
+            </label>
+            <label class="sim-field">
+              <span>보유 평단</span>
+              <input v-model.number="holdAvg" type="number" min="0" step="500" />
+            </label>
+            <label class="sim-field">
+              <span>{{ avgSide === 'BUY' ? '추가 매수가' : '매도가' }}</span>
+              <input v-model.number="addPrice" type="number" min="0" step="500" />
+            </label>
+            <label class="sim-field">
+              <span>{{ avgSide === 'BUY' ? '추가 수량' : '매도 수량' }}</span>
+              <input v-model.number="addQty" type="number" min="0" />
+            </label>
+          </div>
+
+          <div class="sim-result">
+            <div class="sim-result-main">
+              <span>{{ avgSide === 'BUY' ? '예상 평단가' : '실현 손익' }}</span>
+              <strong v-if="avgSide === 'BUY'">₩{{ fmt(Math.round(simResult.newAvg)) }}</strong>
+              <strong v-else :class="simResult.realized >= 0 ? 'is-up' : 'is-down'">
+                {{ simResult.realized >= 0 ? '+' : '-' }}₩{{ fmt(Math.abs(Math.round(simResult.realized))) }}
+              </strong>
+            </div>
+            <dl class="sim-sub">
+              <div>
+                <dt>총 보유 수량</dt>
+                <dd>{{ fmt(simResult.totalQty) }}주</dd>
+              </div>
+              <div v-if="avgSide === 'BUY'">
+                <dt>현재가 대비 평가손익</dt>
+                <dd :class="simResult.pnl >= 0 ? 'is-up' : 'is-down'">
+                  {{ simResult.pnl >= 0 ? '+' : '-' }}₩{{ fmt(Math.abs(Math.round(simResult.pnl))) }}
+                  ({{ simResult.pnlPct >= 0 ? '+' : '' }}{{ simResult.pnlPct.toFixed(2) }}%)
+                </dd>
+              </div>
+              <div v-else>
+                <dt>잔여 평단가</dt>
+                <dd>₩{{ fmt(Math.round(simResult.newAvg)) }}</dd>
+              </div>
+            </dl>
+          </div>
         </div>
 
         <!-- 개인/외국인/기관 -->
@@ -735,6 +1071,7 @@ function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
             </div>
           </div>
         </div>
+        </template>
 
       </div>
 
@@ -923,23 +1260,6 @@ function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
   color: var(--ink);
   box-shadow: 0 2px 6px rgba(0,0,0,0.06);
 }
-
-.chart-tools {
-  display: flex;
-  gap: 10px;
-}
-
-.chart-tools span {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--muted);
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background 0.14s;
-}
-
-.chart-tools span:hover { background: var(--surface-soft); color: var(--ink); }
 
 /* 차트 영역 */
 .chart-area-wrap {
@@ -1320,7 +1640,7 @@ function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
 .inv-date { font-size: 11px; font-weight: 700; color: var(--muted); }
 
 /* ===== 주문 패널 ===== */
-.order-panel { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.order-panel { padding: 16px 16px 18px; display: flex; flex-direction: column; gap: 16px; }
 
 .order-panel h3 { font-size: 16px; font-weight: 900; color: var(--ink); margin: 2px 0 0; }
 
@@ -1523,51 +1843,275 @@ function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
   color: var(--muted);
 }
 
-/* ===== 일지 작성 패널 ===== */
-.diary-inline-panel { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+/* ===== 평단 시뮬레이션 패널 ===== */
+.sim-panel { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.sim-panel h3 { font-size: 16px; font-weight: 900; color: var(--ink); margin: 2px 0 0; }
 
-.diary-inline-head { display: flex; flex-direction: column; gap: 2px; }
-.diary-inline-head h3 { font-size: 15px; font-weight: 900; color: var(--ink); margin: 0; }
+.sim-side-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sim-side-tabs button {
+  padding: 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-subtle);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s, border-color 0.16s;
+}
+.sim-side-tabs button.is-on { background: rgba(0,102,204,0.12); color: var(--krx-down); border-color: rgba(0,102,204,0.3); }
+.sim-side-tabs button.is-on-sell { background: rgba(255,59,92,0.10); color: var(--krx-up); border-color: rgba(255,59,92,0.3); }
 
-.diary-inline-textarea {
+.sim-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sim-field { display: flex; flex-direction: column; gap: 4px; }
+.sim-field span { font-size: 11px; font-weight: 900; color: var(--muted); }
+.sim-field input {
   width: 100%;
-  min-height: 100px;
-  resize: vertical;
-  padding: 10px 12px;
+  height: 36px;
+  padding: 0 10px;
   border-radius: var(--radius);
   border: 1px solid var(--glass-border);
   background: var(--surface-soft);
   color: var(--ink);
   font-size: 13px;
-  font-weight: 700;
-  line-height: 1.6;
+  font-weight: 900;
   outline: none;
   box-sizing: border-box;
   transition: border-color 0.18s;
-  font-family: inherit;
 }
+.sim-field input:focus { border-color: var(--accent); }
 
-.diary-inline-textarea:focus { border-color: var(--accent); }
-
-.diary-inline-textarea::placeholder { color: var(--faint); font-weight: 700; }
-
-.diary-inline-save-btn {
-  width: 100%;
-  height: 40px;
+.sim-result {
+  margin-top: 2px;
+  padding: 14px;
   border-radius: var(--radius);
-  border: 0;
-  background: rgba(49,93,255,0.12);
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: background 0.18s, opacity 0.18s;
-  border: 1px solid rgba(49,93,255,0.22);
+  background: var(--glass-subtle);
+  border: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sim-result-main { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sim-result-main span { font-size: 12px; font-weight: 900; color: var(--muted); }
+.sim-result-main strong { font-size: 22px; font-weight: 900; color: var(--ink); letter-spacing: -0.5px; }
+.sim-sub { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.sim-sub > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sim-sub dt { font-size: 12px; font-weight: 700; color: var(--muted); }
+.sim-sub dd { font-size: 13px; font-weight: 900; color: var(--ink); margin: 0; text-align: right; }
+
+/* ===== 종목정보 탭 ===== */
+.sd-grid.is-info { grid-template-columns: minmax(0, 1fr) 260px; }
+.sd-col-info { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.info-block { padding: 20px 22px; }
+
+.info-block-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.info-name { font-size: 20px; font-weight: 900; color: var(--ink); margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.info-name-sub { font-size: 13px; font-weight: 800; color: var(--muted); }
+.info-source { margin: 4px 0 0; font-size: 12px; color: var(--faint); font-weight: 700; }
+.info-home-link {
+  flex-shrink: 0; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--glass-border); background: var(--surface-soft);
+  color: var(--muted); font-size: 12px; font-weight: 900; cursor: pointer;
+  transition: background 0.16s, color 0.16s;
+}
+.info-home-link:hover { background: var(--glass-strong); color: var(--ink); }
+
+.info-desc {
+  margin: 0 0 16px; padding: 14px 16px; border-radius: var(--radius);
+  background: var(--glass-subtle); border: 1px solid var(--glass-border);
+  font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.6; word-break: keep-all;
 }
 
-.diary-inline-save-btn:hover:not(:disabled) { background: rgba(49,93,255,0.2); }
-.diary-inline-save-btn:disabled { opacity: 0.4; cursor: default; }
-.diary-inline-save-btn.is-saved { background: rgba(16,185,129,0.14); border-color: rgba(16,185,129,0.3); color: #059669; }
+.info-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; }
+.fact { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--faint); }
+.fact dt { font-size: 13px; font-weight: 700; color: var(--muted); flex-shrink: 0; }
+.fact dd { margin: 0; font-size: 13px; font-weight: 900; color: var(--ink); text-align: right; }
+.fact dd small { display: block; font-size: 11px; font-weight: 700; color: var(--faint); margin-top: 2px; }
+
+.info-section-title { font-size: 17px; font-weight: 900; color: var(--ink); margin: 0 0 14px; }
+.info-section-sub { font-size: 12px; font-weight: 800; color: var(--faint); margin-left: 6px; }
+.info-section-desc { margin: -4px 0 16px; font-size: 13px; color: var(--muted); font-weight: 700; line-height: 1.55; word-break: keep-all; }
+
+/* 주요 사업 */
+.biz-row { display: flex; align-items: center; gap: 14px; }
+.biz-icon {
+  width: 48px; height: 48px; border-radius: 14px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 24px;
+  background: linear-gradient(135deg, rgba(49,93,255,0.12), rgba(125,78,232,0.12));
+  border: 1px solid var(--glass-border);
+}
+.biz-info { display: flex; flex-direction: column; gap: 2px; }
+.biz-name { font-size: 15px; font-weight: 900; color: var(--ink); }
+.biz-rank { font-size: 12px; font-weight: 700; color: var(--muted); }
+
+/* 투자 지표 */
+.metric-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.metric-card { padding: 14px 16px; border-radius: var(--radius); background: var(--glass-subtle); border: 1px solid var(--glass-border); }
+.metric-card-title { font-size: 13px; font-weight: 900; color: var(--ink); margin-bottom: 8px; display: flex; align-items: baseline; justify-content: space-between; }
+.metric-card-sub { font-size: 10px; font-weight: 700; color: var(--faint); }
+.metric-line { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-top: 1px solid var(--faint); }
+.metric-line:first-of-type { border-top: 0; }
+.metric-line span { font-size: 12px; font-weight: 700; color: var(--muted); }
+.metric-line strong { font-size: 13px; font-weight: 900; color: var(--ink); }
+
+/* 재무 */
+.fin-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.fin-card { padding: 16px; border-radius: var(--radius); background: var(--glass-subtle); border: 1px solid var(--glass-border); }
+.fin-k { font-size: 12px; font-weight: 800; color: var(--muted); margin-bottom: 8px; }
+.fin-v { font-size: 22px; font-weight: 900; color: var(--ink); letter-spacing: -0.5px; }
+
+/* 수익성 */
+.prof-chart-wrap { margin-top: 4px; }
+.prof-svg { width: 100%; height: auto; display: block; }
+.prof-axis { display: flex; margin-top: 6px; padding: 0 4px; }
+.prof-axis span { flex: 1; text-align: center; font-size: 11px; font-weight: 700; color: var(--faint); }
+.prof-legend { display: flex; gap: 16px; margin-top: 12px; }
+.prof-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: var(--muted); }
+.prof-legend .dot { width: 10px; height: 10px; border-radius: 3px; }
+.prof-legend .dot.rev { background: rgba(49,93,255,0.35); }
+.prof-legend .dot.prof { background: rgba(49,93,255,0.9); }
+.prof-legend .dot.line { background: #f59e0b; border-radius: 50%; }
+
+/* 동종 업계 순위 */
+.peer-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.peer-table th { padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 800; color: var(--muted); border-bottom: 1px solid var(--line); white-space: nowrap; }
+.peer-table th.num, .peer-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.peer-table td { padding: 11px 10px; border-bottom: 1px solid var(--faint); color: var(--ink); font-weight: 700; white-space: nowrap; }
+.peer-table tr:last-child td { border-bottom: 0; }
+.peer-rank { color: var(--muted); font-weight: 900; width: 36px; }
+.peer-name { font-weight: 900; }
+.peer-table tr.is-me td { background: rgba(49,93,255,0.07); color: var(--accent); }
+.peer-table tr.is-me .peer-rank, .peer-table tr.is-me .peer-name { color: var(--accent); }
+.peer-table tr.is-median td { color: var(--faint); font-weight: 700; background: var(--glass-subtle); }
+
+/* 예상 목표 주가 */
+.target-list { display: flex; flex-direction: column; gap: 8px; }
+.target-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--glass-border); }
+.target-tag { font-size: 12px; font-weight: 900; padding: 3px 10px; border-radius: 999px; }
+.target-price { font-size: 15px; font-weight: 900; color: var(--ink); }
+.target-pct { margin-left: auto; font-size: 14px; font-weight: 900; }
+.target-row.high { background: rgba(255,59,92,0.06); }
+.target-row.high .target-tag { background: rgba(255,59,92,0.14); color: var(--negative); }
+.target-row.high .target-pct { color: var(--negative); }
+.target-row.avg { background: rgba(16,185,129,0.06); }
+.target-row.avg .target-tag { background: rgba(16,185,129,0.14); color: #059669; }
+.target-row.avg .target-pct { color: #059669; }
+.target-row.low { background: rgba(49,93,255,0.06); }
+.target-row.low .target-tag { background: rgba(49,93,255,0.14); color: var(--accent); }
+.target-row.low .target-pct { color: var(--accent); }
+.target-current { margin-top: 12px; text-align: right; font-size: 12px; font-weight: 700; color: var(--muted); }
+.target-current strong { color: var(--ink); font-size: 14px; }
+
+@media (max-width: 1100px) {
+  .sd-grid.is-info { grid-template-columns: 1fr; }
+  .metric-cards, .fin-cards, .info-facts { grid-template-columns: 1fr; }
+}
+
+/* ===== 뉴스 탭 ===== */
+.news-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.news-filter { display: flex; gap: 4px; }
+.news-filter button {
+  padding: 5px 12px; border-radius: 999px; border: 1px solid var(--glass-border);
+  background: var(--glass-subtle); color: var(--muted); font-size: 12px; font-weight: 900; cursor: pointer;
+  transition: background 0.16s, color 0.16s;
+}
+.news-filter button.is-active { background: rgba(49,93,255,0.1); border-color: rgba(49,93,255,0.28); color: var(--accent); }
+.news-list { display: flex; flex-direction: column; }
+.news-row { padding: 16px 6px; border-bottom: 1px solid var(--faint); cursor: pointer; transition: background 0.14s; }
+.news-row:last-child { border-bottom: 0; }
+.news-row:hover { background: var(--surface-soft); border-radius: var(--radius); }
+.news-row-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.news-chip { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 900; background: rgba(125,78,232,0.1); color: var(--purple); border: 1px solid rgba(125,78,232,0.2); }
+.news-cat { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 900; background: rgba(49,93,255,0.1); color: var(--accent); }
+.news-cat.is-disclosure { background: rgba(16,185,129,0.12); color: #059669; }
+.news-time { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--faint); }
+.news-row-title { font-size: 15px; font-weight: 800; color: var(--ink); margin: 0 0 5px; line-height: 1.45; word-break: keep-all; }
+.news-row-source { font-size: 12px; font-weight: 700; color: var(--faint); }
+
+/* ===== 커뮤니티 탭 ===== */
+.sd-grid.is-community { grid-template-columns: minmax(0, 1fr) 300px; }
+.sd-col-community { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.comm-avatar {
+  width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  color: #fff; font-size: 14px; font-weight: 900;
+}
+.comm-badge { padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 900; background: rgba(16,185,129,0.12); color: #059669; }
+
+/* 작성 박스 */
+.comm-composer { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
+.comm-composer-input {
+  flex: 1; min-width: 0; height: 40px; border: 0; background: transparent;
+  color: var(--ink); font-size: 14px; font-weight: 600; outline: none;
+}
+.comm-composer-input::placeholder { color: var(--faint); font-weight: 600; }
+.comm-composer-tools { display: flex; gap: 4px; flex-shrink: 0; }
+.comm-composer-tools span {
+  width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px; cursor: pointer; font-size: 15px; color: var(--faint);
+}
+.comm-composer-tools span:hover { background: var(--surface-soft); color: var(--ink); }
+
+/* 정렬 */
+.comm-sort {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--glass-border);
+  background: var(--glass-subtle); color: var(--muted); font-size: 12px; font-weight: 900; cursor: pointer;
+}
+.comm-sort:hover { color: var(--ink); }
+
+/* 피드 */
+.feed-panel { padding: 0; overflow: hidden; }
+.feed-list { display: flex; flex-direction: column; }
+.feed-post { display: flex; gap: 12px; padding: 16px 18px; border-top: 1px solid var(--faint); }
+.feed-post:first-child { border-top: 0; }
+.feed-avatar-col { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+.feed-holder { font-size: 10px; font-weight: 900; color: var(--accent); }
+.feed-body { flex: 1; min-width: 0; }
+.feed-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.feed-author-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.feed-author-line strong { font-size: 13px; font-weight: 900; color: var(--ink); }
+.feed-time { font-size: 11px; font-weight: 700; color: var(--faint); margin-top: 1px; }
+.feed-follow {
+  flex-shrink: 0; padding: 5px 12px; border-radius: 8px; border: 0;
+  background: rgba(49,93,255,0.12); color: var(--accent); font-size: 12px; font-weight: 900;
+  cursor: pointer; transition: background 0.16s;
+}
+.feed-follow:hover { background: rgba(49,93,255,0.2); }
+.feed-follow.is-following { background: var(--surface-soft); color: var(--muted); }
+.feed-title { font-size: 15px; font-weight: 800; color: var(--ink); margin: 8px 0 0; line-height: 1.45; word-break: keep-all; }
+.feed-sub { font-size: 14px; font-weight: 600; color: var(--muted); margin: 2px 0 0; line-height: 1.45; word-break: keep-all; }
+.feed-actions { display: flex; align-items: center; gap: 18px; margin-top: 10px; }
+.feed-act { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; padding: 0; color: var(--muted); font-size: 12px; font-weight: 800; cursor: pointer; transition: color 0.15s; }
+.feed-act:hover { color: var(--accent); }
+
+/* 커뮤니티 사이드바 */
+.comm-stock-card { padding: 18px; }
+.comm-stock-head { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 10px; }
+.comm-stock-name { font-size: 16px; font-weight: 900; color: var(--ink); }
+.comm-stock-code { font-size: 12px; font-weight: 700; color: var(--muted); }
+.comm-stock-price { font-size: 22px; font-weight: 900; color: var(--ink); letter-spacing: -0.5px; }
+.comm-stock-change { font-size: 13px; font-weight: 900; margin-top: 2px; }
+.comm-stock-btn {
+  width: 100%; margin-top: 14px; height: 40px; border-radius: var(--radius);
+  border: 1px solid rgba(49,93,255,0.25); background: rgba(49,93,255,0.08);
+  color: var(--accent); font-size: 13px; font-weight: 900; cursor: pointer; transition: background 0.16s;
+}
+.comm-stock-btn:hover { background: rgba(49,93,255,0.16); }
+
+.comm-popular { padding: 18px; }
+.comm-popular-list { display: flex; flex-direction: column; margin-top: 10px; }
+.comm-popular-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--faint); }
+.comm-popular-item:first-child { border-top: 0; }
+.comm-popular-rank { font-size: 13px; font-weight: 900; color: var(--accent); flex-shrink: 0; width: 14px; }
+.comm-popular-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.comm-popular-title { font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.4; word-break: keep-all; }
+.comm-popular-like { font-size: 11px; font-weight: 800; color: var(--muted); }
+
+@media (max-width: 1100px) {
+  .sd-grid.is-community { grid-template-columns: 1fr; }
+}
 
 /* ===== 색상 ===== */
 .is-up   { color: var(--positive); }

@@ -1,10 +1,186 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import SparklineChart from '../components/SparklineChart.vue'
 import { useRouter } from 'vue-router'
-import { stocksApi, portfolioApi } from '../api'
+import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
+const auth = useAuthStore()
+
+// 검색 바
+const searchQuery = ref('')
+const popularKeywords = ['SK하이닉스', '엔비디아', '삼성전자']
+function goSearch() {
+  // 와이어프레임: 검색 실행 시 주식 조회 페이지로 이동
+  router.push('/stocks')
+}
+
+// 자산 현황
+const hideAmount = ref(false)
+const totalAsset = 12345000
+const totalReturn = 8.2
+const holdingNewsList = [
+  { ticker: 'SK하이닉스', title: 'HBM3E 12단 양산 본격화...NVIDIA 독점 공급' },
+  { ticker: '삼성전자', title: '파운드리 2나노 수율 개선...대형 수주 기대감' },
+  { ticker: 'NVIDIA', title: 'AI 가속기 신제품 공개, 데이터센터 수요 견조' },
+  { ticker: 'NAVER', title: '커머스·클라우드 AI 전환 가속...실적 반등 전망' },
+  { ticker: 'APPLE', title: 'WWDC서 온디바이스 AI 기능 대거 공개 예고' },
+  { ticker: '셀트리온', title: '바이오시밀러 미국 점유율 확대...수출 증가세' },
+]
+
+// 궁합 추천 스와이프 덱
+const matchStocks = [
+  {
+    name: '삼성바이오로직스', code: '207940', market: 'KOSPI · 바이오', sector: '바이오',
+    score: 86, price: '1,042,000원', change: '+1.4%', up: true, interest: 612,
+    dna: [
+      { label: '변동성', value: 63 }, { label: '성장', value: 85 },
+      { label: '가치', value: 45 }, { label: '안정성', value: 60 },
+    ],
+    gradient: 'linear-gradient(135deg, #6d28d9 0%, #a855f7 45%, #db2777 100%)',
+  },
+  {
+    name: 'SK하이닉스', code: '000660', market: 'KOSPI · 전기·전자', sector: '반도체',
+    score: 94, price: '189,300원', change: '+2.1%', up: true, interest: 1284,
+    dna: [
+      { label: '변동성', value: 72 }, { label: '성장', value: 88 },
+      { label: '가치', value: 52 }, { label: '안정성', value: 58 },
+    ],
+    gradient: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%)',
+  },
+  {
+    name: 'NAVER', code: '035420', market: 'KOSPI · 플랫폼', sector: '플랫폼',
+    score: 80, price: '192,500원', change: '+1.4%', up: true, interest: 430,
+    dna: [
+      { label: '변동성', value: 58 }, { label: '성장', value: 76 },
+      { label: '가치', value: 55 }, { label: '안정성', value: 62 },
+    ],
+    gradient: 'linear-gradient(135deg, #059669 0%, #10b981 50%, #06b6d4 100%)',
+  },
+  {
+    name: '셀트리온', code: '068270', market: 'KOSPI · 바이오', sector: '바이오',
+    score: 82, price: '168,300원', change: '+2.4%', up: true, interest: 521,
+    dna: [
+      { label: '변동성', value: 66 }, { label: '성장', value: 80 },
+      { label: '가치', value: 48 }, { label: '안정성', value: 57 },
+    ],
+    gradient: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 50%, #a855f7 100%)',
+  },
+]
+
+const cardEl = ref(null)
+const matchIndex = ref(0)
+const current = computed(() => matchStocks[matchIndex.value])
+const feedbackType = ref(null) // 'like' | 'pass' | 'save'
+const feedbackOpacity = ref(0)
+
+// Stock DNA 4축(변동성/성장/가치/안정성) → 다이아몬드 폴리곤 좌표
+const dnaPolygon = computed(() => {
+  const d = current.value.dna
+  const cx = 60, cy = 60, R = 46
+  return [
+    `${cx},${cy - (R * d[0].value) / 100}`,
+    `${cx + (R * d[1].value) / 100},${cy}`,
+    `${cx},${cy + (R * d[2].value) / 100}`,
+    `${cx - (R * d[3].value) / 100},${cy}`,
+  ].join(' ')
+})
+
+let dragging = false
+let animating = false
+let startX = 0
+let startY = 0
+let curX = 0
+let curY = 0
+
+const EXIT_MS = 540
+
+// 드래그 방향에 따라 가운데 피드백(관심/패스/저장) 갱신
+function updateFeedback() {
+  if (curY < -50 && Math.abs(curY) > Math.abs(curX)) {
+    feedbackType.value = 'save'
+    feedbackOpacity.value = Math.min(Math.abs(curY) / 120, 1)
+  } else if (curX > 40) {
+    feedbackType.value = 'like'
+    feedbackOpacity.value = Math.min(curX / 120, 1)
+  } else if (curX < -40) {
+    feedbackType.value = 'pass'
+    feedbackOpacity.value = Math.min(Math.abs(curX) / 120, 1)
+  } else {
+    feedbackOpacity.value = 0
+  }
+}
+
+// 다음 카드 진입: 살짝 작게+투명 → 제자리로 부드럽게
+function enterCard() {
+  const el = cardEl.value
+  if (!el) return
+  feedbackOpacity.value = 0
+  el.style.transition = 'none'
+  el.style.transform = 'translate3d(0,0,0) scale(.94)'
+  el.style.opacity = '0'
+  requestAnimationFrame(() => {
+    el.style.transition = 'transform .5s cubic-bezier(.2,.8,.2,1), opacity .42s ease'
+    el.style.transform = 'translate3d(0,0,0) scale(1)'
+    el.style.opacity = '1'
+  })
+}
+
+function advance() {
+  matchIndex.value = (matchIndex.value + 1) % matchStocks.length
+  requestAnimationFrame(enterCard)
+}
+
+// direction: 'left'=관심없음, 'right'=관심, 'save'=관심 종목 저장(위로)
+function swipe(direction) {
+  const el = cardEl.value
+  if (!auth.isAuthenticated || animating || !el) return
+  animating = true
+  feedbackType.value = direction === 'save' ? 'save' : direction === 'right' ? 'like' : 'pass'
+  feedbackOpacity.value = 1
+  el.style.transition = `transform ${EXIT_MS}ms cubic-bezier(.4,0,.2,1), opacity ${EXIT_MS}ms ease`
+  if (direction === 'save') {
+    el.style.transform = 'translate3d(0,-220px,0) scale(.9)'
+  } else {
+    const right = direction === 'right'
+    el.style.transform = `translate3d(${right ? 460 : -460}px,40px,0) rotate(${right ? 16 : -16}deg)`
+  }
+  el.style.opacity = '0'
+  setTimeout(() => { advance(); animating = false }, EXIT_MS)
+}
+
+function onPointerDown(e) {
+  if (!auth.isAuthenticated || animating) return
+  dragging = true
+  startX = e.clientX
+  startY = e.clientY
+  curX = 0
+  curY = 0
+  cardEl.value.style.transition = 'none'
+  cardEl.value.setPointerCapture?.(e.pointerId)
+}
+function onPointerMove(e) {
+  if (!dragging) return
+  curX = e.clientX - startX
+  curY = e.clientY - startY
+  const rotate = curX / 20
+  const scale = Math.max(0.96, 1 - (Math.abs(curX) + Math.abs(curY)) / 2400)
+  cardEl.value.style.transform = `translate3d(${curX}px, ${curY}px, 0) rotate(${rotate}deg) scale(${scale})`
+  updateFeedback()
+}
+function onPointerUp() {
+  if (!dragging) return
+  dragging = false
+  // 위로 스와이프 = 저장(하트 버튼과 동일), 좌우 = 관심없음/관심
+  if (curY < -110 && Math.abs(curY) > Math.abs(curX)) return swipe('save')
+  if (curX > 110) return swipe('right')
+  if (curX < -110) return swipe('left')
+  // 임계값 미만 — 제자리 복귀
+  const el = cardEl.value
+  el.style.transition = 'transform .45s cubic-bezier(.2,.8,.2,1)'
+  el.style.transform = 'translate3d(0,0,0) rotate(0deg) scale(1)'
+  feedbackOpacity.value = 0
+}
 
 // 초기값은 와이어프레임 목업 — API 응답이 오면 실데이터로 교체
 const marketIndices = ref([
@@ -59,46 +235,6 @@ const holdings = ref([
   { name: 'APPLE',    ticker: 'AAPL',   qty: 2,  avg: 248000, cur: 261000, color: '#06b6d4' },
 ])
 
-const holdingColors = ['#315dff', '#7d4ee8', '#22c55e', '#f59e0b', '#06b6d4']
-const defaultSpark = [60, 62, 61, 63, 65, 64, 66, 68, 67, 69, 71, 70]
-
-onMounted(async () => {
-  // 시장 지표: GET /api/v1/markets/summary/
-  try {
-    const { data } = await stocksApi.marketSummary()
-    if (data.indices?.length) {
-      marketIndices.value = data.indices.map((idx) => ({
-        name: idx.name,
-        value: idx.current.toLocaleString('ko-KR'),
-        change: (idx.change >= 0 ? '+' : '') + idx.change.toLocaleString('ko-KR'),
-        rate: (idx.change_rate >= 0 ? '+' : '') + idx.change_rate.toFixed(2) + '%',
-        up: idx.change >= 0,
-        sub: '',
-        sparkline: defaultSpark,
-      }))
-    }
-  } catch (e) {
-    console.warn('시장 지표 로드 실패 — 목업 유지', e)
-  }
-
-  // 보유 종목 미리보기: GET /api/v1/portfolio/
-  try {
-    const { data } = await portfolioApi.summary()
-    if (data.holdings_preview?.length) {
-      holdings.value = data.holdings_preview.map((h, i) => ({
-        name: h.stock.name,
-        ticker: h.stock.code,
-        qty: h.quantity,
-        avg: Number(h.average_price),
-        cur: Number(h.current_price),
-        color: holdingColors[i % holdingColors.length],
-      }))
-    }
-  } catch (e) {
-    console.warn('포트폴리오 로드 실패 — 목업 유지', e)
-  }
-})
-
 const recentDiaries = [
   { date: '2026-06-10', stock: 'APPLE',    ticker: 'AAPL',   type: 'hold', title: 'WWDC 전 홀딩 전략' },
   { date: '2026-06-05', stock: '삼성전자', ticker: '005930', type: 'buy',  title: '오늘 매수 이유' },
@@ -120,6 +256,32 @@ const watchlistNews = [
 <template>
   <div class="home-page">
 
+    <!-- ===== 검색 바 ===== -->
+    <section class="panel home-search" aria-label="종목 검색">
+      <form class="search-box" @submit.prevent="goSearch">
+        <svg class="search-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="2" />
+          <path d="M14 14l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        <input
+          v-model="searchQuery"
+          type="text"
+          class="search-input"
+          placeholder="종목명 또는 코드로 검색 (예: 삼성전자, 005930, NVDA)"
+        />
+      </form>
+      <div class="search-popular">
+        <span class="popular-label">🔥 인기검색</span>
+        <button
+          v-for="kw in popularKeywords"
+          :key="kw"
+          type="button"
+          class="popular-kw"
+          @click="goSearch"
+        >{{ kw }}</button>
+      </div>
+    </section>
+
     <!-- ===== 섹션 1: 자산 목표 + 스와이핑 추천 ===== -->
     <div class="hero-grid">
 
@@ -127,19 +289,36 @@ const watchlistNews = [
       <section class="panel goal-panel" aria-label="자산 현황 및 목표">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">현재 총 자산 가치 및 다음 목표</p>
+            <p class="eyebrow">나의 자산</p>
             <h2>자산 현황</h2>
+          </div>
+          <button class="hide-amount-btn" type="button" @click="hideAmount = !hideAmount">
+            👁 {{ hideAmount ? '금액 보기' : '금액 숨기기' }}
+          </button>
+        </div>
+
+        <!-- 총 평가액 -->
+        <div class="asset-summary">
+          <div class="asset-total">
+            <span class="asset-total-label">총 평가액</span>
+            <strong class="asset-total-value">{{ hideAmount ? '••••••••' : fmt(totalAsset) + '원' }}</strong>
+          </div>
+          <div class="asset-return">
+            <span class="asset-return-label">총 수익률</span>
+            <strong class="asset-return-value" :class="totalReturn >= 0 ? 'is-up' : 'is-down'">
+              {{ totalReturn >= 0 ? '+' : '' }}{{ totalReturn }}%
+            </strong>
           </div>
         </div>
 
         <div class="goal-list">
           <!-- 현재 진행중인 목표 -->
           <div class="goal-card target">
-            <div class="goal-card-icon">🖥️</div>
+            <div class="goal-card-icon">✈️</div>
             <div class="goal-card-info">
               <span class="goal-card-label">다음 목표</span>
-              <strong class="goal-card-name">게이밍 데스크탑</strong>
-              <span class="goal-card-amount">목표 3,500,000원</span>
+              <strong class="goal-card-name">유럽 여행</strong>
+              <span class="goal-card-amount">목표 5,000,000원</span>
             </div>
             <span class="goal-badge in-progress">진행중</span>
           </div>
@@ -154,78 +333,131 @@ const watchlistNews = [
 
           <!-- 이전 달성 목표 -->
           <div class="goal-card achieved">
-            <div class="goal-card-icon">🚗</div>
+            <div class="goal-card-icon">👜</div>
             <div class="goal-card-info">
               <span class="goal-card-label">달성 완료</span>
-              <strong class="goal-card-name">국산 정차</strong>
-              <span class="goal-card-amount">45,000,000원</span>
+              <strong class="goal-card-name">명품 가방</strong>
+              <span class="goal-card-amount">8,900,000원</span>
             </div>
             <span class="goal-badge done">달성</span>
           </div>
         </div>
 
-        <!-- 다음 투자 추천 전략 -->
-        <div class="recommendation-box">
-          <p class="eyebrow" style="color: var(--purple);">다음 추천 전략</p>
-          <strong class="recommendation-title">공격형 · 반도체 우선 매점</strong>
-          <p class="recommendation-desc">
-            단계를 위한 투자 포트폴리오 조정이 필요합니다.
-            현재 목표와 연결된 반도체 섹터 비중 확대를 추천합니다.
-          </p>
+        <!-- 액션 버튼 -->
+        <div class="asset-actions">
+          <button class="asset-action-card" type="button" @click="router.push('/trading-diary')">
+            <span class="aac-icon">📓</span>
+            <span class="aac-body">
+              <strong>투자 일기 쓰러 가기</strong>
+              <small>작성 대기 1건 (매매 후 미작성)</small>
+            </span>
+            <span class="aac-arrow">→</span>
+          </button>
+          <button class="asset-action-card" type="button" @click="router.push('/portfolio')">
+            <span class="aac-icon">🩺</span>
+            <span class="aac-body">
+              <strong>장투 점검하기</strong>
+              <small>내 종목 지금 점검해보세요</small>
+            </span>
+            <span class="aac-arrow">→</span>
+          </button>
+        </div>
+
+        <!-- 보유 종목 뉴스 -->
+        <div class="asset-news">
+          <div class="asset-news-head">
+            <span class="asset-news-label">📰 보유 종목 뉴스</span>
+            <span class="asset-news-nav">← → 넘기기</span>
+          </div>
+          <article v-for="n in holdingNewsList" :key="n.title" class="asset-news-item">
+            <span class="news-ticker">{{ n.ticker }}</span>
+            <span class="asset-news-headline">{{ n.title }}</span>
+          </article>
         </div>
       </section>
 
-      <!-- 오른쪽: 스와이핑 주식 추천 -->
-      <section class="swipe-recommend-panel" aria-label="스와이핑 주식 추천">
-        <div class="swipe-recommend-header">
-          <p class="eyebrow">AI 기반 추천</p>
-          <h2>스와이핑 주식 추천</h2>
+      <!-- 오른쪽: 궁합 추천 스와이프 -->
+      <section class="panel swipe-recommend-panel" aria-label="궁합 추천">
+        <div class="match-header">
+          <h2 class="match-title">오늘의 궁합 추천 💝</h2>
+          <p class="match-sub">당신의 투자 성향과 잘 맞는 종목이에요. 넘기면서 관심 종목을 골라보세요.</p>
+          <span class="match-count">추천 {{ matchIndex + 1 }} / {{ matchStocks.length }}</span>
         </div>
 
-        <div class="swipe-card-area">
-          <!-- 그라디언트 주식 카드 -->
+        <div class="deck-wrap">
           <article
-            class="swipe-hero-card"
-            style="background: linear-gradient(135deg, #6d28d9 0%, #a855f7 45%, #db2777 100%)"
+            ref="cardEl"
+            class="match-card"
+            :class="{ blurred: !auth.isAuthenticated }"
+            :style="{ background: current.gradient }"
+            @pointerdown="onPointerDown"
+            @pointermove="onPointerMove"
+            @pointerup="onPointerUp"
           >
-            <div class="swipe-hero-top">
-              <span class="swipe-hero-badge">KOSPI · 전기·전자</span>
-              <div class="swipe-hero-score">
-                94
-                <span>점</span>
+            <div class="match-feedback" :class="feedbackType" :style="{ opacity: feedbackOpacity }">
+              <span v-if="feedbackType === 'like'">❤️ 관심</span>
+              <span v-else-if="feedbackType === 'pass'">✕ 패스</span>
+              <span v-else-if="feedbackType === 'save'">⭐ 저장</span>
+            </div>
+
+            <div class="mc-top">
+              <span class="mc-badge">{{ current.market }}</span>
+              <div class="mc-score">{{ current.score }}<span>궁합점수</span></div>
+            </div>
+
+            <div class="mc-name-block">
+              <h3 class="mc-name">{{ current.name }}</h3>
+              <div class="mc-code">{{ current.code }}</div>
+            </div>
+
+            <div class="mc-prices">
+              <div class="mc-price-box">
+                <span>현재가</span>
+                <strong>{{ current.price }}</strong>
+              </div>
+              <div class="mc-price-box">
+                <span>등락률</span>
+                <strong :class="current.up ? 'up' : 'down'">{{ current.change }}</strong>
               </div>
             </div>
 
-            <div class="swipe-hero-body">
-              <h3 class="swipe-hero-name">SK하이닉스</h3>
-              <div class="swipe-hero-code">000660</div>
-
-              <div class="swipe-hero-prices">
-                <div class="swipe-price-box">
-                  <span>현재가</span>
-                  <strong>189,300원</strong>
-                </div>
-                <div class="swipe-price-box">
-                  <span>등락률</span>
-                  <strong class="up-pill">+2.1%</strong>
+            <!-- Stock DNA -->
+            <div class="mc-dna">
+              <svg class="dna-radar" viewBox="0 0 120 120" aria-hidden="true">
+                <polygon class="dna-grid" points="60,14 106,60 60,106 14,60" />
+                <polygon class="dna-grid" points="60,37 83,60 60,83 37,60" />
+                <line class="dna-axis" x1="60" y1="14" x2="60" y2="106" />
+                <line class="dna-axis" x1="14" y1="60" x2="106" y2="60" />
+                <polygon class="dna-shape" :points="dnaPolygon" />
+              </svg>
+              <div class="dna-info">
+                <div class="dna-title">🧬 Stock DNA</div>
+                <div class="dna-vals">
+                  <template v-for="d in current.dna" :key="d.label">
+                    <span class="dna-k">{{ d.label }}</span>
+                    <span class="dna-v">{{ d.value }}</span>
+                  </template>
                 </div>
               </div>
             </div>
+
+            <div class="mc-reason">🐤 성장 선호와 {{ current.sector }} 모멘텀(성장 {{ current.dna[1].value }})이 맞아요.</div>
+            <div class="mc-interest">❤️ {{ current.interest.toLocaleString('ko-KR') }}명이 이 종목에 관심 있어요</div>
           </article>
 
-          <!-- 소셜 증거 -->
-          <div class="swipe-social">
-            <span class="social-dot"></span>
-            <span>1,284명의 사용자가 좋아요!</span>
-          </div>
-
-          <!-- 스와이프 액션 버튼 -->
-          <div class="swipe-action-row">
-            <button class="swipe-btn pass-btn" aria-label="패스">✕</button>
-            <button class="swipe-btn heart-btn" aria-label="관심 추가">♡</button>
-            <button class="swipe-btn like-btn" aria-label="관심 종목">→</button>
+          <!-- 미로그인: 카드 블러 + 로그인 버튼 -->
+          <div v-if="!auth.isAuthenticated" class="match-login-overlay">
+            <button class="match-login-btn" type="button" @click="router.push('/login')">로그인을 해주세요</button>
           </div>
         </div>
+
+        <!-- 액션 버튼 -->
+        <div class="match-controls">
+          <button class="match-btn pass" type="button" aria-label="관심없음" :disabled="!auth.isAuthenticated" @click="swipe('left')">✕</button>
+          <button class="match-btn save" type="button" aria-label="관심 종목 저장" :disabled="!auth.isAuthenticated" @click="swipe('save')">♥</button>
+          <button class="match-btn like" type="button" aria-label="관심" :disabled="!auth.isAuthenticated" @click="swipe('right')">↗</button>
+        </div>
+        <p class="match-hint">카드를 좌우로 드래그하거나 버튼을 눌러 넘길 수 있어요</p>
       </section>
     </div>
 
@@ -382,12 +614,89 @@ const watchlistNews = [
   gap: 18px;
 }
 
+/* ===== 검색 바 ===== */
+.home-search {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+}
+
+.search-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.search-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  outline: none;
+}
+
+.search-input::placeholder { color: var(--muted); font-weight: 600; }
+
+.search-popular {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.popular-label {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--ink);
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+.popular-kw {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.popular-kw:hover { color: var(--accent); }
+
+.popular-kw:not(:last-child)::after {
+  content: '·';
+  margin: 0 6px;
+  color: var(--faint);
+}
+
+@media (max-width: 800px) {
+  .home-search { flex-direction: column; align-items: stretch; gap: 10px; }
+  .search-popular { flex-wrap: wrap; }
+}
+
 /* ===== 섹션 1: 히어로 그리드 ===== */
 .hero-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
 }
 
 /* --- 자산/목표 패널 --- */
@@ -504,61 +813,183 @@ const watchlistNews = [
   text-align: right;
 }
 
-.recommendation-box {
-  padding: 16px;
-  border-radius: var(--radius);
-  background: linear-gradient(135deg, rgba(125, 78, 232, 0.08) 0%, rgba(49, 93, 255, 0.05) 100%);
-  border: 1px solid rgba(125, 78, 232, 0.2);
+/* --- 총 평가액 + 금액 숨기기 --- */
+.hide-amount-btn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
 }
+.hide-amount-btn:hover { background: var(--surface-hover); color: var(--ink); }
 
-.recommendation-title {
-  display: block;
-  font-size: 15px;
+.asset-summary {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.asset-total { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.asset-total-label { font-size: 12px; font-weight: 900; color: var(--muted); }
+.asset-total-value {
+  font-size: 30px;
   font-weight: 900;
   color: var(--ink);
-  margin: 6px 0 8px;
+  letter-spacing: -1px;
+  line-height: 1;
 }
+.asset-return { display: flex; flex-direction: column; gap: 4px; padding-bottom: 3px; }
+.asset-return-label { font-size: 12px; font-weight: 900; color: var(--muted); }
+.asset-return-value { font-size: 16px; font-weight: 900; }
+.asset-return-value.is-up { color: var(--positive); }
+.asset-return-value.is-down { color: var(--negative); }
 
-.recommendation-desc {
-  margin: 0;
-  color: var(--muted);
+/* --- 액션 버튼 2개 --- */
+.asset-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.asset-action-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--surface-soft);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.15s ease;
+}
+.asset-action-card:hover { background: var(--surface-hover); transform: translateY(-2px); }
+.aac-icon { font-size: 20px; flex-shrink: 0; }
+.aac-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.aac-body strong { font-size: 13px; font-weight: 900; color: var(--ink); }
+.aac-body small { font-size: 11px; color: var(--muted); font-weight: 700; }
+.aac-arrow { color: var(--faint); font-size: 16px; font-weight: 900; flex-shrink: 0; }
+
+/* --- 보유 종목 뉴스 (카드 하단에 고정해 높이 균형) --- */
+.asset-news { margin-top: auto; border-top: 1px solid var(--line); padding-top: 14px; }
+.asset-news-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.asset-news-label { font-size: 13px; font-weight: 900; color: var(--ink); }
+.asset-news-nav { font-size: 12px; font-weight: 700; color: var(--faint); }
+.asset-news-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--faint);
+}
+.asset-news-item:last-child { border-bottom: none; }
+.asset-news-headline {
   font-size: 13px;
-  line-height: 1.6;
-  word-break: keep-all;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* --- 스와이핑 추천 패널 --- */
+/* --- 궁합 추천 스와이프 패널 --- */
 .swipe-recommend-panel {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 0;
 }
 
-.swipe-recommend-header {
-  margin-bottom: 16px;
+/* 흰 패널에 포인트를 주는 은은한 컬러 오라 */
+.swipe-recommend-panel::before,
+.swipe-recommend-panel::after {
+  content: '';
+  position: absolute;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+.swipe-recommend-panel::before {
+  top: -140px;
+  right: -120px;
+  background: radial-gradient(circle, rgba(125, 78, 232, 0.22), transparent 68%);
+  animation: matchAura 7s ease-in-out infinite;
+}
+.swipe-recommend-panel::after {
+  bottom: -150px;
+  left: -120px;
+  background: radial-gradient(circle, rgba(255, 61, 139, 0.18), transparent 70%);
+  animation: matchAura 7s ease-in-out infinite reverse;
+}
+.swipe-recommend-panel > * { position: relative; z-index: 1; }
+
+@keyframes matchAura {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
 }
 
-.swipe-card-area {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
+.match-header { text-align: center; margin-bottom: 18px; }
+.match-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  color: var(--ink);
+}
+.match-sub {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+.match-count {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 900;
 }
 
-.swipe-hero-card {
+.deck-wrap { position: relative; }
+
+.match-card {
+  position: relative;
   width: 100%;
   border-radius: 24px;
   padding: 22px;
-  min-height: 260px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  color: #fff;
   box-shadow: 0 12px 40px rgba(109, 40, 217, 0.3), 0 4px 12px rgba(0, 0, 0, 0.15);
-  position: relative;
   overflow: hidden;
+  user-select: none;
+  touch-action: none;
+  cursor: grab;
+  will-change: transform, opacity;
 }
-
-.swipe-hero-card::before {
+.match-card:active { cursor: grabbing; }
+.match-card.blurred { filter: blur(7px); pointer-events: none; }
+.match-card::before {
   content: '';
   position: absolute;
   width: 200px;
@@ -569,154 +1000,212 @@ const watchlistNews = [
   background: rgba(255, 255, 255, 0.15);
   pointer-events: none;
 }
+.match-card > * { position: relative; z-index: 1; }
 
-.swipe-hero-top {
+/* 상호작용 피드백 — 카드 가운데에 크게 표시 */
+.match-feedback {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+.match-feedback span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 30px;
+  border-radius: 18px;
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  color: #fff;
+  border: 4px solid currentColor;
+  background: rgba(8, 12, 24, 0.34);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.3);
+  transform: rotate(-7deg);
+}
+.match-feedback.like span { color: #2fe39f; }
+.match-feedback.pass span { color: #ff6f8b; }
+.match-feedback.save span { color: #ffce5a; }
+
+.mc-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
-
-.swipe-hero-badge {
+.mc-badge {
   display: inline-flex;
   align-items: center;
   padding: 5px 12px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.18);
   border: 1px solid rgba(255, 255, 255, 0.28);
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.92);
   font-size: 12px;
   font-weight: 900;
 }
-
-.swipe-hero-score {
+.mc-score {
   text-align: right;
-  font-size: 40px;
+  font-size: 36px;
   font-weight: 900;
   line-height: 0.9;
   letter-spacing: -2px;
   color: #fff;
   flex-shrink: 0;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
 }
-
-.swipe-hero-score span {
+.mc-score span {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 0;
   font-weight: 900;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.75);
   margin-top: 4px;
 }
 
-.swipe-hero-body { position: relative; z-index: 1; }
-
-.swipe-hero-name {
-  font-size: 32px;
-  font-weight: 900;
+.mc-name-block { margin-top: 18px; }
+.mc-name {
+  margin: 0;
   color: #fff;
+  font-size: 28px;
+  font-weight: 900;
   letter-spacing: -1px;
   line-height: 1.1;
-  margin: 0 0 4px;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.25);
 }
-
-.swipe-hero-code {
-  color: rgba(255, 255, 255, 0.6);
+.mc-code {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.85);
   font-size: 13px;
   font-weight: 900;
-  margin-bottom: 14px;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.28);
 }
 
-.swipe-hero-prices {
+.mc-prices {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+  margin-top: 16px;
 }
-
-.swipe-price-box {
+.mc-price-box {
   padding: 10px 12px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.15);
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
-
-.swipe-price-box span {
+.mc-price-box span {
   display: block;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.65);
   font-size: 11px;
   font-weight: 900;
   margin-bottom: 4px;
 }
+.mc-price-box strong { display: block; color: #fff; font-size: 15px; font-weight: 900; }
+.mc-price-box strong.up { color: #6effc9; }
+.mc-price-box strong.down { color: #93b8ff; }
 
-.swipe-price-box strong {
-  display: block;
+/* Stock DNA */
+.mc-dna {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.94);
+}
+.dna-radar { width: 96px; height: 96px; flex-shrink: 0; }
+.dna-grid { fill: rgba(49, 93, 255, 0.05); stroke: rgba(49, 93, 255, 0.2); stroke-width: 1; }
+.dna-axis { stroke: rgba(49, 93, 255, 0.18); stroke-width: 1; }
+.dna-shape { fill: rgba(49, 93, 255, 0.45); stroke: var(--accent); stroke-width: 2; }
+.dna-info { flex: 1; min-width: 0; }
+.dna-title { font-size: 13px; font-weight: 900; color: var(--ink); margin-bottom: 10px; }
+.dna-vals {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 8px 10px;
+  align-items: center;
+}
+.dna-k { font-size: 12px; font-weight: 800; color: var(--muted); }
+.dna-v { font-size: 13px; font-weight: 900; color: var(--accent); text-align: right; }
+
+.mc-reason { margin-top: 14px; font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3); }
+.mc-interest { margin-top: 12px; font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3); }
+
+/* 로그인 오버레이 */
+.match-login-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.match-login-btn {
+  padding: 0 22px;
+  height: 48px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
   color: #fff;
   font-size: 15px;
   font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(49, 93, 255, 0.4);
+  transition: transform 0.18s ease;
 }
+.match-login-btn:hover { transform: translateY(-2px); }
 
-.up-pill {
-  color: #6effc9 !important;
-}
-
-/* 소셜 증거 */
-.swipe-social {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.social-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--positive);
-  box-shadow: 0 0 0 3px rgba(15, 159, 110, 0.2);
-  flex-shrink: 0;
-}
-
-/* 스와이프 버튼 */
-.swipe-action-row {
+/* 컨트롤 버튼 */
+.match-controls {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 16px;
+  margin-top: 18px;
 }
-
-.swipe-btn {
-  width: 52px;
-  height: 52px;
+.match-btn {
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
-  border: 1px solid var(--glass-border);
-  background: var(--glass-strong);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  font-size: 20px;
+  border: 1.5px solid var(--glass-border);
+  background: var(--surface-soft);
+  font-size: 22px;
   font-weight: 900;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), var(--glass-inset);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
   color: var(--ink);
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
-
-.swipe-btn.pass-btn { color: var(--negative); border-color: rgba(207, 61, 61, 0.3); }
-.swipe-btn.like-btn { color: var(--positive); border-color: rgba(15, 159, 110, 0.3); }
-
-.swipe-btn.heart-btn {
-  width: 68px;
-  height: 68px;
+.match-btn.pass { color: var(--negative); border-color: rgba(207, 61, 61, 0.4); background: rgba(207, 61, 61, 0.07); }
+.match-btn.like { color: var(--accent); border-color: rgba(49, 93, 255, 0.4); background: rgba(49, 93, 255, 0.07); }
+.match-btn.save {
+  width: 70px;
+  height: 70px;
   border: 0;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
+  background: linear-gradient(135deg, #ff3d8b 0%, #e3344f 100%);
   color: #fff;
-  font-size: 24px;
-  box-shadow: 0 8px 28px rgba(49, 93, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  font-size: 26px;
+  box-shadow: 0 10px 30px rgba(255, 61, 139, 0.45);
 }
+.match-btn:hover:not(:disabled) { transform: translateY(-3px) scale(1.05); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14); }
+.match-btn:active:not(:disabled) { transform: translateY(-1px) scale(0.98); }
+.match-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.swipe-btn:hover {
-  transform: translateY(-3px) scale(1.06);
+.match-hint {
+  margin: 12px 0 0;
+  text-align: center;
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 /* ===== 섹션 2: 시장 지표 ===== */
@@ -967,7 +1456,6 @@ const watchlistNews = [
 /* ===== 반응형 ===== */
 @media (max-width: 1100px) {
   .hero-grid { grid-template-columns: 1fr; }
-  .swipe-hero-card { min-height: 220px; }
 }
 
 @media (max-width: 800px) {

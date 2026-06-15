@@ -1,57 +1,34 @@
 import { defineStore } from 'pinia'
-import { authApi } from '../api'
-import { getAccessToken, setAccessToken } from '../api/client'
 
+// 와이어프레임 모드: 백엔드/DB 연동 없이 로컬 상태만으로 동작한다.
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null,
     hasCompletedOnboarding: false,
-    initialized: false, // 새로고침 후 me() 복원 완료 여부
+    initialized: false,
   }),
   getters: {
     isAuthenticated: (state) => !!state.user,
   },
   actions: {
-    async login(email, password) {
-      const { data } = await authApi.login(email, password)
-      setAccessToken(data.access)
-      this.user = data.user
-      await this.fetchMe()
+    // 이메일/비밀번호 검증 없이 즉시 로그인.
+    // 온보딩 미완료 상태로 두어 로그인 직후 온보딩 설문으로 이동시킨다.
+    mockLogin(nickname = '김주만') {
+      this.user = { nickname, email: 'guest@jumanchu.app' }
+      this.hasCompletedOnboarding = false
+      this.initialized = true
     },
-    async signup(payload) {
-      await authApi.signup(payload)
-      await this.login(payload.email, payload.password)
-    },
-    async fetchMe() {
-      const { data } = await authApi.me()
-      this.user = data.user
-      this.hasCompletedOnboarding = data.has_completed_onboarding
-    },
-    async submitOnboarding(payload) {
-      const { data } = await authApi.submitOnboarding(payload)
-      this.user = data.user
+    // 온보딩 결과를 로컬 상태에만 저장.
+    completeOnboarding(profile) {
+      this.user = { ...this.user, ...profile }
       this.hasCompletedOnboarding = true
-      return data
     },
-    async logout() {
-      try {
-        await authApi.logout()
-      } finally {
-        setAccessToken(null)
-        this.user = null
-        this.hasCompletedOnboarding = false
-      }
+    logout() {
+      this.user = null
+      this.hasCompletedOnboarding = false
     },
-    // 앱 시작 시 1회: access 토큰이 남아 있으면 세션 복원
-    async init() {
-      if (this.initialized) return
-      if (getAccessToken()) {
-        try {
-          await this.fetchMe()
-        } catch {
-          setAccessToken(null)
-        }
-      }
+    // 세션 복원 없음 — 라우터 가드 호환을 위해 유지.
+    init() {
       this.initialized = true
     },
   },

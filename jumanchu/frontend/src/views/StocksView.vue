@@ -1,8 +1,7 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import SparklineChart from '../components/SparklineChart.vue'
-import { stocksApi } from '../api'
 
 const router = useRouter()
 
@@ -200,50 +199,140 @@ const stocks = ref([
   },
 ])
 
-const defaultSpark = [60, 62, 61, 63, 65, 64, 66, 68, 67, 69, 71, 70]
-const defaultChartPoints = [100, 101, 100, 102, 101, 103, 102, 104, 103, 105, 104, 106, 105, 107, 106, 108, 107, 109, 108, 110]
+// ===== 스와이프로 관심종목 만들기 =====
+const SWIPE_GOAL = 10
+const swipeIndex = ref(0)
+const swipedCount = ref(0)
+const savedStocks = ref([]) // { ...stock, action: 'like' | 'save' }
+const swipeDone = computed(() => swipedCount.value >= SWIPE_GOAL)
 
-function fmtTradingValue(v) {
-  if (!v) return '-'
-  return v >= 1e8 ? `${Math.round(v / 1e8).toLocaleString()}억` : `${Math.round(v / 1e4).toLocaleString()}만`
-}
-
-onMounted(async () => {
-  // GET /api/v1/stocks/ → 종목별 현재가는 /stocks/:code/price/ 병렬 조회
-  try {
-    const { data } = await stocksApi.list({ page: 1, size: 15 })
-    if (!data.items?.length) return
-    const priceResults = await Promise.allSettled(
-      data.items.map((s) => stocksApi.price(s.code)),
-    )
-    stocks.value = data.items.map((s, i) => {
-      const p = priceResults[i].status === 'fulfilled' ? priceResults[i].value.data.price : null
-      const rate = p?.change_rate ?? 0
-      return {
-        rank: i + 1,
-        code: s.code, name: s.name, market: s.market, sector: s.sector || '-',
-        price: p ? Number(p.current) : 0,
-        change: p ? Number(p.change) : 0,
-        rate,
-        volume: p ? fmtTradingValue(Number(p.trading_value)) : '-',
-        buyRatio: 50, sellRatio: 50,
-        aiNote: '',
-        color: rate >= 0 ? '#06C' : '#FF3B5C',
-        sparkline: defaultSpark,
-        chartPoints: defaultChartPoints,
-        aiReason: '',
-        summary: [],
-        community: [],
-      }
-    })
-  } catch (e) {
-    console.warn('종목 목록 로드 실패 — 목업 유지', e)
+// 기존 종목 데이터 → 메인 페이지 궁합 카드 형태로 파생 (궁합점수·Stock DNA·관심 수)
+function deriveCard(s) {
+  if (!s) return s
+  const growth = Math.min(95, Math.round(s.buyRatio + 25))
+  const volatility = Math.min(95, 40 + Math.round(Math.abs(s.rate) * 4))
+  const value = Math.max(30, 70 - Math.round(Math.abs(s.rate) * 2))
+  const stability = Math.max(35, Math.min(90, 120 - volatility))
+  return {
+    ...s,
+    score: Math.min(98, Math.max(62, Math.round(60 + s.buyRatio * 0.45))),
+    interest: 200 + Math.round(s.buyRatio * 9),
+    dna: [
+      { label: '변동성', value: volatility },
+      { label: '성장', value: growth },
+      { label: '가치', value: value },
+      { label: '안정성', value: stability },
+    ],
   }
+}
+const currentCard = computed(() => deriveCard(stocks.value[swipeIndex.value % stocks.value.length]))
+const dnaPolygon = computed(() => {
+  const d = currentCard.value?.dna
+  if (!d) return ''
+  const cx = 60, cy = 60, R = 46
+  return [
+    `${cx},${cy - (R * d[0].value) / 100}`,
+    `${cx + (R * d[1].value) / 100},${cy}`,
+    `${cx},${cy + (R * d[2].value) / 100}`,
+    `${cx - (R * d[3].value) / 100},${cy}`,
+  ].join(' ')
 })
 
-// ===== 필터링 =====
+function cardGradient(s) {
+  if (!s) return ''
+  return s.rate >= 0
+    ? 'linear-gradient(135deg, #2563eb 0%, #7c3aed 55%, #06b6d4 100%)'
+    : 'linear-gradient(135deg, #db2777 0%, #7c3aed 55%, #2563eb 100%)'
+}
+
+const swipeCardEl = ref(null)
+const feedbackType = ref(null)
+const feedbackOpacity = ref(0)
+let dragging = false
+let animating = false
+let sx = 0, sy = 0, dx = 0, dy = 0
+const SWIPE_EXIT = 460
+
+function updateSwipeFeedback() {
+  if (dy < -50 && Math.abs(dy) > Math.abs(dx)) {
+    feedbackType.value = 'save'; feedbackOpacity.value = Math.min(Math.abs(dy) / 120, 1)
+  } else if (dx > 40) {
+    feedbackType.value = 'like'; feedbackOpacity.value = Math.min(dx / 120, 1)
+  } else if (dx < -40) {
+    feedbackType.value = 'pass'; feedbackOpacity.value = Math.min(Math.abs(dx) / 120, 1)
+  } else {
+    feedbackOpacity.value = 0
+  }
+}
+function enterSwipeCard() {
+  const el = swipeCardEl.value
+  if (!el) return
+  feedbackOpacity.value = 0
+  el.style.transition = 'none'
+  el.style.transform = 'translate3d(0,0,0) scale(.94)'
+  el.style.opacity = '0'
+  requestAnimationFrame(() => {
+    el.style.transition = 'transform .42s cubic-bezier(.2,.8,.2,1), opacity .3s ease'
+    el.style.transform = 'translate3d(0,0,0) scale(1)'
+    el.style.opacity = '1'
+  })
+}
+function swipeAction(action) {
+  const el = swipeCardEl.value
+  if (animating || !el || swipeDone.value) return
+  animating = true
+  const card = currentCard.value
+  if (action === 'like') savedStocks.value.push({ ...card, action: 'like' })
+  else if (action === 'save') savedStocks.value.push({ ...card, action: 'save' })
+  feedbackType.value = action === 'save' ? 'save' : action === 'like' ? 'like' : 'pass'
+  feedbackOpacity.value = 1
+  el.style.transition = `transform ${SWIPE_EXIT}ms cubic-bezier(.4,0,.2,1), opacity ${SWIPE_EXIT}ms ease`
+  if (action === 'save') {
+    el.style.transform = 'translate3d(0,-220px,0) scale(.9)'
+  } else {
+    const r = action === 'like'
+    el.style.transform = `translate3d(${r ? 460 : -460}px,40px,0) rotate(${r ? 16 : -16}deg)`
+  }
+  el.style.opacity = '0'
+  setTimeout(() => {
+    swipedCount.value += 1
+    swipeIndex.value += 1
+    animating = false
+    if (!swipeDone.value) requestAnimationFrame(enterSwipeCard)
+  }, SWIPE_EXIT)
+}
+function onSwipeDown(e) {
+  if (animating) return
+  dragging = true; sx = e.clientX; sy = e.clientY; dx = 0; dy = 0
+  swipeCardEl.value.style.transition = 'none'
+  swipeCardEl.value.setPointerCapture?.(e.pointerId)
+}
+function onSwipeMove(e) {
+  if (!dragging) return
+  dx = e.clientX - sx; dy = e.clientY - sy
+  const rot = dx / 20
+  const sc = Math.max(0.96, 1 - (Math.abs(dx) + Math.abs(dy)) / 2400)
+  swipeCardEl.value.style.transform = `translate3d(${dx}px,${dy}px,0) rotate(${rot}deg) scale(${sc})`
+  updateSwipeFeedback()
+}
+function onSwipeUp() {
+  if (!dragging) return
+  dragging = false
+  if (dy < -110 && Math.abs(dy) > Math.abs(dx)) return swipeAction('save')
+  if (dx > 110) return swipeAction('like')
+  if (dx < -110) return swipeAction('pass')
+  const el = swipeCardEl.value
+  el.style.transition = 'transform .35s cubic-bezier(.2,.8,.2,1)'
+  el.style.transform = 'translate3d(0,0,0) rotate(0deg) scale(1)'
+  feedbackOpacity.value = 0
+}
+function resetSwipe() {
+  swipeIndex.value = 0; swipedCount.value = 0; savedStocks.value = []
+}
+
+// ===== 결과 목록 필터링 (관심·저장한 종목) =====
 const filteredStocks = computed(() => {
-  let list = stocks.value
+  let list = savedStocks.value
   if (marketFilter.value === 'domestic') list = list.filter(s => s.market === 'KOSPI' || s.market === 'KOSDAQ')
   if (marketFilter.value === 'overseas') list = list.filter(s => s.market === 'NASDAQ' || s.market === 'NYSE')
   return list
@@ -316,6 +405,93 @@ const periods = [
       <!-- ===== 왼쪽: 종목 리스트 ===== -->
       <section class="panel stocks-list-panel" aria-label="종목 목록">
 
+        <!-- ===== 스와이프 모드 (관심종목 고르기) ===== -->
+        <template v-if="!swipeDone">
+          <div class="sv-match-header">
+            <h2 class="sv-match-title">오늘의 궁합 추천 💝</h2>
+            <p class="sv-match-sub">당신의 투자 성향과 잘 맞는 종목이에요. 넘기면서 관심 종목을 골라보세요.</p>
+            <span class="sv-match-count">추천 {{ swipedCount + 1 }} / {{ SWIPE_GOAL }}</span>
+          </div>
+
+          <div class="sv-deck">
+            <article
+              ref="swipeCardEl"
+              class="sv-card"
+              :style="{ background: cardGradient(currentCard) }"
+              @pointerdown="onSwipeDown"
+              @pointermove="onSwipeMove"
+              @pointerup="onSwipeUp"
+            >
+              <div class="sv-feedback" :class="feedbackType" :style="{ opacity: feedbackOpacity }">
+                <span v-if="feedbackType === 'like'">❤️ 관심</span>
+                <span v-else-if="feedbackType === 'pass'">✕ 관심없음</span>
+                <span v-else-if="feedbackType === 'save'">⭐ 저장</span>
+              </div>
+
+              <div class="mc-top">
+                <span class="mc-badge">{{ currentCard.market }} · {{ currentCard.sector }}</span>
+                <div class="mc-score">{{ currentCard.score }}<span>궁합점수</span></div>
+              </div>
+
+              <div class="mc-name-block">
+                <h3 class="mc-name">{{ currentCard.name }}</h3>
+                <div class="mc-code">{{ currentCard.code }}</div>
+              </div>
+
+              <div class="mc-prices">
+                <div class="mc-price-box">
+                  <span>현재가</span>
+                  <strong>{{ currentCard.price.toLocaleString() }}원</strong>
+                </div>
+                <div class="mc-price-box">
+                  <span>등락률</span>
+                  <strong :class="currentCard.rate >= 0 ? 'up' : 'down'">{{ currentCard.rate >= 0 ? '+' : '' }}{{ currentCard.rate.toFixed(2) }}%</strong>
+                </div>
+              </div>
+
+              <!-- Stock DNA -->
+              <div class="mc-dna">
+                <svg class="dna-radar" viewBox="0 0 120 120" aria-hidden="true">
+                  <polygon class="dna-grid" points="60,14 106,60 60,106 14,60" />
+                  <polygon class="dna-grid" points="60,37 83,60 60,83 37,60" />
+                  <line class="dna-axis" x1="60" y1="14" x2="60" y2="106" />
+                  <line class="dna-axis" x1="14" y1="60" x2="106" y2="60" />
+                  <polygon class="dna-shape" :points="dnaPolygon" />
+                </svg>
+                <div class="dna-info">
+                  <div class="dna-title">🧬 Stock DNA</div>
+                  <div class="dna-vals">
+                    <template v-for="d in currentCard.dna" :key="d.label">
+                      <span class="dna-k">{{ d.label }}</span>
+                      <span class="dna-v">{{ d.value }}</span>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mc-reason">🐤 성장 선호와 {{ currentCard.sector }} 모멘텀(성장 {{ currentCard.dna[1].value }})이 맞아요.</div>
+              <div class="mc-interest">❤️ {{ currentCard.interest.toLocaleString() }}명이 이 종목에 관심 있어요</div>
+            </article>
+          </div>
+
+          <div class="sv-controls">
+            <button class="sv-ctrl pass" type="button" @click="swipeAction('pass')">✕</button>
+            <button class="sv-ctrl save" type="button" @click="swipeAction('save')">♥</button>
+            <button class="sv-ctrl like" type="button" @click="swipeAction('like')">↗</button>
+          </div>
+          <p class="sv-hint">카드를 좌우로 드래그하거나 버튼을 눌러 넘길 수 있어요</p>
+        </template>
+
+        <!-- ===== 결과 모드 (관심·저장한 종목) ===== -->
+        <template v-else>
+        <div class="sv-result-head">
+          <div>
+            <p class="eyebrow">스와이프 완료 🎉</p>
+            <h2>관심 · 저장한 종목 {{ savedStocks.length }}개</h2>
+          </div>
+          <button class="sv-reset" type="button" @click="resetSwipe">다시 고르기</button>
+        </div>
+
         <!-- 필터 탭 -->
         <div class="filter-row">
           <div class="segmented">
@@ -352,6 +528,10 @@ const periods = [
 
         <!-- 종목 행 -->
         <div class="stock-list">
+          <div v-if="!filteredStocks.length" class="sv-empty">
+            선택한 종목이 없어요.
+            <button type="button" @click="resetSwipe">다시 고르기</button>
+          </div>
           <div
             v-for="s in filteredStocks"
             :key="s.code"
@@ -371,6 +551,7 @@ const periods = [
                 <strong>{{ s.name }}</strong>
                 <span>{{ s.market }} · {{ s.sector }}</span>
               </div>
+              <span class="saved-tag" :class="s.action">{{ s.action === 'like' ? '관심' : '저장' }}</span>
             </div>
 
             <!-- 현재가 -->
@@ -414,6 +595,7 @@ const periods = [
             </div>
           </div>
         </div>
+        </template>
       </section>
 
       <!-- ===== 오른쪽: 종목 상세 ===== -->
@@ -1146,4 +1328,73 @@ const periods = [
   }
   .col-bar, .col-note, .col-spark { display: none; }
 }
+
+/* ===== 스와이프 관심종목 ===== */
+.sv-match-header { text-align: center; margin-bottom: 16px; }
+.sv-match-title { font-size: 22px; font-weight: 900; letter-spacing: -0.5px; color: var(--ink); margin: 0; }
+.sv-match-sub { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; word-break: keep-all; }
+.sv-match-count { display: inline-block; margin-top: 8px; color: var(--faint); font-size: 12px; font-weight: 900; }
+
+.sv-deck { position: relative; display: flex; justify-content: center; }
+.sv-card {
+  position: relative; width: 100%; max-width: 460px; border-radius: 24px; padding: 22px; color: #fff;
+  box-shadow: 0 16px 44px rgba(109,40,217,0.28), 0 6px 14px rgba(0,0,0,0.12);
+  overflow: hidden; user-select: none; touch-action: none; cursor: grab; will-change: transform, opacity;
+}
+.sv-card:active { cursor: grabbing; }
+.sv-card::before { content: ''; position: absolute; width: 200px; height: 200px; top: -60px; right: -60px; border-radius: 50%; background: rgba(255,255,255,0.15); pointer-events: none; }
+.sv-card > * { position: relative; z-index: 1; }
+
+.sv-feedback { position: absolute; inset: 0; z-index: 6; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.14s ease; }
+.sv-feedback span { padding: 12px 26px; border-radius: 16px; font-size: 28px; font-weight: 900; color: #fff; border: 4px solid currentColor; background: rgba(8,12,24,0.34); box-shadow: 0 14px 44px rgba(0,0,0,0.3); transform: rotate(-7deg); }
+.sv-feedback.like span { color: #2fe39f; }
+.sv-feedback.pass span { color: #ff6f8b; }
+.sv-feedback.save span { color: #ffce5a; }
+
+/* 카드 내용 (메인 페이지 궁합 카드와 동일) */
+.mc-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.mc-badge { display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 999px; background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.28); color: rgba(255,255,255,0.92); font-size: 12px; font-weight: 900; }
+.mc-score { text-align: right; font-size: 36px; font-weight: 900; line-height: 0.9; letter-spacing: -2px; color: #fff; flex-shrink: 0; text-shadow: 0 2px 10px rgba(0,0,0,0.28); }
+.mc-score span { display: block; font-size: 11px; letter-spacing: 0; font-weight: 900; color: rgba(255,255,255,0.75); margin-top: 4px; }
+.mc-name-block { margin-top: 18px; }
+.mc-name { margin: 0; color: #fff; font-size: 28px; font-weight: 900; letter-spacing: -1px; line-height: 1.1; text-shadow: 0 2px 12px rgba(0,0,0,0.32), 0 1px 2px rgba(0,0,0,0.25); }
+.mc-code { margin-top: 4px; color: rgba(255,255,255,0.85); font-size: 13px; font-weight: 900; text-shadow: 0 1px 6px rgba(0,0,0,0.28); }
+.mc-prices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+.mc-price-box { padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); }
+.mc-price-box span { display: block; color: rgba(255,255,255,0.65); font-size: 11px; font-weight: 900; margin-bottom: 4px; }
+.mc-price-box strong { display: block; color: #fff; font-size: 15px; font-weight: 900; }
+.mc-price-box strong.up { color: #6effc9; }
+.mc-price-box strong.down { color: #93b8ff; }
+.mc-dna { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 14px; border-radius: 18px; background: rgba(255,255,255,0.94); }
+.dna-radar { width: 96px; height: 96px; flex-shrink: 0; }
+.dna-grid { fill: rgba(49,93,255,0.05); stroke: rgba(49,93,255,0.2); stroke-width: 1; }
+.dna-axis { stroke: rgba(49,93,255,0.18); stroke-width: 1; }
+.dna-shape { fill: rgba(49,93,255,0.45); stroke: var(--accent); stroke-width: 2; }
+.dna-info { flex: 1; min-width: 0; }
+.dna-title { font-size: 13px; font-weight: 900; color: var(--ink); margin-bottom: 10px; }
+.dna-vals { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 8px 10px; align-items: center; }
+.dna-k { font-size: 12px; font-weight: 800; color: var(--muted); }
+.dna-v { font-size: 13px; font-weight: 900; color: var(--accent); text-align: right; }
+.mc-reason { margin-top: 14px; font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.3); }
+.mc-interest { margin-top: 12px; font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.3); }
+
+.sv-controls { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 18px; }
+.sv-ctrl { width: 56px; height: 56px; border-radius: 50%; border: 1.5px solid var(--glass-border); background: var(--surface-soft); font-size: 22px; font-weight: 900; color: var(--ink); cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.1); transition: transform 0.18s ease; }
+.sv-ctrl.pass { color: var(--negative); border-color: rgba(207,61,61,0.4); background: rgba(207,61,61,0.07); }
+.sv-ctrl.like { color: var(--accent); border-color: rgba(49,93,255,0.4); background: rgba(49,93,255,0.07); }
+.sv-ctrl.save { width: 68px; height: 68px; border: 0; background: linear-gradient(135deg, #ff3d8b 0%, #e3344f 100%); color: #fff; font-size: 26px; box-shadow: 0 10px 30px rgba(255,61,139,0.4); }
+.sv-ctrl:hover { transform: translateY(-3px) scale(1.05); }
+.sv-hint { margin: 12px 0 0; text-align: center; font-size: 12px; font-weight: 700; color: var(--faint); }
+
+.sv-result-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.sv-result-head h2 { font-size: 18px; font-weight: 900; color: var(--ink); margin: 2px 0 0; }
+.sv-reset { flex-shrink: 0; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--glass-border); background: var(--surface-soft); color: var(--muted); font-size: 12px; font-weight: 900; cursor: pointer; }
+.sv-reset:hover { background: var(--glass-strong); color: var(--ink); }
+
+.saved-tag { flex-shrink: 0; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 900; }
+.saved-tag.like { background: rgba(49,93,255,0.12); color: var(--accent); }
+.saved-tag.save { background: rgba(255,61,139,0.12); color: #e3344f; }
+
+.sv-empty { padding: 48px 20px; text-align: center; color: var(--muted); font-size: 14px; font-weight: 700; }
+.sv-empty button { margin-left: 8px; border: 0; background: none; color: var(--accent); font-weight: 900; cursor: pointer; text-decoration: underline; }
 </style>
