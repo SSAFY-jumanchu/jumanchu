@@ -11,4 +11,5 @@ urlpatterns = [
     path('stocks/<str:code>/financials/', views.StockFinancialsView.as_view(), name='stock-financials'),
     path('stocks/<str:code>/posts/', views.StockPostsView.as_view(), name='stock-posts'),
     path('markets/summary/', views.MarketSummaryView.as_view(), name='markets-summary'),
+    path('economic-events/', views.EconomicEventListView.as_view(), name='economic-events'),
 ]

@@ -11,7 +11,7 @@ from freezegun import freeze_time
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from stocks.models import Stock, StockPrice
+from stocks.models import EconomicEvent, Stock, StockPrice
 from stocks.services.price_dispatch import (
     WARNINGS_ALL_FALSE,
     _is_market_open,
@@ -335,3 +335,48 @@ class StockChartTests(APITestCase):
             )
         self.assertEqual(res.status_code, 503)
         self.assertEqual(res.json().get('code'), 'EXTERNAL_API_ERROR')
+
+
+class EconomicEventTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        EconomicEvent.objects.create(
+            event_date=date(2026, 6, 9), title='ADP 고용', importance='MEDIUM', country='US')
+        EconomicEvent.objects.create(
+            event_date=date(2026, 6, 10), title='CPI', importance='HIGH', country='US')
+        EconomicEvent.objects.create(
+            event_date=date(2026, 6, 11), title='실업률', importance='MEDIUM', country='KR')
+        EconomicEvent.objects.create(
+            event_date=date(2026, 6, 15), title='NAHB', importance='LOW', country='US')
+
+    def test_list_public_and_envelope(self):
+        # 비로그인도 조회 가능(AllowAny) + envelope 모양
+        res = self.client.get(reverse('economic-events'))
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(set(body.keys()), {'items', 'page', 'size', 'total'})
+        self.assertEqual(body['total'], 4)
+        # event_date 오름차순 정렬
+        dates = [it['event_date'] for it in body['items']]
+        self.assertEqual(dates, sorted(dates))
+
+    def test_filter_country(self):
+        res = self.client.get(reverse('economic-events'), {'country': 'KR'})
+        self.assertEqual(res.json()['total'], 1)
+        self.assertEqual(res.json()['items'][0]['country'], 'KR')
+
+    def test_filter_importance(self):
+        res = self.client.get(reverse('economic-events'), {'importance': 'HIGH'})
+        self.assertEqual(res.json()['total'], 1)
+        self.assertEqual(res.json()['items'][0]['title'], 'CPI')
+
+    def test_filter_date_range(self):
+        res = self.client.get(reverse('economic-events'),
+                              {'from': '2026-06-10', 'to': '2026-06-11'})
+        self.assertEqual(res.json()['total'], 2)
+
+    def test_malformed_date_ignored(self):
+        # 잘못된 날짜로 500 안 나고 200, 필터 무시
+        res = self.client.get(reverse('economic-events'), {'from': '2026-13-99'})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()['total'], 4)

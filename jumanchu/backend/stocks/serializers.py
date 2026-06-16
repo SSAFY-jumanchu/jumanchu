@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from stocks.models import (
+    EconomicEvent,
     FinancialSummary,
     Stock,
     StockIndicator,
@@ -169,3 +170,16 @@ class MarketSummaryResponseSerializer(serializers.Serializer):
     top_losers = StockSummarySerializer(many=True)
     most_active = StockSummarySerializer(many=True)
     fetched_at = serializers.DateTimeField()
+
+
+class EconomicEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EconomicEvent
+        fields = ['id', 'event_date', 'title', 'importance', 'country']
+
+
+class EconomicEventListResponseSerializer(serializers.Serializer):
+    items = EconomicEventSerializer(many=True)
+    page = serializers.IntegerField()
+    size = serializers.IntegerField()
+    total = serializers.IntegerField()
