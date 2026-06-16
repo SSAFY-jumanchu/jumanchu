@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 from stocks import serializers as s
 from stocks.models import EconomicEvent, Stock, StockPrice
 from stocks.pagination import paginate
+from stocks.services.market_summary import market_summary
 from stocks.services.price_dispatch import (
     build_today_candle, fetch_minute_candles, fetch_price, get_cache_ttl,
 )
@@ -370,7 +371,19 @@ class MarketSummaryView(APIView):
         responses={200: s.MarketSummaryResponseSerializer},
     )
     def get(self, request):
-        return _stub()
+        cached = cache.get('markets:summary')
+        if cached is not None:
+            return Response(cached)
+        try:
+            data = market_summary()
+        except (requests.HTTPError, requests.Timeout, RuntimeError, KeyError) as e:
+            return Response(
+                {'detail': f'시장 데이터 조회 실패: {e}'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        body = s.MarketSummaryResponseSerializer(data).data
+        cache.set('markets:summary', body, timeout=10)  # 명세: Redis 10s TTL
+        return Response(body)
 
 
 @extend_schema(tags=['Market'])

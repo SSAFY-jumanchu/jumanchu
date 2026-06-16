@@ -1,7 +1,7 @@
 """Stock 조회 API (list/detail/price/chart) 통합·단위 테스트."""
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
 from django.core.cache import cache
@@ -415,3 +415,83 @@ class StockPostsTests(APITestCase):
     def test_posts_stock_404(self):
         res = self.client.get(reverse('stock-posts', kwargs={'code': 'ZZZZZZ'}))
         self.assertEqual(res.status_code, 404)
+
+
+def _index_client_mock():
+    """get_kis_client() 대체 — 지수 KIS 호출을 캔드 응답으로 (실호출 금지)."""
+    client = MagicMock()
+    dom = {
+        '0001': {'bstp_nmix_prpr': '8726.60', 'bstp_nmix_prdy_vrss': '180.62',
+                 'bstp_nmix_prdy_ctrt': '2.11'},
+        '1001': {'bstp_nmix_prpr': '870.50', 'bstp_nmix_prdy_vrss': '-5.20',
+                 'bstp_nmix_prdy_ctrt': '-0.59'},
+    }
+    ovs = {
+        'COMP': {'ovrs_nmix_prpr': '26562.23', 'ovrs_nmix_prdy_clpr': '26683.94'},
+        'SPX': {'ovrs_nmix_prpr': '7543.57', 'ovrs_nmix_prdy_clpr': '7554.29'},
+    }
+    client.get_domestic_index.side_effect = lambda iscd: {'output': dom[iscd]}
+    client.get_overseas_index.side_effect = lambda iscd, d1, d2: {'output1': ovs[iscd]}
+    return client
+
+
+class MarketSummaryTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        prev, latest = date(2026, 6, 15), date(2026, 6, 16)
+        # (code, name, 전일종가, 당일종가, 당일거래량) — A +10% / B -5% / C +1%·최대거래량
+        specs = [
+            ('AAAAAA', '에이', Decimal('100'), Decimal('110'), 1000),
+            ('BBBBBB', '비',   Decimal('100'), Decimal('95'),  2000),
+            ('CCCCCC', '씨',   Decimal('100'), Decimal('101'), 999999),
+        ]
+        for code, name, prev_close, latest_close, vol in specs:
+            st = Stock.objects.create(code=code, market='KOSPI', name=name, currency='KRW')
+            StockPrice.objects.create(stock=st, price_date=prev, open=prev_close,
+                                      high=prev_close, low=prev_close, close=prev_close, volume=0)
+            StockPrice.objects.create(stock=st, price_date=latest, open=latest_close,
+                                      high=latest_close, low=latest_close, close=latest_close,
+                                      volume=vol)
+
+    def setUp(self):
+        cache.clear()
+
+    def test_market_summary_ok(self):
+        with patch('stocks.services.market_summary.get_kis_client',
+                   return_value=_index_client_mock()):
+            res = self.client.get(reverse('markets-summary'))
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(set(body.keys()),
+                         {'indices', 'top_gainers', 'top_losers', 'most_active', 'fetched_at'})
+        # 지수 4개 + 매핑(국내는 직접, 해외는 현재가·전일종가로 등락률 계산)
+        idx = {i['code']: i for i in body['indices']}
+        self.assertEqual(set(idx), {'KOSPI', 'KOSDAQ', 'COMP', 'SPX'})
+        self.assertAlmostEqual(idx['KOSPI']['current'], 8726.60, places=2)
+        self.assertAlmostEqual(idx['KOSPI']['change_rate'], 2.11, places=2)
+        self.assertAlmostEqual(idx['COMP']['current'], 26562.23, places=2)
+        self.assertLess(idx['COMP']['change_rate'], 0)  # 26562.23 < 26683.94
+        # 랭킹
+        self.assertEqual(body['top_gainers'][0]['code'], 'AAAAAA')
+        self.assertEqual(body['top_losers'][0]['code'], 'BBBBBB')
+        self.assertEqual(body['most_active'][0]['code'], 'CCCCCC')
+        self.assertEqual(Decimal(body['top_gainers'][0]['current']), Decimal('110.0000'))
+
+    def test_market_summary_cache_hit(self):
+        client = _index_client_mock()
+        with patch('stocks.services.market_summary.get_kis_client', return_value=client):
+            self.client.get(reverse('markets-summary'))
+            self.client.get(reverse('markets-summary'))
+        # 2번째는 캐시 hit → 국내지수 KIS 호출은 1라운드(코스피·코스닥 2건)만
+        self.assertEqual(client.get_domestic_index.call_count, 2)
+
+    def test_market_summary_index_failure_resilient(self):
+        client = MagicMock()
+        client.get_domestic_index.side_effect = RuntimeError('KIS down')
+        client.get_overseas_index.side_effect = RuntimeError('KIS down')
+        with patch('stocks.services.market_summary.get_kis_client', return_value=client):
+            res = self.client.get(reverse('markets-summary'))
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(body['indices'], [])                        # 지수 전멸이어도
+        self.assertEqual(body['top_gainers'][0]['code'], 'AAAAAA')   # 랭킹(DB)은 살아있음
