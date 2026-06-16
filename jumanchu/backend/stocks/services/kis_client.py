@@ -282,3 +282,39 @@ class KISClient:
                 "NREC": nrec, "FILL": fill, "KEYB": keyb,
             },
         )
+
+    # ----- 지수 (시장 요약용) -----
+    def get_domestic_index(self, iscd: str) -> dict[str, Any]:
+        """국내 시장지수 현재가 (FHPUP02100000). iscd: 0001(코스피) / 1001(코스닥).
+
+        응답 output 활용 필드:
+          bstp_nmix_prpr        현재지수
+          bstp_nmix_prdy_vrss   전일대비 (부호 포함)
+          bstp_nmix_prdy_ctrt   전일대비율(%)
+        """
+        return self._get(
+            path="/uapi/domestic-stock/v1/quotations/inquire-index-price",
+            tr_id="FHPUP02100000",
+            params={"FID_COND_MRKT_DIV_CODE": "U", "FID_INPUT_ISCD": iscd},
+        )
+
+    def get_overseas_index(self, iscd: str, start_yyyymmdd: str,
+                           end_yyyymmdd: str) -> dict[str, Any]:
+        """해외 지수 일별시세 (FHKST03030100, 시장구분 N=해외지수).
+        iscd: COMP(나스닥 종합) / SPX(S&P500) / .DJI(다우) / NDX(나스닥100).
+
+        응답 output1(최신 스냅샷) 활용 필드:
+          ovrs_nmix_prpr        현재지수
+          ovrs_nmix_prdy_clpr   전일종가
+          ovrs_nmix_prdy_vrss   전일대비
+        (prdy_ctrt는 null로 올 수 있어 등락률은 호출자가 직접 계산.)
+        """
+        return self._get(
+            path="/uapi/overseas-price/v1/quotations/inquire-daily-chartprice",
+            tr_id="FHKST03030100",
+            params={
+                "FID_COND_MRKT_DIV_CODE": "N", "FID_INPUT_ISCD": iscd,
+                "FID_INPUT_DATE_1": start_yyyymmdd, "FID_INPUT_DATE_2": end_yyyymmdd,
+                "FID_PERIOD_DIV_CODE": "D",
+            },
+        )
