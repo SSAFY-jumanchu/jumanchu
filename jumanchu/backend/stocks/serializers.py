@@ -135,7 +135,7 @@ class FinancialsResponseSerializer(serializers.Serializer):
 class PostSummarySerializer(serializers.Serializer):
     id = serializers.IntegerField()
     title = serializers.CharField()
-    author_nickname = serializers.CharField()
+    author_nickname = serializers.CharField(source='user.nickname')
     created_at = serializers.DateTimeField()
     comment_count = serializers.IntegerField()
     like_count = serializers.IntegerField()

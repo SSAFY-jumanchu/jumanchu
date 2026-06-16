@@ -380,3 +380,38 @@ class EconomicEventTests(APITestCase):
         res = self.client.get(reverse('economic-events'), {'from': '2026-13-99'})
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()['total'], 4)
+
+
+class StockPostsTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from django.contrib.auth import get_user_model
+        from community.models import CommunityPost
+        User = get_user_model()
+        cls.stock = Stock.objects.create(code='005930', market='KOSPI',
+                                          name='삼성전자', currency='KRW')
+        other = Stock.objects.create(code='000660', market='KOSPI',
+                                      name='SK하이닉스', currency='KRW')
+        u = User.objects.create(username='u1', nickname='유저1', birth_year=1995)
+        CommunityPost.objects.create(user=u, stock=cls.stock, category='ANALYSIS',
+                                     title='삼성 분석', body='좋음')
+        CommunityPost.objects.create(user=u, stock=cls.stock, category='QUESTION',
+                                     title='삼성 질문', body='?')
+        CommunityPost.objects.create(user=u, stock=other, category='SHARE',
+                                     title='하이닉스 글', body='x')
+
+    def test_posts_for_stock_only(self):
+        # 비로그인 OK(AllowAny), 그 종목 글만
+        res = self.client.get(reverse('stock-posts', kwargs={'code': '005930'}))
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(set(body.keys()), {'items', 'page', 'size', 'total'})
+        self.assertEqual(body['total'], 2)
+        item = body['items'][0]
+        self.assertEqual(item['author_nickname'], '유저1')
+        self.assertIn('comment_count', item)
+        self.assertIn('like_count', item)
+
+    def test_posts_stock_404(self):
+        res = self.client.get(reverse('stock-posts', kwargs={'code': 'ZZZZZZ'}))
+        self.assertEqual(res.status_code, 404)

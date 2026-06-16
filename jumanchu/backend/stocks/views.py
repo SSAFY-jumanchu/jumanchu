@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 from django.core.cache import cache
-from django.db.models import F, Q
+from django.db.models import Count, F, Q
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -340,7 +340,25 @@ class StockPostsView(APIView):
         responses={200: s.StockPostsResponseSerializer},
     )
     def get(self, request, code: str):
-        return _stub()
+        stock = _stock_by_code(code)
+        if stock is None:
+            return Response({'detail': '해당 종목을 찾을 수 없습니다.'},
+                            status=status.HTTP_404_NOT_FOUND)
+        from community.models import CommunityPost
+
+        qs = (
+            CommunityPost.objects.filter(stock=stock)
+            .select_related('user')
+            .annotate(comment_count=Count('comments'))
+            .order_by('-created_at')
+        )
+        data = paginate(
+            qs,
+            page=request.query_params.get('page'),
+            size=request.query_params.get('size'),
+            item_serializer_cls=s.PostSummarySerializer,
+        )
+        return Response(data)
 
 
 @extend_schema(tags=['Stock'])
