@@ -16,6 +16,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from accounts import serializers as s
 from accounts.models import User, InvestmentProfile, UserPreferredSector
 from portfolio.models import Account
+from recommend.matching import classify_investor_type, find_signature
 from stocks.serializers import StockSerializer
 from decimal import Decimal
 
@@ -297,14 +298,12 @@ class OnboardingView(APIView):
         else:
             risk_type = InvestmentProfile.RiskType.AGGRESSIVE
 
-        # 시그니처 종목 "나와 유사한 종목 + 4축 DNA"(front-wip)는
-        # stock_dna 일배치 적재 + 5벡터↔DNA 궁합 매칭(match_score 1등)이 선행돼야 함 — 둘 다 미구현.
-        # TODO(궁합): stock_dna 배치 + recommendation_cache 1등으로 signature_stock 채우기.
-        signature = None
-
         sectors = data.get('preferred_sectors', [])
+        weights = [Decimal('1.0'), Decimal('0.6'), Decimal('0.3')]
+        sector_weights = {sec: float(weights[i]) for i, sec in enumerate(sectors[:3])}
+
         with transaction.atomic():
-            InvestmentProfile.objects.update_or_create(
+            profile, _ = InvestmentProfile.objects.update_or_create(
                 user=request.user,
                 defaults={
                     'risk_type': risk_type,
@@ -316,24 +315,43 @@ class OnboardingView(APIView):
                     'preferred_period': data.get('preferred_period'),
                     'preferred_sector': sectors[0] if sectors else '',
                     'onboarding_answers': q,
-                    'signature_stock': signature,
                     'profiled_at': timezone.now(),
                 },
             )
             # 복수 관심 섹터 (상위 3개 가중 1.0/0.6/0.3)
             UserPreferredSector.objects.filter(user=request.user).delete()
-            weights = [Decimal('1.0'), Decimal('0.6'), Decimal('0.3')]
             for i, sector in enumerate(sectors[:3]):
                 UserPreferredSector.objects.create(
                     user=request.user, sector=sector, weight=weights[i],
                 )
+            # 궁합 1등 종목 박제 (전 종목 Stock DNA 대조, KR+US)
+            sig_dna, sig_score = find_signature(profile, sector_weights)
+            if sig_dna:
+                profile.signature_stock = sig_dna.stock
+                profile.save(update_fields=['signature_stock'])
 
+        investor_type = classify_investor_type(profile)
         request.user.refresh_from_db()
-        request.user.profile_stock_code = signature.code if signature else None
-        profile_stock = {'code': signature.code, 'name': signature.name} if signature else None
+        if sig_dna:
+            request.user.profile_stock_code = sig_dna.stock.code
+            profile_stock = {
+                'code': sig_dna.stock.code,
+                'name': sig_dna.stock.name,
+                'match_score': sig_score,
+                'dna': {
+                    'volatility': float(sig_dna.volatility),
+                    'value_score': float(sig_dna.value_score),
+                    'growth_score': float(sig_dna.growth_score),
+                    'stability': float(sig_dna.stability),
+                },
+            }
+        else:
+            request.user.profile_stock_code = None
+            profile_stock = None
         body = s.OnboardingResponseSerializer({
             'user': request.user,
             'profile_stock': profile_stock,
+            'investor_type': investor_type,
         })
         return Response(body.data, status=status.HTTP_200_OK)
 

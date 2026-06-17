@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 from rest_framework import status
@@ -5,6 +6,8 @@ from rest_framework.test import APITestCase
 
 from accounts.models import InvestmentProfile, User, UserPreferredSector
 from portfolio.models import Account
+from recommend.models import StockDna
+from stocks.models import Stock
 
 
 # TODO(auth): 인증 플로우 단위 테스트 (회원가입/로그인/refresh 회전/logout blacklist/중복 닉네임)
@@ -62,3 +65,23 @@ class OnboardingTests(APITestCase):
         self.client.force_authenticate(user=None)
         res = self.client.post(self.url, self._payload(), format='json')
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_signature_picks_best_match(self):
+        today = date.today()
+        s1 = Stock.objects.create(code='000001', name='고변동', market='KOSPI', currency='KRW', sector='반도체', market_cap=5_000_000)
+        s2 = Stock.objects.create(code='000002', name='안정주', market='KOSPI', currency='KRW', sector='금융', market_cap=9_000_000)
+        StockDna.objects.create(stock=s1, volatility=Decimal('0.95'), value_score=Decimal('0.2'),
+                                growth_score=Decimal('0.9'), stability=Decimal('0.1'), sector='반도체', calculated_date=today)
+        StockDna.objects.create(stock=s2, volatility=Decimal('0.1'), value_score=Decimal('0.8'),
+                                growth_score=Decimal('0.3'), stability=Decimal('0.9'), sector='금융', calculated_date=today)
+        # 안정형(전부 1점) + 관심섹터 금융 → 저변동·고안정 종목이 1등이어야
+        res = self.client.post(
+            self.url, self._payload(q1=1, q2=1, q3=1, q4=1, q5=1, q6=1, preferred_sectors=['금융']),
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        p = InvestmentProfile.objects.get(user=self.user)
+        self.assertEqual(p.signature_stock_id, s2.id)
+        self.assertEqual(res.data['profile_stock']['code'], '000002')
+        self.assertIn('dna', res.data['profile_stock'])
+        self.assertEqual(res.data['investor_type']['type'], '신중 탐색형')
