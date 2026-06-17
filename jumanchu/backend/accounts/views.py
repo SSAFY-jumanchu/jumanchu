@@ -325,7 +325,9 @@ class OnboardingView(APIView):
                     user=request.user, sector=sector, weight=weights[i],
                 )
             # 궁합 1등 종목 박제 (전 종목 Stock DNA 대조, KR+US)
-            sig_dna, sig_score = find_signature(profile, sector_weights)
+            sig_dna, sig_score = find_signature(
+                profile, sector_weights, top_sector=sectors[0] if sectors else None,
+            )
             if sig_dna:
                 profile.signature_stock = sig_dna.stock
                 profile.save(update_fields=['signature_stock'])

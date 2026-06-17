@@ -90,19 +90,31 @@ def _large_cap_ids(top_n: int) -> set:
     return ids
 
 
-def find_signature(profile, sector_weights: dict, top_n: int = LARGE_CAP_TOP_N):
-    """대형주(market_cap 상위 top_n) 중 궁합 1등 종목. → (StockDna, score) | (None, None)."""
+def find_signature(profile, sector_weights: dict, top_sector: str | None = None, top_n: int = LARGE_CAP_TOP_N):
+    """대형주(market_cap 상위 top_n) 중 궁합 1등 종목.
+
+    1순위 관심섹터(top_sector)가 있으면 그 섹터 내 궁합 1등을 우선,
+    해당 섹터에 대형주 후보가 없거나 관심섹터 미선택이면 전체 1등으로 폴백.
+    → (StockDna, score) | (None, None).
+    """
     calc_date = (StockDna.objects.order_by("-calculated_date")
                  .values_list("calculated_date", flat=True).first())
     if calc_date is None:
         return None, None
     candidates = _large_cap_ids(top_n)
-    best, best_score = None, -1.0
     qs = StockDna.objects.filter(calculated_date=calc_date, stock_id__in=candidates).select_related("stock")
+
+    best = best_sector = None
+    best_score = best_sector_score = -1.0
     for dna in qs:
         score = compute_match_score(profile, dna, sector_weights)
         if score > best_score:
             best, best_score = dna, score
+        if top_sector and dna.sector == top_sector and score > best_sector_score:
+            best_sector, best_sector_score = dna, score
+
+    if best_sector is not None:
+        return best_sector, best_sector_score
     return best, best_score
 
 
