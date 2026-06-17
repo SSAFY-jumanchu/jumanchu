@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # (응답 code, 표시 name, KIS iscd)
 _KR_INDICES = [("KOSPI", "코스피", "0001"), ("KOSDAQ", "코스닥", "1001")]
 _US_INDICES = [("COMP", "나스닥", "COMP"), ("SPX", "S&P500", "SPX")]
+_KR_MARKETS = ["KOSPI", "KOSDAQ"]
 _US_MARKETS = ["NASDAQ", "NYSE"]
 _US_EXCD = "NAS"          # 미국 순위는 나스닥 기준 (NYSE는 후속)
 _RANK_LIMIT = 5
@@ -97,25 +98,30 @@ def _map_us_rank(row: dict) -> dict:
 
 
 # ----- 랭킹 (KIS 순위 API) -----
+def _active_codes(markets: list[str]) -> set[str]:
+    """우리 DB의 활성 종목 코드 — KIS 순위를 이걸로 필터(미보유·비활성·ETN 등 클릭 불가 종목 제외)."""
+    return set(
+        Stock.objects.filter(market__in=markets, is_active=True)
+        .values_list("code", flat=True)
+    )
+
+
 def _kr_rankings() -> dict:
     c = get_kis_client()
-    gainers = [_map_kr_rank(r) for r in c.get_domestic_fluctuation("0").get("output", [])]
-    losers = [_map_kr_rank(r) for r in c.get_domestic_fluctuation("1").get("output", [])]
-    active = [_map_kr_rank(r) for r in c.get_domestic_volume_rank().get("output", [])]
+    active = _active_codes(_KR_MARKETS)
+
+    def keep(rows: list) -> list:
+        return [m for m in (_map_kr_rank(r) for r in rows) if m["code"] in active]
+
+    gainers = keep(c.get_domestic_fluctuation("0").get("output", []))
+    losers = keep(c.get_domestic_fluctuation("1").get("output", []))
+    active_rows = keep(c.get_domestic_volume_rank().get("output", []))
     # KIS 순위 행 순서가 등락률과 100% 일치하진 않아 직접 정렬(거래량은 KIS 순서 신뢰).
     return {
         "top_gainers": sorted(gainers, key=lambda r: r["change_rate"], reverse=True)[:_RANK_LIMIT],
         "top_losers": sorted(losers, key=lambda r: r["change_rate"])[:_RANK_LIMIT],
-        "most_active": active[:_RANK_LIMIT],
+        "most_active": active_rows[:_RANK_LIMIT],
     }
-
-
-def _active_us_codes() -> set[str]:
-    """우리 DB의 활성 미국 종목 코드 — KIS 전체시장 순위를 이걸로 필터."""
-    return set(
-        Stock.objects.filter(market__in=_US_MARKETS, is_active=True)
-        .values_list("code", flat=True)
-    )
 
 
 def _us_rankings() -> dict:
@@ -124,7 +130,7 @@ def _us_rankings() -> dict:
     most_active=거래량순, top_gainers/losers=그 풀을 등락률로 재정렬.
     """
     c = get_kis_client()
-    active = _active_us_codes()
+    active = _active_codes(_US_MARKETS)
     pool = [
         m for m in (_map_us_rank(r) for r in
                     c.get_overseas_volume_rank(_US_EXCD).get("output2", []))

@@ -443,6 +443,8 @@ def _market_client_mock():
                             'stck_prpr': '70000', 'prdy_vrss': '-5000', 'prdy_ctrt': '-6.6'}]}
     client.get_domestic_fluctuation.side_effect = kr_fluct
     client.get_domestic_volume_rank.return_value = {'output': [
+        {'mksc_shrn_iscd': 'Q530036', 'hts_kor_isnm': '삼성인버스2X',
+         'stck_prpr': '2000', 'prdy_vrss': '10', 'prdy_ctrt': '0.5'},   # DB에 없음 → 제외
         {'mksc_shrn_iscd': '252670', 'hts_kor_isnm': 'KODEX인버스',
          'stck_prpr': '5000', 'prdy_vrss': '-100', 'prdy_ctrt': '-2.0'}]}
 
@@ -464,6 +466,9 @@ class MarketSummaryTests(APITestCase):
                                    ('TSLA', '테슬라', True), ('DEAD', '상폐예정', False)]:
             Stock.objects.create(code=code, market='NASDAQ', name=name,
                                  currency='USD', is_active=active)
+        # 한국 랭킹 필터용 — Q530036(ETN)은 DB에 없어 랭킹에서 빠져야 함
+        for code, name in [('068270', '셀트리온'), ('005930', '삼성전자'), ('252670', 'KODEX인버스')]:
+            Stock.objects.create(code=code, market='KOSPI', name=name, currency='KRW')
 
     def setUp(self):
         cache.clear()
@@ -487,6 +492,7 @@ class MarketSummaryTests(APITestCase):
         self.assertEqual(body['kr']['top_losers'][0]['code'], '005930')
         self.assertEqual(Decimal(body['kr']['top_losers'][0]['change']), Decimal('-5000.0000'))
         self.assertEqual(body['kr']['most_active'][0]['code'], '252670')  # mksc_shrn_iscd 사용
+        self.assertNotIn('Q530036', [r['code'] for r in body['kr']['most_active']])  # ETN(DB없음) 제외
         # 미국 랭킹 — 거래량 풀(우리 활성 종목)에서 파생. PENNY(DB없음)/DEAD(비활성) 제외
         us = body['us']
         self.assertEqual([r['code'] for r in us['most_active']], ['TSLA', 'NVDA', 'AAPL'])  # 거래량순
