@@ -89,6 +89,7 @@ class OnboardingRequestSerializer(serializers.Serializer):
 class OnboardingResponseSerializer(serializers.Serializer):
     user = UserSerializer()
     profile_stock = serializers.DictField(required=False, allow_null=True)
+    investor_type = serializers.DictField(required=False)
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
