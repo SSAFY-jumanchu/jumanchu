@@ -1,5 +1,8 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 // ===== 보유 종목 (재무 30% · 성장 40% · 궁합 30%) =====
 const holdings = [
@@ -233,6 +236,9 @@ const scoreCards = computed(() => [
             <div class="lt-ov-reco" :style="{ color: gradeColor(total(s)) }">{{ s.recommend }}</div>
             <p class="lt-ov-summary">🐤 {{ s.summary }}</p>
           </div>
+          <button class="lt-ov-go" type="button" @click="router.push(`/stocks/${s.code}`)">
+            종목 상세 →
+          </button>
         </section>
 
         <!-- 재무 / 성장 / 궁합 -->
@@ -348,6 +354,24 @@ const scoreCards = computed(() => [
 .lt-ov-code { font-size: 13px; font-weight: 700; color: var(--muted); }
 .lt-ov-reco { font-size: 15px; font-weight: 900; margin: 4px 0 8px; }
 .lt-ov-summary { margin: 0; font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.6; word-break: keep-all; }
+.lt-ov-go {
+  align-self: flex-start;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(49,93,255,0.28);
+  background: rgba(49,93,255,0.1);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.16s, transform 0.16s;
+}
+.lt-ov-go:hover { background: rgba(49,93,255,0.2); transform: translateY(-1px); }
 
 /* 재무/성장/궁합 카드 */
 .lt-score-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }

@@ -114,25 +114,6 @@ const trades = [
   { price: 315500, qty: 8, rate: +1.94, time: '15:25:05', side: 'down' },
 ]
 
-// ===== 개인/외국인/기관 =====
-const investors = {
-  individual: +962126,
-  foreign: -710214,
-  institution: -311468,
-}
-
-const investorHistory = [
-  { date: '오늘', individual: +962126, foreign: -710214, institution: -311468 },
-  { date: '26.06.04', individual: +238929, foreign: -321817, institution: +64521 },
-  { date: '26.06.02', individual: +398595, foreign: -363599, institution: +44317 },
-  { date: '26.06.01', individual: -86869, foreign: -732563, institution: +631686 },
-  { date: '26.05.29', individual: +446850, foreign: -472461, institution: +12091 },
-]
-
-const maxInvAbs = computed(() =>
-  Math.max(...investorHistory.map(r => Math.max(Math.abs(r.individual), Math.abs(r.foreign), Math.abs(r.institution))))
-)
-
 // ===== 종토방 커뮤니티 =====
 const communityPosts = [
   { user: '장기투자자', badge: null, time: '3분', content: '오늘 +2.42% 상승이네요. 외국인이 사고 있어요!', likes: 12 },
@@ -331,12 +312,6 @@ function fmtCompact(v) {
   if (v >= 10000) return `${(v / 10000).toFixed(1)}만`
   return v.toLocaleString()
 }
-function fmtInv(v) {
-  const sign = v >= 0 ? '+' : ''
-  if (Math.abs(v) >= 10000) return `${sign}${Math.round(v / 10000)}만`
-  return `${sign}${v.toLocaleString()}`
-}
-function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
 </script>
 
 <template>
@@ -1028,49 +1003,6 @@ function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
           </div>
         </div>
 
-        <!-- 개인/외국인/기관 -->
-        <div class="panel investor-panel">
-          <h3>개인·외국인·기관</h3>
-
-          <!-- 오늘 순매수 막대 -->
-          <div class="investor-summary">
-            <div class="inv-row" v-for="({ key, label, val }) in [
-              { key:'individual', label:'개인', val: investors.individual },
-              { key:'foreign', label:'외국인', val: investors.foreign },
-              { key:'institution', label:'기관', val: investors.institution },
-            ]" :key="key">
-              <span class="inv-label">{{ label }}</span>
-              <div class="inv-bar-track">
-                <div
-                  class="inv-bar"
-                  :class="val >= 0 ? 'is-buy' : 'is-sell'"
-                  :style="{
-                    width: invBarWidth(val, Math.max(Math.abs(investors.individual), Math.abs(investors.foreign), Math.abs(investors.institution))) + '%',
-                    [val >= 0 ? 'marginLeft' : 'marginRight']: val >= 0 ? '50%' : 'auto',
-                  }"
-                ></div>
-              </div>
-              <span class="inv-val" :class="val >= 0 ? 'is-up' : 'is-down'">{{ fmtInv(val) }}</span>
-            </div>
-          </div>
-
-          <!-- 날짜별 히스토리 -->
-          <div class="inv-history-head">
-            <span>일자</span>
-            <span>개인</span>
-            <span>외국인</span>
-            <span>기관</span>
-          </div>
-
-          <div class="inv-history-list">
-            <div v-for="(row, i) in investorHistory" :key="i" class="inv-history-row">
-              <span class="inv-date">{{ row.date }}</span>
-              <span :class="row.individual >= 0 ? 'is-up' : 'is-down'">{{ fmtInv(row.individual) }}</span>
-              <span :class="row.foreign >= 0 ? 'is-up' : 'is-down'">{{ fmtInv(row.foreign) }}</span>
-              <span :class="row.institution >= 0 ? 'is-up' : 'is-down'">{{ fmtInv(row.institution) }}</span>
-            </div>
-          </div>
-        </div>
         </template>
 
       </div>
@@ -1576,68 +1508,6 @@ function invBarWidth(v, max) { return Math.round((Math.abs(v) / max) * 100) }
 .trade-qty { font-size: 11px; font-weight: 700; color: var(--muted); text-align: right; }
 .trade-rate { font-size: 11px; font-weight: 900; text-align: right; }
 .trade-time { font-size: 10px; font-weight: 700; color: var(--faint); text-align: right; }
-
-/* ===== 개인/외국인/기관 ===== */
-.investor-panel { padding: 14px; }
-
-.investor-panel h3 {
-  font-size: 14px; font-weight: 900; color: var(--ink);
-  margin: 0 0 12px;
-}
-
-.investor-summary { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-
-.inv-row { display: flex; align-items: center; gap: 8px; }
-
-.inv-label { font-size: 12px; font-weight: 900; color: var(--muted); width: 42px; flex-shrink: 0; }
-
-.inv-bar-track {
-  flex: 1;
-  height: 8px;
-  background: rgba(0,0,0,0.06);
-  border-radius: 999px;
-  position: relative;
-  overflow: hidden;
-}
-
-.inv-bar {
-  position: absolute;
-  top: 0;
-  height: 100%;
-  border-radius: 999px;
-}
-
-.inv-bar.is-buy { background: #0066CC; left: 0; }
-.inv-bar.is-sell { background: #FF3B5C; right: 0; }
-
-.inv-val { font-size: 12px; font-weight: 900; width: 44px; text-align: right; flex-shrink: 0; }
-
-/* 히스토리 */
-.inv-history-head, .inv-history-row {
-  display: grid;
-  grid-template-columns: 60px 1fr 1fr 1fr;
-  gap: 4px;
-  padding: 5px 4px;
-  font-size: 11px;
-  font-weight: 700;
-  text-align: right;
-}
-
-.inv-history-head {
-  color: var(--faint);
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 5px;
-}
-
-.inv-history-head span:first-child,
-.inv-history-row span:first-child { text-align: left; }
-
-.inv-history-list { display: flex; flex-direction: column; gap: 0; }
-
-.inv-history-row { border-radius: 4px; transition: background 0.12s; }
-.inv-history-row:hover { background: var(--surface-soft); }
-
-.inv-date { font-size: 11px; font-weight: 700; color: var(--muted); }
 
 /* ===== 주문 패널 ===== */
 .order-panel { padding: 16px 16px 18px; display: flex; flex-direction: column; gap: 16px; }

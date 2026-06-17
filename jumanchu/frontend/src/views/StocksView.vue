@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import SparklineChart from '../components/SparklineChart.vue'
 
@@ -379,6 +379,32 @@ const periods = [
   { key: '6m', label: '6개월' },
   { key: '1y', label: '1년' },
 ]
+
+// ===== 뷰 토글: 인기 종목 / 선호 종목 =====
+const viewMode = ref('popular') // 'popular' | 'preference'
+
+// ===== 인기 종목 (실시간 랭킹) =====
+const popularSort = ref('value')
+const popularSortOptions = [
+  { key: 'value', label: '거래대금' },
+  { key: 'volume', label: '거래량' },
+  { key: 'up', label: '급상승' },
+  { key: 'down', label: '급하락' },
+]
+const liked = reactive({})
+function toggleLike(code) { liked[code] = !liked[code] }
+const nowLabel = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+const popularStocks = computed(() => {
+  let list = stocks.value.filter((s) => {
+    if (marketFilter.value === 'domestic') return s.market === 'KOSPI' || s.market === 'KOSDAQ'
+    if (marketFilter.value === 'overseas') return s.market === 'NASDAQ' || s.market === 'NYSE'
+    return true
+  })
+  if (popularSort.value === 'up') list = [...list].sort((a, b) => b.rate - a.rate)
+  else if (popularSort.value === 'down') list = [...list].sort((a, b) => a.rate - b.rate)
+  return list
+})
 </script>
 
 <template>
@@ -405,6 +431,100 @@ const periods = [
       <!-- ===== 왼쪽: 종목 리스트 ===== -->
       <section class="panel stocks-list-panel" aria-label="종목 목록">
 
+        <!-- ===== 뷰 토글 (리퀴드 글래스 슬라이드) ===== -->
+        <div class="view-toggle" :class="viewMode">
+          <span class="view-toggle-thumb" aria-hidden="true"></span>
+          <button type="button" :class="{ on: viewMode === 'popular' }" @click="viewMode = 'popular'">인기 종목</button>
+          <button type="button" :class="{ on: viewMode === 'preference' }" @click="viewMode = 'preference'">선호 종목</button>
+        </div>
+
+        <!-- ===== 인기 종목 (실시간 랭킹) ===== -->
+        <template v-if="viewMode === 'popular'">
+          <div class="pop-filter">
+            <div class="segmented">
+              <button
+                v-for="f in marketFilters"
+                :key="f.key"
+                type="button"
+                :class="{ 'is-selected': marketFilter === f.key }"
+                @click="marketFilter = f.key"
+              >{{ f.label }}</button>
+            </div>
+            <div class="pop-sort">
+              <button
+                v-for="o in popularSortOptions"
+                :key="o.key"
+                type="button"
+                :class="{ 'is-selected': popularSort === o.key }"
+                @click="popularSort = o.key"
+              >{{ o.label }}</button>
+            </div>
+            <div class="period-tabs">
+              <button
+                v-for="p in periods"
+                :key="p.key"
+                type="button"
+                :class="{ 'is-selected': sortPeriod === p.key }"
+                @click="sortPeriod = p.key"
+              >{{ p.label }}</button>
+            </div>
+          </div>
+
+          <p class="pop-caption">순위 · 오늘 {{ nowLabel }} 기준</p>
+
+          <div class="pop-table">
+            <div class="pop-row pop-head">
+              <span class="pop-rank-h">순위</span>
+              <span>종목</span>
+              <span class="pop-num">현재가</span>
+              <span class="pop-num">등락률</span>
+              <span class="pop-num">거래대금</span>
+              <span class="pop-ratio-h">거래 비율</span>
+              <span class="pop-ai-h">AI 요약</span>
+            </div>
+
+            <div
+              v-for="(s, i) in popularStocks"
+              :key="s.code"
+              class="pop-row"
+              :class="{ active: selectedStock?.code === s.code }"
+              @click="selectStock(s)"
+            >
+              <span class="pop-rank">
+                <button class="pop-heart" :class="{ on: liked[s.code] }" @click.stop="toggleLike(s.code)">
+                  {{ liked[s.code] ? '♥' : '♡' }}
+                </button>
+                <span class="pop-rank-num">{{ i + 1 }}</span>
+              </span>
+              <div class="pop-name">
+                <span class="pop-logo" :style="{ background: s.color }">{{ s.name.slice(0, 1) }}</span>
+                <div class="pop-name-info">
+                  <strong>{{ s.name }}</strong>
+                  <span>{{ s.market }} · {{ s.sector }}</span>
+                </div>
+              </div>
+              <span class="pop-num pop-price">{{ s.price.toLocaleString() }}원</span>
+              <span class="pop-num pop-rate" :class="s.rate >= 0 ? 'up' : 'down'">
+                {{ s.rate >= 0 ? '+' : '' }}{{ s.rate.toFixed(2) }}%
+              </span>
+              <span class="pop-num pop-vol">{{ s.volume }}</span>
+              <div class="pop-ratio">
+                <div class="pop-ratio-bar">
+                  <span class="buy" :style="{ width: s.buyRatio + '%' }"></span>
+                  <span class="sell" :style="{ width: s.sellRatio + '%' }"></span>
+                </div>
+                <div class="pop-ratio-nums">
+                  <span class="b">{{ s.buyRatio }}</span>
+                  <span class="s">{{ s.sellRatio }}</span>
+                </div>
+              </div>
+              <span class="pop-ai">{{ s.aiNote }}</span>
+            </div>
+          </div>
+        </template>
+
+        <!-- ===== 선호 종목 (스와이프 → 관심·저장) ===== -->
+        <template v-else>
         <!-- ===== 스와이프 모드 (관심종목 고르기) ===== -->
         <template v-if="!swipeDone">
           <div class="sv-match-header">
@@ -595,6 +715,7 @@ const periods = [
             </div>
           </div>
         </div>
+        </template>
         </template>
       </section>
 
@@ -1316,10 +1437,124 @@ const periods = [
   flex-shrink: 0;
 }
 
+/* ===== 뷰 토글 (리퀴드 글래스) ===== */
+.view-toggle {
+  position: relative;
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--glass-subtle);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-inset);
+  margin-bottom: 16px;
+}
+.view-toggle button {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 112px;
+  padding: 9px 22px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.view-toggle button.on { color: var(--accent); }
+
+/* 물방울처럼 슝 미끄러지는 글래스 인디케이터 */
+.view-toggle-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(232,238,255,0.62) 100%);
+  border: 1px solid rgba(255,255,255,0.8);
+  box-shadow:
+    0 6px 18px rgba(49,93,255,0.22),
+    inset 0 1px 1px rgba(255,255,255,0.95),
+    inset 0 -3px 8px rgba(49,93,255,0.12);
+  backdrop-filter: blur(10px) saturate(1.4);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  pointer-events: none;
+  z-index: 0;
+  /* 스프링 오버슈트로 '슝~' 하는 액체 느낌 */
+  transition: transform 0.36s cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: transform;
+}
+.view-toggle.preference .view-toggle-thumb { transform: translateX(100%); }
+
+@media (prefers-reduced-motion: reduce) {
+  .view-toggle-thumb { transition: transform 0.2s ease; }
+}
+
+/* ===== 인기 종목 (실시간 랭킹) ===== */
+.pop-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.pop-sort { display: inline-flex; gap: 4px; padding: 3px; border-radius: 999px; background: var(--glass-subtle); border: 1px solid var(--glass-border); }
+.pop-sort button { padding: 5px 12px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 900; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.pop-sort button.is-selected { background: var(--chip-active); color: var(--ink); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+.pop-caption { margin: 0 0 8px; font-size: 12px; font-weight: 700; color: var(--faint); }
+
+.pop-table { display: flex; flex-direction: column; }
+.pop-row {
+  display: grid;
+  grid-template-columns: 60px minmax(120px, 1.5fr) 92px 78px 80px 108px minmax(110px, 1.2fr);
+  align-items: center; gap: 10px;
+  padding: 11px 8px; border-bottom: 1px solid var(--faint);
+  cursor: pointer; transition: background 0.14s;
+}
+.pop-row:last-child { border-bottom: 0; }
+.pop-row.pop-head { border-bottom: 1px solid var(--line); cursor: default; }
+.pop-row.pop-head span { font-size: 11px; font-weight: 800; color: var(--faint); }
+.pop-row:not(.pop-head):hover { background: var(--surface-soft); }
+.pop-row.active { background: rgba(49,93,255,0.07); }
+
+.pop-num { text-align: right; }
+.pop-rank-h { text-align: left; }
+.pop-ratio-h, .pop-ai-h { text-align: left; }
+
+.pop-rank { display: flex; align-items: center; gap: 8px; }
+.pop-heart { border: 0; background: none; padding: 0; font-size: 16px; color: var(--faint); cursor: pointer; line-height: 1; transition: color 0.14s, transform 0.12s; }
+.pop-heart.on { color: #e3344f; }
+.pop-heart:hover { transform: scale(1.15); }
+.pop-rank-num { font-size: 14px; font-weight: 900; color: var(--ink); }
+
+.pop-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pop-logo { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 900; flex-shrink: 0; }
+.pop-name-info { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pop-name-info strong { font-size: 14px; font-weight: 900; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pop-name-info span { font-size: 11px; font-weight: 700; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pop-price { font-size: 14px; font-weight: 900; color: var(--ink); font-variant-numeric: tabular-nums; }
+.pop-rate { font-size: 13px; font-weight: 900; padding: 3px 8px; border-radius: 8px; justify-self: end; }
+.pop-rate.up { color: #e3344f; background: rgba(227,52,79,0.1); }
+.pop-rate.down { color: #2b59d6; background: rgba(43,89,214,0.1); }
+.pop-vol { font-size: 13px; font-weight: 800; color: var(--muted); }
+
+.pop-ratio { display: flex; flex-direction: column; gap: 3px; }
+.pop-ratio-bar { display: flex; height: 5px; border-radius: 999px; overflow: hidden; background: var(--surface-soft); }
+.pop-ratio-bar .buy { background: #2b59d6; }
+.pop-ratio-bar .sell { background: #e3344f; }
+.pop-ratio-nums { display: flex; justify-content: space-between; font-size: 10px; font-weight: 900; }
+.pop-ratio-nums .b { color: #2b59d6; }
+.pop-ratio-nums .s { color: #e3344f; }
+
+.pop-ai { font-size: 12px; font-weight: 700; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ===== 반응형 ===== */
 @media (max-width: 1200px) {
   .stocks-layout { grid-template-columns: 1fr; }
   .detail-panel { position: static; }
+}
+
+@media (max-width: 820px) {
+  .pop-row { grid-template-columns: 52px minmax(110px, 1.4fr) 84px 70px; }
+  .pop-num.pop-vol, .pop-ratio, .pop-ratio-h, .pop-ai, .pop-ai-h { display: none; }
 }
 
 @media (max-width: 900px) {
