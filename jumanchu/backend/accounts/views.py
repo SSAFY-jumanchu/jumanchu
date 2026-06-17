@@ -16,7 +16,6 @@ from rest_framework_simplejwt.exceptions import TokenError
 from accounts import serializers as s
 from accounts.models import User, InvestmentProfile, UserPreferredSector
 from portfolio.models import Account
-from stocks.models import Stock
 from stocks.serializers import StockSerializer
 from decimal import Decimal
 
@@ -298,15 +297,12 @@ class OnboardingView(APIView):
         else:
             risk_type = InvestmentProfile.RiskType.AGGRESSIVE
 
-        # 시그니처 종목: 상장연도 == 생년 (없으면 None)
-        signature = (
-            Stock.objects.filter(listed_at__year=request.user.birth_year, is_active=True)
-            .order_by('-market_cap')
-            .first()
-        )
+        # 시그니처 종목 "나와 유사한 종목 + 4축 DNA"(front-wip)는
+        # stock_dna 일배치 적재 + 5벡터↔DNA 궁합 매칭(match_score 1등)이 선행돼야 함 — 둘 다 미구현.
+        # TODO(궁합): stock_dna 배치 + recommendation_cache 1등으로 signature_stock 채우기.
+        signature = None
 
         sectors = data.get('preferred_sectors', [])
-        bonus = Decimal('20000')
         with transaction.atomic():
             InvestmentProfile.objects.update_or_create(
                 user=request.user,
@@ -331,10 +327,6 @@ class OnboardingView(APIView):
                 UserPreferredSector.objects.create(
                     user=request.user, sector=sector, weight=weights[i],
                 )
-            # 웰컴 보너스 (최초 온보딩 1회)
-            account = request.user.account
-            account.balance += bonus
-            account.save(update_fields=['balance', 'updated_at'])
 
         request.user.refresh_from_db()
         request.user.profile_stock_code = signature.code if signature else None
@@ -342,7 +334,6 @@ class OnboardingView(APIView):
         body = s.OnboardingResponseSerializer({
             'user': request.user,
             'profile_stock': profile_stock,
-            'welcome_bonus': bonus,
         })
         return Response(body.data, status=status.HTTP_200_OK)
 

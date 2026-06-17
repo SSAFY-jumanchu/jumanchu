@@ -41,12 +41,6 @@ class OnboardingTests(APITestCase):
         self.assertIsNotNone(p.profiled_at)
         self.assertEqual(p.onboarding_answers['q5'], 5)
 
-    def test_welcome_bonus_added(self):
-        before = self.account.balance
-        self.client.post(self.url, self._payload(), format='json')
-        self.account.refresh_from_db()
-        self.assertEqual(self.account.balance, before + Decimal('20000'))
-
     def test_preferred_sectors_weighted(self):
         self.client.post(self.url, self._payload(), format='json')
         weights = {x.sector: x.weight for x in UserPreferredSector.objects.filter(user=self.user)}

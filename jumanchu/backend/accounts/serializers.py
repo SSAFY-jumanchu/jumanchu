@@ -89,7 +89,6 @@ class OnboardingRequestSerializer(serializers.Serializer):
 class OnboardingResponseSerializer(serializers.Serializer):
     user = UserSerializer()
     profile_stock = serializers.DictField(required=False, allow_null=True)
-    welcome_bonus = serializers.DecimalField(max_digits=15, decimal_places=0)
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
