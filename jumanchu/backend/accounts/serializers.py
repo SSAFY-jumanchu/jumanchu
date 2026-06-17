@@ -6,8 +6,9 @@ from accounts.models import InvestmentProfile, User
 class InvestmentProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = InvestmentProfile
-        fields = ['risk_type', 'investment_style', 'preferred_period',
-                  'preferred_sector', 'updated_at']
+        fields = ['risk_type', 'investment_style', 'preferred_period', 'preferred_sector',
+                  'risk_tolerance', 'investment_term', 'experience', 'loss_aversion', 'behavior',
+                  'profiled_at', 'updated_at']
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -69,16 +70,25 @@ class MeUpdateRequestSerializer(serializers.Serializer):
 
 
 class OnboardingRequestSerializer(serializers.Serializer):
-    risk_type = serializers.ChoiceField(choices=InvestmentProfile.RiskType.choices)
-    investment_style = serializers.CharField(max_length=50, required=False, allow_blank=True)
-    preferred_period = serializers.IntegerField(required=False, min_value=1)
-    preferred_sector = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    """온보딩 설문 6문항(각 1/3/5점) + 관심섹터·보유기간. 5벡터는 서버에서 산출."""
+    q1 = serializers.ChoiceField(choices=[1, 3, 5], help_text='투자 목적')
+    q2 = serializers.ChoiceField(choices=[1, 3, 5], help_text='투자 경험')
+    q3 = serializers.ChoiceField(choices=[1, 3, 5], help_text='손실 허용 범위')
+    q4 = serializers.ChoiceField(choices=[1, 3, 5], help_text='자금 의존도')
+    q5 = serializers.ChoiceField(choices=[1, 3, 5], help_text='투자 기간 (총점 가중 ×2)')
+    q6 = serializers.ChoiceField(choices=[1, 3, 5], help_text='시장 하락 반응')
+    preferred_sectors = serializers.ListField(
+        child=serializers.CharField(max_length=50), required=False, default=list,
+        help_text='관심 섹터 우선순위 순 (상위 3개 가중 1.0/0.6/0.3)',
+    )
+    preferred_period = serializers.IntegerField(
+        required=False, min_value=1, allow_null=True, help_text='선호 보유 개월',
+    )
 
 
 class OnboardingResponseSerializer(serializers.Serializer):
     user = UserSerializer()
     profile_stock = serializers.DictField(required=False, allow_null=True)
-    welcome_bonus = serializers.DecimalField(max_digits=15, decimal_places=0)
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
