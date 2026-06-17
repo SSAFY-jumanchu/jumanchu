@@ -221,6 +221,7 @@ _GUARDRAIL = (
     "- '데이터 없음' 항목은 언급하지 않거나 '데이터가 아직 부족하다'고만 표현한다.\n"
     "- 사용자가 이미 보유 중인 종목에 대한 분석이며, 매수·매도 권유가 아니다.\n"
     "- 숫자를 한두 개만 골라 근거로 인용하고, 나열식이 아닌 자연스러운 문장으로 쓴다.\n"
+    "- financial·growth·userfit은 각각 2문장 이내로 짧게, 종합의견(final_opinion)에서만 총평을 길게 쓴다.\n"
 )
 
 
@@ -251,8 +252,8 @@ def build_report_prompt(
     ])
 
     sections = (
-        '  "financial": "재무 건전성 요약 2~3문장",\n'
-        '  "growth": "성장성 요약 2~3문장",\n'
+        '  "financial": "재무 건전성 요약 (2문장 이내)",\n'
+        '  "growth": "성장성 요약 (2문장 이내)",\n'
     )
     blocks = [
         f"[재무 근거 수치]\n{fin_facts}",
@@ -267,9 +268,9 @@ def build_report_prompt(
             + _userfit_facts(meta, profile)
         )
         blocks.append(f"[적합도 근거 수치]\n{uf_facts}")
-        sections += '  "userfit": "사용자 적합도 요약 2~3문장",\n'
+        sections += '  "userfit": "사용자 적합도 요약 (2문장 이내)",\n'
 
-    sections += '  "final_opinion": "총점 기반 종합의견 3~4문장"'
+    sections += '  "final_opinion": "재무·성장·적합도를 종합한 총평 3~4문장"'
 
     total_line = (
         f"총점 {scores.total:.0f}/100 ({grade_of(scores.total)}등급) — {label_of(scores.total)}"
