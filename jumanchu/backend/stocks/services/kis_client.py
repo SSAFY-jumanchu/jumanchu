@@ -282,3 +282,90 @@ class KISClient:
                 "NREC": nrec, "FILL": fill, "KEYB": keyb,
             },
         )
+
+    # ----- 지수 (시장 요약용) -----
+    def get_domestic_index(self, iscd: str) -> dict[str, Any]:
+        """국내 시장지수 현재가 (FHPUP02100000). iscd: 0001(코스피) / 1001(코스닥).
+
+        응답 output 활용 필드:
+          bstp_nmix_prpr        현재지수
+          bstp_nmix_prdy_vrss   전일대비 (부호 포함)
+          bstp_nmix_prdy_ctrt   전일대비율(%)
+        """
+        return self._get(
+            path="/uapi/domestic-stock/v1/quotations/inquire-index-price",
+            tr_id="FHPUP02100000",
+            params={"FID_COND_MRKT_DIV_CODE": "U", "FID_INPUT_ISCD": iscd},
+        )
+
+    def get_overseas_index(self, iscd: str, start_yyyymmdd: str,
+                           end_yyyymmdd: str) -> dict[str, Any]:
+        """해외 지수 일별시세 (FHKST03030100, 시장구분 N=해외지수).
+        iscd: COMP(나스닥 종합) / SPX(S&P500) / .DJI(다우) / NDX(나스닥100).
+
+        응답 output1(최신 스냅샷) 활용 필드:
+          ovrs_nmix_prpr        현재지수
+          ovrs_nmix_prdy_clpr   전일종가
+          ovrs_nmix_prdy_vrss   전일대비
+        (prdy_ctrt는 null로 올 수 있어 등락률은 호출자가 직접 계산.)
+        """
+        return self._get(
+            path="/uapi/overseas-price/v1/quotations/inquire-daily-chartprice",
+            tr_id="FHKST03030100",
+            params={
+                "FID_COND_MRKT_DIV_CODE": "N", "FID_INPUT_ISCD": iscd,
+                "FID_INPUT_DATE_1": start_yyyymmdd, "FID_INPUT_DATE_2": end_yyyymmdd,
+                "FID_PERIOD_DIV_CODE": "D",
+            },
+        )
+
+    # ----- 순위 (시장 요약 랭킹용) -----
+    def get_domestic_fluctuation(self, sort_cls: str) -> dict[str, Any]:
+        """국내 등락률 순위 (FHPST01700000). sort_cls: '0'(상승)/'1'(하락).
+
+        응답 output(list) 활용 필드:
+          stck_shrn_iscd 코드, hts_kor_isnm 이름, stck_prpr 현재가,
+          prdy_vrss 전일대비(부호), prdy_ctrt 등락률
+        """
+        return self._get(
+            path="/uapi/domestic-stock/v1/ranking/fluctuation",
+            tr_id="FHPST01700000",
+            params={
+                "fid_cond_mrkt_div_code": "J", "fid_cond_scr_div_code": "20170",
+                "fid_input_iscd": "0000", "fid_rank_sort_cls_code": sort_cls,
+                "fid_input_cnt_1": "0", "fid_prc_cls_code": "0",
+                "fid_input_price_1": "", "fid_input_price_2": "", "fid_vol_cnt": "",
+                "fid_trgt_cls_code": "0", "fid_trgt_exls_cls_code": "0",
+                "fid_div_cls_code": "0", "fid_rsfl_rate1": "", "fid_rsfl_rate2": "",
+            },
+        )
+
+    def get_domestic_volume_rank(self) -> dict[str, Any]:
+        """국내 거래량 순위 (FHPST01710000).
+
+        응답 output(list): mksc_shrn_iscd 코드, hts_kor_isnm 이름, stck_prpr,
+          prdy_vrss, prdy_ctrt, acml_vol 거래량
+        """
+        return self._get(
+            path="/uapi/domestic-stock/v1/quotations/volume-rank",
+            tr_id="FHPST01710000",
+            params={
+                "fid_cond_mrkt_div_code": "J", "fid_cond_scr_div_code": "20171",
+                "fid_input_iscd": "0000", "fid_div_cls_code": "0", "fid_blng_cls_code": "0",
+                "fid_trgt_cls_code": "111111111", "fid_trgt_exls_cls_code": "0000000000",
+                "fid_input_price_1": "", "fid_input_price_2": "", "fid_vol_cnt": "",
+                "fid_input_date_1": "",
+            },
+        )
+
+    def get_overseas_volume_rank(self, excd: str) -> dict[str, Any]:
+        """해외 거래량 순위 (HHDFS76310010). excd: NAS/NYS.
+
+        응답 output2(list): symb, name/ename, last, diff, sign, rate, tvol 거래량
+        """
+        return self._get(
+            path="/uapi/overseas-stock/v1/ranking/trade-vol",
+            tr_id="HHDFS76310010",
+            params={"AUTH": "", "EXCD": excd, "NDAY": "0", "PRC1": "", "PRC2": "",
+                    "VOL_RANG": "0", "KEYB": ""},
+        )

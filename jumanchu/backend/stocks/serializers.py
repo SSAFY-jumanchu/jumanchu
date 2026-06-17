@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from stocks.models import (
+    EconomicEvent,
     FinancialSummary,
     Stock,
     StockIndicator,
@@ -134,7 +135,7 @@ class FinancialsResponseSerializer(serializers.Serializer):
 class PostSummarySerializer(serializers.Serializer):
     id = serializers.IntegerField()
     title = serializers.CharField()
-    author_nickname = serializers.CharField()
+    author_nickname = serializers.CharField(source='user.nickname')
     created_at = serializers.DateTimeField()
     comment_count = serializers.IntegerField()
     like_count = serializers.IntegerField()
@@ -163,9 +164,27 @@ class StockSummarySerializer(serializers.Serializer):
     change_rate = serializers.FloatField()
 
 
-class MarketSummaryResponseSerializer(serializers.Serializer):
-    indices = IndexSummarySerializer(many=True)
+class MarketRankingsSerializer(serializers.Serializer):
     top_gainers = StockSummarySerializer(many=True)
     top_losers = StockSummarySerializer(many=True)
     most_active = StockSummarySerializer(many=True)
+
+
+class MarketSummaryResponseSerializer(serializers.Serializer):
+    indices = IndexSummarySerializer(many=True)
+    kr = MarketRankingsSerializer()
+    us = MarketRankingsSerializer()
     fetched_at = serializers.DateTimeField()
+
+
+class EconomicEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EconomicEvent
+        fields = ['id', 'event_date', 'title', 'importance', 'country']
+
+
+class EconomicEventListResponseSerializer(serializers.Serializer):
+    items = EconomicEventSerializer(many=True)
+    page = serializers.IntegerField()
+    size = serializers.IntegerField()
+    total = serializers.IntegerField()

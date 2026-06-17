@@ -1,7 +1,7 @@
 """Stock 조회 API (list/detail/price/chart) 통합·단위 테스트."""
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
 from django.core.cache import cache
@@ -11,7 +11,7 @@ from freezegun import freeze_time
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from stocks.models import Stock, StockPrice
+from stocks.models import EconomicEvent, Stock, StockPrice
 from stocks.services.price_dispatch import (
     WARNINGS_ALL_FALSE,
     _is_market_open,
@@ -335,3 +335,189 @@ class StockChartTests(APITestCase):
             )
         self.assertEqual(res.status_code, 503)
         self.assertEqual(res.json().get('code'), 'EXTERNAL_API_ERROR')
+
+
+class EconomicEventTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        EconomicEvent.objects.create(
+            event_date=date(2026, 6, 9), title='ADP 고용', importance='MEDIUM', country='US')
+        EconomicEvent.objects.create(
+            event_date=date(2026, 6, 10), title='CPI', importance='HIGH', country='US')
+        EconomicEvent.objects.create(
+            event_date=date(2026, 6, 11), title='실업률', importance='MEDIUM', country='KR')
+        EconomicEvent.objects.create(
+            event_date=date(2026, 6, 15), title='NAHB', importance='LOW', country='US')
+
+    def test_list_public_and_envelope(self):
+        # 비로그인도 조회 가능(AllowAny) + envelope 모양
+        res = self.client.get(reverse('economic-events'))
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(set(body.keys()), {'items', 'page', 'size', 'total'})
+        self.assertEqual(body['total'], 4)
+        # event_date 오름차순 정렬
+        dates = [it['event_date'] for it in body['items']]
+        self.assertEqual(dates, sorted(dates))
+
+    def test_filter_country(self):
+        res = self.client.get(reverse('economic-events'), {'country': 'KR'})
+        self.assertEqual(res.json()['total'], 1)
+        self.assertEqual(res.json()['items'][0]['country'], 'KR')
+
+    def test_filter_importance(self):
+        res = self.client.get(reverse('economic-events'), {'importance': 'HIGH'})
+        self.assertEqual(res.json()['total'], 1)
+        self.assertEqual(res.json()['items'][0]['title'], 'CPI')
+
+    def test_filter_date_range(self):
+        res = self.client.get(reverse('economic-events'),
+                              {'from': '2026-06-10', 'to': '2026-06-11'})
+        self.assertEqual(res.json()['total'], 2)
+
+    def test_malformed_date_ignored(self):
+        # 잘못된 날짜로 500 안 나고 200, 필터 무시
+        res = self.client.get(reverse('economic-events'), {'from': '2026-13-99'})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()['total'], 4)
+
+
+class StockPostsTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from django.contrib.auth import get_user_model
+        from community.models import CommunityPost
+        User = get_user_model()
+        cls.stock = Stock.objects.create(code='005930', market='KOSPI',
+                                          name='삼성전자', currency='KRW')
+        other = Stock.objects.create(code='000660', market='KOSPI',
+                                      name='SK하이닉스', currency='KRW')
+        u = User.objects.create(username='u1', nickname='유저1', birth_year=1995)
+        CommunityPost.objects.create(user=u, stock=cls.stock, category='ANALYSIS',
+                                     title='삼성 분석', body='좋음')
+        CommunityPost.objects.create(user=u, stock=cls.stock, category='QUESTION',
+                                     title='삼성 질문', body='?')
+        CommunityPost.objects.create(user=u, stock=other, category='SHARE',
+                                     title='하이닉스 글', body='x')
+
+    def test_posts_for_stock_only(self):
+        # 비로그인 OK(AllowAny), 그 종목 글만
+        res = self.client.get(reverse('stock-posts', kwargs={'code': '005930'}))
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(set(body.keys()), {'items', 'page', 'size', 'total'})
+        self.assertEqual(body['total'], 2)
+        item = body['items'][0]
+        self.assertEqual(item['author_nickname'], '유저1')
+        self.assertIn('comment_count', item)
+        self.assertIn('like_count', item)
+
+    def test_posts_stock_404(self):
+        res = self.client.get(reverse('stock-posts', kwargs={'code': 'ZZZZZZ'}))
+        self.assertEqual(res.status_code, 404)
+
+
+def _market_client_mock():
+    """get_kis_client() 대체 — 지수 + 한국·미국 순위 KIS 호출을 캔드 응답으로 (실호출 금지)."""
+    client = MagicMock()
+    # 지수
+    dom_idx = {
+        '0001': {'bstp_nmix_prpr': '8726.60', 'bstp_nmix_prdy_vrss': '180.62',
+                 'bstp_nmix_prdy_ctrt': '2.11'},
+        '1001': {'bstp_nmix_prpr': '870.50', 'bstp_nmix_prdy_vrss': '-5.20',
+                 'bstp_nmix_prdy_ctrt': '-0.59'},
+    }
+    ovs_idx = {
+        'COMP': {'ovrs_nmix_prpr': '26562.23', 'ovrs_nmix_prdy_clpr': '26683.94'},
+        'SPX': {'ovrs_nmix_prpr': '7543.57', 'ovrs_nmix_prdy_clpr': '7554.29'},
+    }
+    client.get_domestic_index.side_effect = lambda iscd: {'output': dom_idx[iscd]}
+    client.get_overseas_index.side_effect = lambda iscd, d1, d2: {'output1': ovs_idx[iscd]}
+
+    # 한국 등락률 순위 (0 상승 / 1 하락) + 거래량 순위
+    def kr_fluct(sort):
+        if sort == '0':
+            return {'output': [{'stck_shrn_iscd': '068270', 'hts_kor_isnm': '셀트리온',
+                                'stck_prpr': '200000', 'prdy_vrss': '30000', 'prdy_ctrt': '17.6'}]}
+        return {'output': [{'stck_shrn_iscd': '005930', 'hts_kor_isnm': '삼성전자',
+                            'stck_prpr': '70000', 'prdy_vrss': '-5000', 'prdy_ctrt': '-6.6'}]}
+    client.get_domestic_fluctuation.side_effect = kr_fluct
+    client.get_domestic_volume_rank.return_value = {'output': [
+        {'mksc_shrn_iscd': 'Q530036', 'hts_kor_isnm': '삼성인버스2X',
+         'stck_prpr': '2000', 'prdy_vrss': '10', 'prdy_ctrt': '0.5'},   # DB에 없음 → 제외
+        {'mksc_shrn_iscd': '252670', 'hts_kor_isnm': 'KODEX인버스',
+         'stck_prpr': '5000', 'prdy_vrss': '-100', 'prdy_ctrt': '-2.0'}]}
+
+    # 미국 랭킹은 거래량 순위 풀에서 파생. PENNY(DB없음)/DEAD(is_active=False)는 필터돼야 함
+    client.get_overseas_volume_rank.return_value = {'output2': [
+        {'symb': 'TSLA', 'name': '테슬라', 'last': '250.00', 'diff': '5.00', 'sign': '2', 'rate': '+2.0'},
+        {'symb': 'NVDA', 'name': '엔비디아', 'last': '1200.00', 'diff': '100.00', 'sign': '2', 'rate': '+9.1'},
+        {'symb': 'AAPL', 'name': '애플', 'last': '150.00', 'diff': '10.00', 'sign': '5', 'rate': '-6.2'},
+        {'symb': 'DEAD', 'name': '상폐예정', 'last': '3.00', 'diff': '1.00', 'sign': '5', 'rate': '-25.0'},
+        {'symb': 'PENNY', 'name': '동전주', 'last': '0.50', 'diff': '0.30', 'sign': '2', 'rate': '+150.0'}]}
+    return client
+
+
+class MarketSummaryTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        # 미국 랭킹 필터용 — DB에 있고 is_active인 종목만 노출돼야 함
+        for code, name, active in [('NVDA', '엔비디아', True), ('AAPL', '애플', True),
+                                   ('TSLA', '테슬라', True), ('DEAD', '상폐예정', False)]:
+            Stock.objects.create(code=code, market='NASDAQ', name=name,
+                                 currency='USD', is_active=active)
+        # 한국 랭킹 필터용 — Q530036(ETN)은 DB에 없어 랭킹에서 빠져야 함
+        for code, name in [('068270', '셀트리온'), ('005930', '삼성전자'), ('252670', 'KODEX인버스')]:
+            Stock.objects.create(code=code, market='KOSPI', name=name, currency='KRW')
+
+    def setUp(self):
+        cache.clear()
+
+    def test_market_summary_ok(self):
+        with patch('stocks.services.market_summary.get_kis_client',
+                   return_value=_market_client_mock()):
+            res = self.client.get(reverse('markets-summary'))
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(set(body.keys()), {'indices', 'kr', 'us', 'fetched_at'})
+        # 지수 4개 (국내 직접 / 해외 현재가·전일종가로 등락률 계산)
+        idx = {i['code']: i for i in body['indices']}
+        self.assertEqual(set(idx), {'KOSPI', 'KOSDAQ', 'COMP', 'SPX'})
+        self.assertAlmostEqual(idx['KOSPI']['change_rate'], 2.11, places=2)
+        self.assertLess(idx['COMP']['change_rate'], 0)  # 26562.23 < 26683.94
+        # 한국 랭킹
+        self.assertEqual(set(body['kr']), {'top_gainers', 'top_losers', 'most_active'})
+        self.assertEqual(body['kr']['top_gainers'][0]['code'], '068270')
+        self.assertEqual(body['kr']['top_gainers'][0]['name'], '셀트리온')
+        self.assertEqual(body['kr']['top_losers'][0]['code'], '005930')
+        self.assertEqual(Decimal(body['kr']['top_losers'][0]['change']), Decimal('-5000.0000'))
+        self.assertEqual(body['kr']['most_active'][0]['code'], '252670')  # mksc_shrn_iscd 사용
+        self.assertNotIn('Q530036', [r['code'] for r in body['kr']['most_active']])  # ETN(DB없음) 제외
+        # 미국 랭킹 — 거래량 풀(우리 활성 종목)에서 파생. PENNY(DB없음)/DEAD(비활성) 제외
+        us = body['us']
+        self.assertEqual([r['code'] for r in us['most_active']], ['TSLA', 'NVDA', 'AAPL'])  # 거래량순
+        self.assertEqual(us['top_gainers'][0]['code'], 'NVDA')   # 등락률 최고
+        self.assertEqual(Decimal(us['top_gainers'][0]['change']), Decimal('100.0000'))
+        self.assertEqual(us['top_losers'][0]['code'], 'AAPL')    # 등락률 최저, sign 5 → 음수
+        self.assertEqual(Decimal(us['top_losers'][0]['change']), Decimal('-10.0000'))
+        self.assertNotIn('PENNY', [r['code'] for r in us['most_active']])
+        self.assertNotIn('DEAD', [r['code'] for r in us['most_active']])
+
+    def test_market_summary_cache_hit(self):
+        client = _market_client_mock()
+        with patch('stocks.services.market_summary.get_kis_client', return_value=client):
+            self.client.get(reverse('markets-summary'))
+            self.client.get(reverse('markets-summary'))
+        # 2번째는 캐시 hit → 국내지수 KIS 호출은 1라운드(코스피·코스닥 2건)만
+        self.assertEqual(client.get_domestic_index.call_count, 2)
+
+    def test_market_summary_kr_failure_resilient(self):
+        client = _market_client_mock()
+        client.get_domestic_fluctuation.side_effect = RuntimeError('KIS down')
+        with patch('stocks.services.market_summary.get_kis_client', return_value=client):
+            res = self.client.get(reverse('markets-summary'))
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        # KR 랭킹은 실패로 빈 리스트, 미국은 살아있음
+        self.assertEqual(body['kr'], {'top_gainers': [], 'top_losers': [], 'most_active': []})
+        self.assertEqual(body['us']['top_gainers'][0]['code'], 'NVDA')

@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 from django.core.cache import cache
-from django.db.models import F, Q
+from django.db.models import Count, F, Q
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -13,8 +13,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from stocks import serializers as s
-from stocks.models import Stock, StockPrice
+from stocks.models import EconomicEvent, Stock, StockPrice
 from stocks.pagination import paginate
+from stocks.services.market_summary import market_summary
 from stocks.services.price_dispatch import (
     build_today_candle, fetch_minute_candles, fetch_price, get_cache_ttl,
 )
@@ -36,6 +37,16 @@ _KST = ZoneInfo("Asia/Seoul")
 
 def _stub():
     return Response({'detail': 'Not implemented'}, status=status.HTTP_501_NOT_IMPLEMENTED)
+
+
+def _safe_date(value):
+    """YYYY-MM-DD → date. 비었거나 형식/값이 잘못되면 None (500 방지)."""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _db_price_to_candle(p: StockPrice) -> dict:
@@ -330,7 +341,25 @@ class StockPostsView(APIView):
         responses={200: s.StockPostsResponseSerializer},
     )
     def get(self, request, code: str):
-        return _stub()
+        stock = _stock_by_code(code)
+        if stock is None:
+            return Response({'detail': '해당 종목을 찾을 수 없습니다.'},
+                            status=status.HTTP_404_NOT_FOUND)
+        from community.models import CommunityPost
+
+        qs = (
+            CommunityPost.objects.filter(stock=stock)
+            .select_related('user')
+            .annotate(comment_count=Count('comments'))
+            .order_by('-created_at')
+        )
+        data = paginate(
+            qs,
+            page=request.query_params.get('page'),
+            size=request.query_params.get('size'),
+            item_serializer_cls=s.PostSummarySerializer,
+        )
+        return Response(data)
 
 
 @extend_schema(tags=['Stock'])
@@ -342,4 +371,55 @@ class MarketSummaryView(APIView):
         responses={200: s.MarketSummaryResponseSerializer},
     )
     def get(self, request):
-        return _stub()
+        cached = cache.get('markets:summary')
+        if cached is not None:
+            return Response(cached)
+        try:
+            data = market_summary()
+        except (requests.HTTPError, requests.Timeout, RuntimeError, KeyError) as e:
+            return Response(
+                {'detail': f'시장 데이터 조회 실패: {e}'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        body = s.MarketSummaryResponseSerializer(data).data
+        cache.set('markets:summary', body, timeout=5)  # 실시간 지향: 5s TTL
+        return Response(body)
+
+
+@extend_schema(tags=['Market'])
+class EconomicEventListView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        summary='경제 캘린더 (경제지표 발표 일정)',
+        parameters=[
+            OpenApiParameter('country', str, required=False, enum=['US', 'KR']),
+            OpenApiParameter('importance', str, required=False, enum=['HIGH', 'MEDIUM', 'LOW']),
+            OpenApiParameter('from', str, required=False, description='YYYY-MM-DD (event_date 이상)'),
+            OpenApiParameter('to', str, required=False, description='YYYY-MM-DD (event_date 이하)'),
+            OpenApiParameter('page', int, required=False),
+            OpenApiParameter('size', int, required=False),
+        ],
+        responses={200: s.EconomicEventListResponseSerializer},
+    )
+    def get(self, request):
+        qs = EconomicEvent.objects.all()
+        p = request.query_params
+        if p.get('country'):
+            qs = qs.filter(country=p['country'])
+        if p.get('importance'):
+            qs = qs.filter(importance=p['importance'])
+        date_from = _safe_date(p.get('from'))
+        date_to = _safe_date(p.get('to'))
+        if date_from:
+            qs = qs.filter(event_date__gte=date_from)
+        if date_to:
+            qs = qs.filter(event_date__lte=date_to)
+
+        data = paginate(
+            qs,
+            page=p.get('page'),
+            size=p.get('size'),
+            item_serializer_cls=s.EconomicEventSerializer,
+        )
+        return Response(data)
