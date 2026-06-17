@@ -382,7 +382,7 @@ class MarketSummaryView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         body = s.MarketSummaryResponseSerializer(data).data
-        cache.set('markets:summary', body, timeout=10)  # 명세: Redis 10s TTL
+        cache.set('markets:summary', body, timeout=5)  # 실시간 지향: 5s TTL
         return Response(body)
 
 

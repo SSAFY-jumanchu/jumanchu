@@ -164,11 +164,16 @@ class StockSummarySerializer(serializers.Serializer):
     change_rate = serializers.FloatField()
 
 
-class MarketSummaryResponseSerializer(serializers.Serializer):
-    indices = IndexSummarySerializer(many=True)
+class MarketRankingsSerializer(serializers.Serializer):
     top_gainers = StockSummarySerializer(many=True)
     top_losers = StockSummarySerializer(many=True)
     most_active = StockSummarySerializer(many=True)
+
+
+class MarketSummaryResponseSerializer(serializers.Serializer):
+    indices = IndexSummarySerializer(many=True)
+    kr = MarketRankingsSerializer()
+    us = MarketRankingsSerializer()
     fetched_at = serializers.DateTimeField()
 
 
