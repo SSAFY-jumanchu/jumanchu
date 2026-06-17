@@ -3,6 +3,7 @@ from datetime import date
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.db import transaction
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -13,7 +14,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from accounts import serializers as s
-from accounts.models import User, InvestmentProfile
+from accounts.models import User, InvestmentProfile, UserPreferredSector
 from portfolio.models import Account
 from stocks.models import Stock
 from stocks.serializers import StockSerializer
@@ -268,13 +269,82 @@ class OnboardingView(APIView):
         responses={200: s.OnboardingResponseSerializer},
     )
     def post(self, request):
-        # TODO(auth): 투자성향 온보딩
-        #   1. OnboardingRequestSerializer 검증
-        #   2. InvestmentProfile upsert (update_or_create, user=request.user)
-        #   3. profile_stock: birth_year=상장연도 매칭 — stocks 데이터 의존, 없으면 null
-        #   4. welcome_bonus: Account.balance 에 가산 (금액은 ERD/팀 확인 후 확정)
-        #   5. OnboardingResponseSerializer 로 200
-        return _stub()
+        serializer = s.OnboardingRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        # 이미 온보딩 완료면 409 (웰컴 보너스 중복 방지)
+        existing = getattr(request.user, 'investment_profile', None)
+        if existing and existing.profiled_at:
+            return Response({'detail': '이미 온보딩을 완료했습니다.'},
+                            status=status.HTTP_409_CONFLICT)
+
+        q = {f'q{i}': data[f'q{i}'] for i in range(1, 7)}
+        q1, q2, q3, q4, q5, q6 = q['q1'], q['q2'], q['q3'], q['q4'], q['q5'], q['q6']
+
+        # 6문항 → 5벡터 (FE 1:1 매핑; ⚠️ loss_aversion 방향은 정율(Algo) 확인 — 현재 q3 raw)
+        risk_tolerance = (q1 + q4) // 2   # q1(목적) 주 + q4(자금여력) 보조
+        experience = q2
+        loss_aversion = q3
+        investment_term = q5
+        behavior = q6
+
+        # 총점(q5 가중 ×2, 7~35) → 3등급
+        total = q1 + q2 + q3 + q4 + q6 + q5 * 2
+        if total <= 13:
+            risk_type = InvestmentProfile.RiskType.CONSERVATIVE
+        elif total <= 22:
+            risk_type = InvestmentProfile.RiskType.MODERATE
+        else:
+            risk_type = InvestmentProfile.RiskType.AGGRESSIVE
+
+        # 시그니처 종목: 상장연도 == 생년 (없으면 None)
+        signature = (
+            Stock.objects.filter(listed_at__year=request.user.birth_year, is_active=True)
+            .order_by('-market_cap')
+            .first()
+        )
+
+        sectors = data.get('preferred_sectors', [])
+        bonus = Decimal('20000')
+        with transaction.atomic():
+            InvestmentProfile.objects.update_or_create(
+                user=request.user,
+                defaults={
+                    'risk_type': risk_type,
+                    'risk_tolerance': risk_tolerance,
+                    'investment_term': investment_term,
+                    'experience': experience,
+                    'loss_aversion': loss_aversion,
+                    'behavior': behavior,
+                    'preferred_period': data.get('preferred_period'),
+                    'preferred_sector': sectors[0] if sectors else '',
+                    'onboarding_answers': q,
+                    'signature_stock': signature,
+                    'profiled_at': timezone.now(),
+                },
+            )
+            # 복수 관심 섹터 (상위 3개 가중 1.0/0.6/0.3)
+            UserPreferredSector.objects.filter(user=request.user).delete()
+            weights = [Decimal('1.0'), Decimal('0.6'), Decimal('0.3')]
+            for i, sector in enumerate(sectors[:3]):
+                UserPreferredSector.objects.create(
+                    user=request.user, sector=sector, weight=weights[i],
+                )
+            # 웰컴 보너스 (최초 온보딩 1회)
+            account = request.user.account
+            account.balance += bonus
+            account.save(update_fields=['balance', 'updated_at'])
+
+        request.user.refresh_from_db()
+        request.user.profile_stock_code = signature.code if signature else None
+        profile_stock = {'code': signature.code, 'name': signature.name} if signature else None
+        body = s.OnboardingResponseSerializer({
+            'user': request.user,
+            'profile_stock': profile_stock,
+            'welcome_bonus': bonus,
+        })
+        return Response(body.data, status=status.HTTP_200_OK)
 
 
 @extend_schema(tags=['Auth'])
