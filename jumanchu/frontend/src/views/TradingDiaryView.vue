@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 
 // ===== 작성 대기 (와이어프레임: 미작성 매매가 있다고 가정) =====
 const pendingTrade = { name: '로보스타', logo: '로', color: '#0f9f6e', side: '매수', date: '06.09' }
@@ -54,19 +54,6 @@ function saveDiary() {
     actual: '+0.0%', review: null,
   })
   newDiary.value = { type: '매수', reasons: [], confidence: 3, target: '+20%', stop: '-10%' }
-}
-
-// ===== 복기 (가장 오래된 미복기 일기 대상) =====
-const reviewTarget = computed(() => entries.value.find(e => e.review === null) || null)
-const reviewVerdict = ref('보류')
-const reviewLearned = ref('')
-
-function saveReview() {
-  const t = reviewTarget.value
-  if (!t) return
-  t.review = { verdict: reviewVerdict.value, learned: reviewLearned.value.trim() || '복기 메모 없음' }
-  reviewVerdict.value = '보류'
-  reviewLearned.value = ''
 }
 
 // ===== 상태 헬퍼 =====
@@ -141,7 +128,7 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
         </div>
       </section>
 
-      <!-- ===== 우: 작성 + 복기 ===== -->
+      <!-- ===== 우: 새 매매일기 작성 ===== -->
       <div class="td-right">
 
         <!-- 새 매매일기 작성 -->
@@ -222,38 +209,6 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
           <button class="td-save-btn" type="button" @click="saveDiary">매매일기 저장</button>
           <p class="td-form-hint">자유 서술·눈치 전부 없이, 선택만으로 1초 작성</p>
         </section>
-
-        <!-- 복기 -->
-        <section class="panel td-review-form" aria-label="복기">
-          <template v-if="reviewTarget">
-            <p class="td-form-title">🔍 복기 — {{ reviewTarget.name }} {{ reviewTarget.side }} ({{ reviewTarget.date.slice(5) }})</p>
-            <div class="td-review-actual">
-              실제 수익률 <strong :class="reviewTarget.actual.startsWith('-') ? 'is-down' : 'is-up'">{{ reviewTarget.actual }}</strong> · 판단은?
-            </div>
-            <div class="td-chips">
-              <button
-                v-for="v in ['보류', '성공', '실패']"
-                :key="v"
-                type="button"
-                class="td-chip-btn"
-                :class="{ on: reviewVerdict === v }"
-                @click="reviewVerdict = v"
-              >{{ v }}</button>
-            </div>
-            <div class="td-field" style="margin-top: 14px">
-              <span class="td-field-label">배운 점 (자유 서술)</span>
-              <textarea
-                v-model="reviewLearned"
-                class="td-review-textarea"
-                placeholder="이번 매매에서 배운 점을 적어보세요."
-              ></textarea>
-            </div>
-            <button class="td-save-btn" type="button" @click="saveReview">복기 저장</button>
-          </template>
-          <div v-else class="td-review-empty">
-            🎉 복기할 매매일기가 없어요. 모두 복기 완료!
-          </div>
-        </section>
       </div>
     </div>
   </div>
@@ -319,8 +274,8 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 .td-review-line { margin: 0 0 5px; font-size: 12px; font-weight: 800; color: var(--muted); }
 .td-review-learned { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.5; word-break: keep-all; }
 
-/* 작성/복기 폼 공통 */
-.td-form, .td-review-form { padding: 18px 20px; }
+/* 작성 폼 */
+.td-form { padding: 18px 20px; }
 .td-form-title { font-size: 14px; font-weight: 900; color: var(--ink); margin: 0 0 14px; word-break: keep-all; }
 .td-field { margin-bottom: 14px; }
 .td-field-label { display: block; font-size: 12px; font-weight: 900; color: var(--muted); margin-bottom: 8px; }
@@ -346,17 +301,6 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 }
 .td-save-btn:hover { opacity: 0.92; transform: translateY(-1px); }
 .td-form-hint { margin: 10px 0 0; text-align: center; font-size: 11px; font-weight: 700; color: var(--faint); }
-
-/* 복기 */
-.td-review-actual { font-size: 13px; font-weight: 800; color: var(--muted); margin-bottom: 10px; }
-.td-review-textarea {
-  width: 100%; min-height: 84px; padding: 12px 14px; border-radius: var(--radius);
-  border: 1px solid var(--glass-border); background: var(--surface-soft); color: var(--ink);
-  font-size: 13px; font-weight: 700; line-height: 1.6; outline: none; resize: vertical;
-  box-sizing: border-box; font-family: inherit; transition: border-color 0.18s;
-}
-.td-review-textarea:focus { border-color: var(--accent); }
-.td-review-empty { padding: 28px 12px; text-align: center; font-size: 14px; font-weight: 800; color: var(--muted); }
 
 /* 색상 */
 .is-up { color: #e3344f; }

@@ -348,7 +348,7 @@ const watchlistNews = [
           <button class="asset-action-card" type="button" @click="router.push('/trading-diary')">
             <span class="aac-icon">📓</span>
             <span class="aac-body">
-              <strong>투자 일기 쓰러 가기</strong>
+              <strong>데이트 기록 남기기</strong>
               <small>작성 대기 1건 (매매 후 미작성)</small>
             </span>
             <span class="aac-arrow">→</span>
@@ -356,8 +356,8 @@ const watchlistNews = [
           <button class="asset-action-card" type="button" @click="router.push('/portfolio')">
             <span class="aac-icon">🩺</span>
             <span class="aac-body">
-              <strong>장투 점검하기</strong>
-              <small>내 종목 지금 점검해보세요</small>
+              <strong>관계 점검하기</strong>
+              <small>내 종목, 잘 만나고 있나요?</small>
             </span>
             <span class="aac-arrow">→</span>
           </button>
@@ -379,8 +379,8 @@ const watchlistNews = [
       <!-- 오른쪽: 궁합 추천 스와이프 -->
       <section class="panel swipe-recommend-panel" aria-label="궁합 추천">
         <div class="match-header">
-          <h2 class="match-title">오늘의 궁합 추천 💝</h2>
-          <p class="match-sub">당신의 투자 성향과 잘 맞는 종목이에요. 넘기면서 관심 종목을 골라보세요.</p>
+          <h2 class="match-title">오늘, 당신과 잘 맞는 인연 💝</h2>
+          <p class="match-sub">김주만님과 잘 맞는 종목들이에요. 넘기면서 끌리는 상대를 골라보세요.</p>
           <span class="match-count">추천 {{ matchIndex + 1 }} / {{ matchStocks.length }}</span>
         </div>
 

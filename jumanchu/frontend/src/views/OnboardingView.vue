@@ -53,7 +53,7 @@ const questions = [
   {
     id: 'q3',
     label: '손실 허용 범위',
-    desc: '허용 가능한 손실 범위를 선택해주세요.',
+    desc: '이 관계에서, 어디까지 흔들려도 괜찮으신가요?',
     options: [
       { score: 1, title: '10% 미만도 불안함', desc: '원금 손실은 절대 용납하기 어렵습니다.' },
       { score: 3, title: '10~20% 수준', desc: '단기 손실은 수용하나 장기 회복이 필요합니다.' },
@@ -194,7 +194,7 @@ function displayScore(q, score) {
 
       <!-- 헤더 -->
       <div class="ob-page-header">
-        <p class="eyebrow" style="text-align:center; font-size:13px;">김주만님 만의 주식투자 스타일 알아가기</p>
+        <p class="eyebrow" style="text-align:center; font-size:13px;">김주만님과 오래 함께할 투자 스타일을 찾아볼게요</p>
         <h1 class="ob-page-title">온보딩</h1>
       </div>
 

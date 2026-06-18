@@ -528,8 +528,8 @@ const popularStocks = computed(() => {
         <!-- ===== 스와이프 모드 (관심종목 고르기) ===== -->
         <template v-if="!swipeDone">
           <div class="sv-match-header">
-            <h2 class="sv-match-title">오늘의 궁합 추천 💝</h2>
-            <p class="sv-match-sub">당신의 투자 성향과 잘 맞는 종목이에요. 넘기면서 관심 종목을 골라보세요.</p>
+            <h2 class="sv-match-title">오늘, 당신과 잘 맞는 인연 💝</h2>
+            <p class="sv-match-sub">김주만님과 잘 맞는 종목들이에요. 넘기면서 끌리는 상대를 골라보세요.</p>
             <span class="sv-match-count">추천 {{ swipedCount + 1 }} / {{ SWIPE_GOAL }}</span>
           </div>
 
