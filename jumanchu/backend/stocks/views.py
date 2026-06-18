@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from stocks import serializers as s
-from stocks.models import EconomicEvent, Stock, StockPrice
+from stocks.models import EconomicEvent, Stock, StockIndicator, StockPrice
 from stocks.pagination import paginate
 from stocks.services.market_summary import market_summary
 from stocks.services.price_dispatch import (
@@ -111,6 +111,22 @@ def _stock_by_code(code: str):
         .order_by(F('market_cap').desc(nulls_last=True), 'market')
         .first()
     )
+
+
+def _merge_indicator(stock):
+    """투자 지표 — per/pbr(펀더멘털 행) ↔ beta/52주(시장지표 행)가 서로 다른 행에 저장돼 있어
+    필드별 '최신 비-null'을 병합한 (저장 안 한) StockIndicator를 만든다. 행이 없으면 None."""
+    rows = list(stock.indicators.order_by('-calculated_date'))
+    if not rows:
+        return None
+    fields = ['per', 'pbr', 'eps', 'roe', 'roa', 'dividend_yield',
+              'beta', 'volatility', 'high_52w', 'low_52w']
+    merged = {}
+    for r in rows:  # 최신 → 과거
+        for f in fields:
+            if merged.get(f) is None and getattr(r, f) is not None:
+                merged[f] = getattr(r, f)
+    return StockIndicator(stock=stock, calculated_date=rows[0].calculated_date, **merged)
 
 
 @extend_schema(tags=['Stock'])
@@ -325,7 +341,36 @@ class StockFinancialsView(APIView):
         responses={200: s.FinancialsResponseSerializer},
     )
     def get(self, request, code: str):
-        return _stub()
+        stock = _stock_by_code(code)
+        if not stock:
+            return Response({'detail': '해당 종목을 찾을 수 없습니다.'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        fin_type = request.query_params.get('type', 'annual')
+        try:
+            limit = int(request.query_params.get('limit', 4))
+        except (TypeError, ValueError):
+            limit = 4
+        limit = max(1, min(limit, 20))
+
+        # 재무 요약: 분기/연간 구분 (fiscal_period에 Q·분기 포함이면 분기)
+        is_quarter = Q(fiscal_period__icontains='Q') | Q(fiscal_period__icontains='분기')
+        qs = stock.financials.all()
+        typed = qs.filter(is_quarter) if fin_type == 'quarterly' else qs.exclude(is_quarter)
+        summaries = list(typed.order_by('-fiscal_period')[:limit])
+        if not summaries:  # 해당 타입 데이터가 없으면 전체에서 fallback
+            summaries = list(qs.order_by('-fiscal_period')[:limit])
+
+        indicator = _merge_indicator(stock)
+        last_updated = summaries[0].fetched_at if summaries else timezone.now()
+        body = s.FinancialsResponseSerializer({
+            'stock_code': stock.code,
+            'type': fin_type,
+            'summaries': summaries,
+            'indicator': indicator,
+            'last_updated': last_updated,
+        })
+        return Response(body.data)
 
 
 @extend_schema(tags=['Stock'])
