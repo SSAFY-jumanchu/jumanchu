@@ -13,6 +13,7 @@ api_v1_patterns = [
     path('', include('recommend.urls')),
     path('', include('diary.urls')),
     path('', include('community.urls')),
+    path('', include('newses.urls')),
 ]
 
 urlpatterns = [
