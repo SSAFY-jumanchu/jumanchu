@@ -11,7 +11,7 @@ from freezegun import freeze_time
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from stocks.models import EconomicEvent, Stock, StockPrice
+from stocks.models import EconomicEvent, FinancialSummary, Stock, StockIndicator, StockPrice
 from stocks.services.price_dispatch import (
     WARNINGS_ALL_FALSE,
     _is_market_open,
@@ -521,3 +521,55 @@ class MarketSummaryTests(APITestCase):
         # KR 랭킹은 실패로 빈 리스트, 미국은 살아있음
         self.assertEqual(body['kr'], {'top_gainers': [], 'top_losers': [], 'most_active': []})
         self.assertEqual(body['us']['top_gainers'][0]['code'], 'NVDA')
+
+
+class StockFinancialsTests(APITestCase):
+    """재무 요약 + 투자 지표 API (/stocks/<code>/financials/)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.stock = Stock.objects.create(code='005930', market='KOSPI', name='삼성전자',
+                                         currency='KRW', market_cap=400_000_000_000_000)
+        Stock.objects.create(code='000001', market='KOSPI', name='무데이터', currency='KRW')
+        # 지표: per/pbr/eps/roe는 펀더멘털 행(옛 날짜), beta/52주는 시장 행(최신) — 병합 검증
+        StockIndicator.objects.create(stock=cls.stock, calculated_date=date(2026, 5, 26),
+                                      per=14.2, pbr=1.18, eps=22324, roe=8.57, dividend_yield=1.8)
+        StockIndicator.objects.create(stock=cls.stock, calculated_date=date(2026, 6, 3),
+                                      beta=1.27, high_52w=323000, low_52w=55600)
+        # 재무 요약: 연간 2개
+        FinancialSummary.objects.create(stock=cls.stock, fiscal_period='2024FY', data_source='DART',
+                                        net_profit=34_000_000_000_000, net_profit_yoy=10.0, debt_ratio=24.8)
+        FinancialSummary.objects.create(stock=cls.stock, fiscal_period='2023FY', data_source='DART',
+                                        net_profit=15_000_000_000_000, debt_ratio=26.0)
+
+    def test_indicator_merged_across_rows(self):
+        res = self.client.get(reverse('stock-financials', args=['005930']))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ind = res.data['indicator']
+        self.assertEqual(ind['per'], 14.2)        # 펀더멘털 행
+        self.assertEqual(ind['eps'], 22324)
+        self.assertEqual(ind['beta'], 1.27)       # 시장 행 — 다른 행이지만 병합됨
+        self.assertEqual(ind['high_52w'], 323000)
+
+    def test_summaries_latest_first(self):
+        res = self.client.get(reverse('stock-financials', args=['005930']))
+        summ = res.data['summaries']
+        self.assertEqual(len(summ), 2)
+        self.assertEqual(summ[0]['fiscal_period'], '2024FY')
+        self.assertEqual(summ[0]['debt_ratio'], 24.8)
+        self.assertEqual(res.data['type'], 'annual')
+
+    def test_quarterly_type_falls_back_when_empty(self):
+        res = self.client.get(reverse('stock-financials', args=['005930']), {'type': 'quarterly'})
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(res.data['summaries']), 1)  # 분기 없음 → 전체 fallback
+
+    def test_404_unknown_code(self):
+        res = self.client.get(reverse('stock-financials', args=['999999']))
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_no_data_graceful(self):
+        res = self.client.get(reverse('stock-financials', args=['000001']))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIsNone(res.data['indicator'])
+        self.assertEqual(list(res.data['summaries']), [])
