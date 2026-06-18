@@ -7,7 +7,7 @@ const router = useRouter()
 // ===== 보유 종목 (재무 30% · 성장 40% · 궁합 30%) =====
 const holdings = [
   {
-    code: '000660', name: 'SK하이닉스', market: 'KOSPI', sector: '반도체', logo: 'SK', color: '#e3344f',
+    code: '000660', name: 'SK하이닉스', market: 'KOSPI', sector: '전기·전자', logo: 'SK', color: '#e3344f',
     recommend: '장기 보유 강력 추천',
     summary: '성장성(92)이 가중 40%로 종합을 끌어올렸습니다. 재무·궁합도 견조해 장기 보유 매력이 높으나, 포트 비중 38%는 분산 관점에서 관리가 필요합니다.',
     financial: {
@@ -27,7 +27,7 @@ const holdings = [
     compat: {
       score: 87, note: '공격형 성향·반도체 선호와 잘 맞음. 비중 38%로 분산 유의.',
       items: [
-        { label: '리스크 매칭', value: '공격형' }, { label: '섹터 매칭', value: '전기전자' },
+        { label: '리스크 매칭', value: '공격형' }, { label: '섹터 매칭', value: '전기·전자' },
         { label: '기간 매칭', value: '12개월' }, { label: '경험 매칭', value: '중급' },
       ],
     },
@@ -44,26 +44,26 @@ const holdings = [
   },
   {
     code: '005930', name: '삼성전자', market: 'KOSPI', sector: '전기·전자', logo: '삼', color: '#3b5bdb',
-    recommend: '장기 보유 추천',
-    summary: '궁합(88)과 재무(80)가 안정적입니다. 성장성은 HBM 추격 단계라 다소 낮지만, 균형형 투자자에게 적합한 핵심 보유 종목입니다.',
+    recommend: '보유 유지 · 모니터링 적합',
+    summary: '삼성전자는 재무적으로 안정적이며, 특히 성장성 면에서 매우 긍정적인 모습을 보이고 있습니다. 전기·전자 섹터 선호와 맞물려 보유 유지·모니터링에 적합한 종목으로 판단됩니다. 다만 일부 데이터가 부족해 모든 측면을 평가하기엔 제한이 있으나, 전반적으로 장기투자 관점에서 긍정적인 요소가 많습니다.',
     financial: {
-      score: 80, note: '안정적 재무구조와 풍부한 현금. 실적 회복 추세.',
+      score: 80, note: '삼성전자의 재무 건전성은 부채비율이 27.9%로 낮고, 유동비율이 243.3%로 높아 안정적입니다.',
       items: [
-        { label: '부채비율', value: '26.8%' }, { label: 'ROE', value: '8.57%' },
-        { label: '영업이익률', value: '14.2%' }, { label: '유동비율', value: '252.0%' },
+        { label: '부채비율', value: '27.9%' }, { label: 'ROE', value: '8.57%' },
+        { label: '영업이익률', value: '14.2%' }, { label: '유동비율', value: '243.3%' },
       ],
     },
     growth: {
-      score: 74, note: '반도체 업황 개선 수혜. HBM 추격 중으로 단기 성장성은 제한적.',
+      score: 74, note: '매출 성장률이 16.2%로 높고, 영업이익 성장률이 398.3%로 매우 강력하게 나타나고 있습니다.',
       items: [
-        { label: '매출성장률(YoY)', value: '+12.3%' }, { label: '순이익성장률(YoY)', value: '+38.5%' },
+        { label: '매출성장률(YoY)', value: '+16.2%' }, { label: '영업이익 성장률(YoY)', value: '+398.3%' },
         { label: 'EPS 증가율', value: '+35.1%' },
       ],
     },
     compat: {
-      score: 88, note: '균형형 성향과 1순위 관심 섹터에 부합. 적정 비중 유지 중.',
+      score: 88, note: '전기·전자 섹터에 대한 선호와 일치하며, 균형형 투자 성향에 적합한 종목입니다.',
       items: [
-        { label: '리스크 매칭', value: '균형형' }, { label: '섹터 매칭', value: '전기전자' },
+        { label: '리스크 매칭', value: '균형형' }, { label: '섹터 매칭', value: '전기·전자' },
         { label: '기간 매칭', value: '12개월' }, { label: '경험 매칭', value: '중급' },
       ],
     },
@@ -79,7 +79,7 @@ const holdings = [
     ],
   },
   {
-    code: 'NVDA', name: 'NVIDIA', market: 'NASDAQ', sector: '반도체', logo: 'N', color: '#76b900',
+    code: 'NVDA', name: 'NVIDIA', market: 'NASDAQ', sector: '전기·전자', logo: 'N', color: '#76b900',
     recommend: '장기 핵심 보유 추천',
     summary: '재무(92)·성장(96)이 모두 최상위로 종합 91점입니다. 변동성은 높지만 AI 인프라 핵심주로 장기 핵심 보유에 적합합니다.',
     financial: {
@@ -99,7 +99,7 @@ const holdings = [
     compat: {
       score: 84, note: '고밸류·고변동성 유의. 해외 비중 확대엔 핵심 종목.',
       items: [
-        { label: '리스크 매칭', value: '공격형' }, { label: '섹터 매칭', value: '해외·반도체' },
+        { label: '리스크 매칭', value: '공격형' }, { label: '섹터 매칭', value: '전기·전자' },
         { label: '기간 매칭', value: '12개월' }, { label: '경험 매칭', value: '중급' },
       ],
     },
@@ -115,7 +115,7 @@ const holdings = [
     ],
   },
   {
-    code: 'AAPL', name: 'Apple', market: 'NASDAQ', sector: '소비자가전', logo: 'A', color: '#333a45',
+    code: 'AAPL', name: 'Apple', market: 'NASDAQ', sector: '전기·전자', logo: 'A', color: '#333a45',
     recommend: '장기 보유 적합',
     summary: '재무(88)와 궁합(84)은 견조하나 성장성(68)이 낮아 종합 79점입니다. 안정적 분산용 장기 보유에 적합합니다.',
     financial: {
@@ -135,7 +135,7 @@ const holdings = [
     compat: {
       score: 84, note: '방어적 성장주로 분산 효과 우수. 환율 노출 고려.',
       items: [
-        { label: '리스크 매칭', value: '균형형' }, { label: '섹터 매칭', value: '해외·가전' },
+        { label: '리스크 매칭', value: '균형형' }, { label: '섹터 매칭', value: '전기·전자' },
         { label: '기간 매칭', value: '12개월+' }, { label: '경험 매칭', value: '중급' },
       ],
     },

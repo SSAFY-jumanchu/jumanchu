@@ -31,7 +31,7 @@ const holdingNewsList = [
 // 궁합 추천 스와이프 덱
 const matchStocks = [
   {
-    name: '삼성바이오로직스', code: '207940', market: 'KOSPI · 바이오', sector: '바이오',
+    name: '삼성바이오로직스', code: '207940', market: 'KOSPI · 제약', sector: '제약',
     score: 86, price: '1,042,000원', change: '+1.4%', up: true, interest: 612,
     dna: [
       { label: '변동성', value: 63 }, { label: '성장', value: 85 },
@@ -40,7 +40,7 @@ const matchStocks = [
     gradient: 'linear-gradient(135deg, #6d28d9 0%, #a855f7 45%, #db2777 100%)',
   },
   {
-    name: 'SK하이닉스', code: '000660', market: 'KOSPI · 전기·전자', sector: '반도체',
+    name: 'SK하이닉스', code: '000660', market: 'KOSPI · 전기·전자', sector: '전기·전자',
     score: 94, price: '189,300원', change: '+2.1%', up: true, interest: 1284,
     dna: [
       { label: '변동성', value: 72 }, { label: '성장', value: 88 },
@@ -49,7 +49,7 @@ const matchStocks = [
     gradient: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%)',
   },
   {
-    name: 'NAVER', code: '035420', market: 'KOSPI · 플랫폼', sector: '플랫폼',
+    name: 'NAVER', code: '035420', market: 'KOSPI · IT 서비스', sector: 'IT 서비스',
     score: 80, price: '192,500원', change: '+1.4%', up: true, interest: 430,
     dna: [
       { label: '변동성', value: 58 }, { label: '성장', value: 76 },
@@ -58,7 +58,7 @@ const matchStocks = [
     gradient: 'linear-gradient(135deg, #059669 0%, #10b981 50%, #06b6d4 100%)',
   },
   {
-    name: '셀트리온', code: '068270', market: 'KOSPI · 바이오', sector: '바이오',
+    name: '셀트리온', code: '068270', market: 'KOSPI · 제약', sector: '제약',
     score: 82, price: '168,300원', change: '+2.4%', up: true, interest: 521,
     dna: [
       { label: '변동성', value: 66 }, { label: '성장', value: 80 },

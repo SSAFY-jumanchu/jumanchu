@@ -18,17 +18,17 @@ const holdings = ref([
     sparkline: [82, 80, 78, 75, 77, 74, 72, 73, 70, 68, 66, 64],
   },
   {
-    code: 'NVDA', name: 'NVIDIA', market: 'NASDAQ', sector: '반도체',
+    code: 'NVDA', name: 'NVIDIA', market: 'NASDAQ', sector: '전기·전자',
     qty: 8, avgPrice: 820, currentPrice: 1074,
     sparkline: [55, 57, 56, 59, 61, 63, 62, 65, 67, 69, 71, 73],
   },
   {
-    code: 'AAPL', name: 'Apple', market: 'NASDAQ', sector: 'IT·소비재',
+    code: 'AAPL', name: 'Apple', market: 'NASDAQ', sector: '전기·전자',
     qty: 20, avgPrice: 185, currentPrice: 192,
     sparkline: [50, 53, 52, 56, 58, 61, 60, 64, 66, 69, 71, 74],
   },
   {
-    code: '035420', name: 'NAVER', market: 'KOSPI', sector: 'IT·소프트웨어',
+    code: '035420', name: 'NAVER', market: 'KOSPI', sector: 'IT 서비스',
     qty: 5, avgPrice: 195000, currentPrice: 214000,
     sparkline: [44, 48, 47, 52, 55, 58, 62, 65, 68, 72, 75, 79],
   },

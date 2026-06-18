@@ -13,7 +13,7 @@ const selectedStock = ref(null)
 // ===== 종목 데이터 (초기값은 와이어프레임 목업 — API 응답이 오면 교체) =====
 const stocks = ref([
   {
-    rank: 1, code: '000660', name: 'SK하이닉스', market: 'KOSPI', sector: '반도체',
+    rank: 1, code: '000660', name: 'SK하이닉스', market: 'KOSPI', sector: '전기·전자',
     price: 2031000, change: -239200, rate: -11.61,
     volume: '748억', buyRatio: 38, sellRatio: 62,
     aiNote: '브로드컴 실적 쇼크',
@@ -66,7 +66,7 @@ const stocks = ref([
     community: [],
   },
   {
-    rank: 5, code: '215380', name: '로보스타', market: 'KOSPI', sector: '기계',
+    rank: 5, code: '215380', name: '로보스타', market: 'KOSPI', sector: '기계·장비',
     price: 140300, change: +1100, rate: +0.79,
     volume: '75억', buyRatio: 57, sellRatio: 43,
     aiNote: '아이벤트 소진',
@@ -78,7 +78,7 @@ const stocks = ref([
     community: [],
   },
   {
-    rank: 6, code: '005380', name: '현대차', market: 'KOSPI', sector: '자동차',
+    rank: 6, code: '005380', name: '현대차', market: 'KOSPI', sector: '운송장비·부품',
     price: 675000, change: -24900, rate: -3.57,
     volume: '58억', buyRatio: 57, sellRatio: 43,
     aiNote: '외국인 순매수 확대',
@@ -90,7 +90,7 @@ const stocks = ref([
     community: [],
   },
   {
-    rank: 7, code: 'SOXL', name: 'SOXL', market: 'NASDAQ', sector: '반도체 ETF',
+    rank: 7, code: 'SOXL', name: 'SOXL', market: 'NASDAQ', sector: '전기·전자',
     price: 365778, change: -35900, rate: -8.91,
     volume: '40억', buyRatio: 43, sellRatio: 57,
     aiNote: '브로드컴 실적 쇼크',
@@ -102,7 +102,7 @@ const stocks = ref([
     community: [],
   },
   {
-    rank: 8, code: '035420', name: 'NAVER', market: 'KOSPI', sector: 'IT·소프트웨어',
+    rank: 8, code: '035420', name: 'NAVER', market: 'KOSPI', sector: 'IT 서비스',
     price: 248500, change: -19100, rate: -7.10,
     volume: '37억', buyRatio: 47, sellRatio: 53,
     aiNote: '아이벤트 소진',
@@ -114,7 +114,7 @@ const stocks = ref([
     community: [],
   },
   {
-    rank: 9, code: '454910', name: '두산로보틱스', market: 'KOSPI', sector: '기계',
+    rank: 9, code: '454910', name: '두산로보틱스', market: 'KOSPI', sector: '기계·장비',
     price: 133800, change: -23600, rate: -15.26,
     volume: '31억', buyRatio: 40, sellRatio: 60,
     aiNote: '아이벤트 소진',
@@ -138,7 +138,7 @@ const stocks = ref([
     community: [],
   },
   {
-    rank: 11, code: 'SOXS', name: 'SOXS', market: 'NASDAQ', sector: '반도체 ETF',
+    rank: 11, code: 'SOXS', name: 'SOXS', market: 'NASDAQ', sector: '전기·전자',
     price: 8682, change: +740, rate: +9.23,
     volume: '27억', buyRatio: 33, sellRatio: 67,
     aiNote: '브로드컴 실적 쇼크',
@@ -162,7 +162,7 @@ const stocks = ref([
     community: [],
   },
   {
-    rank: 13, code: 'MUU', name: 'MUU', market: 'NASDAQ', sector: 'ETF',
+    rank: 13, code: 'MUU', name: 'MUU', market: 'NASDAQ', sector: '전기·전자',
     price: 1232051, change: -145200, rate: -10.59,
     volume: '22억', buyRatio: 40, sellRatio: 60,
     aiNote: '브로드컴 실적 쇼크',
@@ -174,7 +174,7 @@ const stocks = ref([
     community: [],
   },
   {
-    rank: 14, code: '012330', name: '현대모비스', market: 'KOSPI', sector: '자동차',
+    rank: 14, code: '012330', name: '현대모비스', market: 'KOSPI', sector: '운송장비·부품',
     price: 673000, change: -74800, rate: -10.02,
     volume: '19억', buyRatio: 52, sellRatio: 48,
     aiNote: '브로드컴 실적 쇼크',
