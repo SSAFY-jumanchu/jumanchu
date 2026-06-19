@@ -1,4 +1,5 @@
-from drf_spectacular.utils import extend_schema
+from django.utils import timezone
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -49,3 +50,27 @@ class WatchlistItemView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(tags=['Recommend'])
+class RecommendSwipeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary='오늘의 궁합 추천 (스와이프 카드)',
+        parameters=[OpenApiParameter('limit', int, required=False)],
+        responses={200: s.SwipeRecommendResponseSerializer},
+    )
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get('limit', 30))
+        except (TypeError, ValueError):
+            limit = 30
+        limit = max(1, min(limit, 50))
+        try:
+            cards = services.swipe_recommendations(request.user, limit=limit)
+        except services.OnboardingRequired:
+            return Response({'detail': '온보딩을 먼저 완료해주세요.'},
+                            status=status.HTTP_409_CONFLICT)
+        body = {'items': cards, 'total': len(cards), 'generated_at': timezone.now()}
+        return Response(s.SwipeRecommendResponseSerializer(body).data)

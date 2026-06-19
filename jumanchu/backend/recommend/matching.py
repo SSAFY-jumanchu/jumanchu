@@ -35,14 +35,14 @@ def _f(x) -> float:
     return 0.5 if x is None else float(x)
 
 
-def compute_match_score(profile, dna, sector_weights: dict) -> float:
-    """유저 5벡터 × 종목 DNA → 궁합 점수 0~100."""
+def _match_components(profile, dna, sector_weights: dict) -> dict:
+    """5요소 부분점수(0~1, 가중 전). compute_match_score·recommend_for_user 공용."""
     vol, val, grw, sta = _f(dna.volatility), _f(dna.value_score), _f(dna.growth_score), _f(dna.stability)
 
-    # 리스크 35% — 위험성향 ↔ 변동성
+    # 리스크 — 위험성향 ↔ 변동성
     risk_m = 1 - abs(_norm5(profile.risk_tolerance) - vol)
 
-    # 기간 20% — 단기→변동 / 중기→(안정+가치+변동)/3 / 장기→(안정+가치)/2
+    # 기간 — 단기→변동 / 중기→(안정+가치+변동)/3 / 장기→(안정+가치)/2
     term = profile.investment_term
     if term <= 2:
         term_m = vol
@@ -51,10 +51,10 @@ def compute_match_score(profile, dna, sector_weights: dict) -> float:
     else:
         term_m = (sta + val) / 2
 
-    # 섹터 20% — 관심섹터면 가중치(1.0/0.6/0.3), 아니면 0.5
+    # 섹터 — 관심섹터면 가중치(1.0/0.6/0.3), 아니면 0.5
     sector_m = sector_weights.get(dna.sector, 0.5)
 
-    # 경험 15% — 초보→안정 / 중급→(안정+성장)/2 / 숙련→(성장+변동)/2
+    # 경험 — 초보→안정 / 중급→(안정+성장)/2 / 숙련→(성장+변동)/2
     exp = profile.experience
     if exp <= 2:
         exp_m = sta
@@ -63,17 +63,25 @@ def compute_match_score(profile, dna, sector_weights: dict) -> float:
     else:
         exp_m = (grw + vol) / 2
 
-    # 스타일 10% — 종목 가치·성장 (추후 behavior 반영)
+    # 스타일 — 종목 가치·성장 (추후 behavior 반영)
     style_m = (val + grw) / 2
 
-    total = (
-        _clamp01(risk_m) * 0.35
-        + _clamp01(term_m) * 0.20
-        + _clamp01(sector_m) * 0.20
-        + _clamp01(exp_m) * 0.15
-        + _clamp01(style_m) * 0.10
-    ) * 100
+    return {
+        'risk': _clamp01(risk_m), 'term': _clamp01(term_m), 'sector': _clamp01(sector_m),
+        'exp': _clamp01(exp_m), 'style': _clamp01(style_m),
+    }
+
+
+def _score_from_components(c: dict) -> float:
+    """5요소 가중합 ×100 (risk0.35/term0.20/sector0.20/exp0.15/style0.10)."""
+    total = (c['risk'] * 0.35 + c['term'] * 0.20 + c['sector'] * 0.20
+             + c['exp'] * 0.15 + c['style'] * 0.10) * 100
     return round(total, 1)
+
+
+def compute_match_score(profile, dna, sector_weights: dict) -> float:
+    """유저 5벡터 × 종목 DNA → 궁합 점수 0~100."""
+    return _score_from_components(_match_components(profile, dna, sector_weights))
 
 
 LARGE_CAP_TOP_N = 200
@@ -141,3 +149,51 @@ def classify_investor_type(profile) -> dict:
         "experience_emoji": badge_emoji,
         "label": f"{badge_emoji} {badge} · {emoji} {name}",
     }
+
+
+_AXIS_KR = {'volatility': '변동성', 'value': '가치', 'growth': '성장성', 'stability': '안정성'}
+
+
+def _build_reason(profile, dna, sector_weights: dict) -> str:
+    """규칙 기반 한 줄 추천 사유 — 성향 + (관심섹터) + 최고 DNA 축."""
+    itype = classify_investor_type(profile)['type']
+    axes = {
+        'volatility': _f(dna.volatility), 'value': _f(dna.value_score),
+        'growth': _f(dna.growth_score), 'stability': _f(dna.stability),
+    }
+    top_axis = max(axes, key=axes.get)
+    top_val = round(axes[top_axis] * 100)
+    sec = f" · {dna.sector} 선호" if dna.sector in sector_weights else ""
+    return f"🤝 {itype}{sec}에 {_AXIS_KR[top_axis]}({top_val})이 잘 맞아요."
+
+
+def recommend_for_user(profile, sector_weights: dict, limit: int = 30,
+                       exclude_ids=None, top_n: int = LARGE_CAP_TOP_N) -> list:
+    """대형주 후보를 궁합 점수로 정렬해 상위 limit개. (이미 담은 종목 exclude_ids 제외)
+
+    스와이프 추천 카드용 — find_signature의 top-N 일반화.
+    → [{stock, dna, match_score, rank, components, reason}].
+    """
+    calc_date = (StockDna.objects.order_by("-calculated_date")
+                 .values_list("calculated_date", flat=True).first())
+    if calc_date is None:
+        return []
+    candidates = _large_cap_ids(top_n)
+    if exclude_ids:
+        candidates -= set(exclude_ids)
+    qs = StockDna.objects.filter(calculated_date=calc_date, stock_id__in=candidates).select_related("stock")
+
+    scored = []
+    for dna in qs:
+        comps = _match_components(profile, dna, sector_weights)
+        scored.append((_score_from_components(comps), comps, dna))
+    scored.sort(key=lambda t: t[0], reverse=True)
+
+    results = []
+    for rank, (score, comps, dna) in enumerate(scored[:limit], start=1):
+        results.append({
+            'stock': dna.stock, 'dna': dna, 'match_score': score, 'rank': rank,
+            'components': {k: round(v, 4) for k, v in comps.items()},
+            'reason': _build_reason(profile, dna, sector_weights),
+        })
+    return results
