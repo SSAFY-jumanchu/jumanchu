@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html import unescape
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
 NAVER_NEWS_ENDPOINT = "https://openapi.naver.com/v1/search/news.json"
@@ -33,6 +33,7 @@ _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"   # backend/.env
 _TAG = re.compile(r"<[^>]+>")
 _WS = re.compile(r"[ \t 　]+")
 _NL = re.compile(r"\n{3,}")
+MAX_BODY_CHARS = 2000   # 본문 최대 길이(초과 시 잘라서 반환)
 
 
 # --------------------------------------------------------------------------- #
@@ -81,11 +82,13 @@ class NaverArticle:
     published_at: datetime | None
     summary: str             # 검색 API description(요약 스니펫)
     body: str = ""           # 본문 전체(추출 성공 시)
+    source: str = ""         # 언론사명 (originallink 도메인에서 역산)
 
     def to_dict(self) -> dict:
         return {
             "title": self.title,
             "url": self.origin_link or self.naver_link,
+            "source": self.source,
             "published_at": self.published_at.isoformat() if self.published_at else None,
             "summary": self.summary,
             "body": self.body,
@@ -105,6 +108,60 @@ def _parse_dt(s: str) -> datetime | None:
         return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
     except (TypeError, ValueError):
         return None
+
+
+# 도메인 → 언론사명. 네이버 검색 API는 언론사명을 안 주므로 originallink 로 역산.
+# 미등록 도메인은 호스트 그대로 노출(폴백). 잘못된 이름이 폴백보다 나쁘니 확신 매체만 등재.
+_PRESS_BY_DOMAIN = {
+    # 통신/방송
+    "yna.co.kr": "연합뉴스", "yonhapnewstv.co.kr": "연합뉴스TV", "newsis.com": "뉴시스",
+    "news1.kr": "뉴스1", "newspim.com": "뉴스핌", "nocutnews.co.kr": "노컷뉴스",
+    "mbn.co.kr": "MBN", "ytn.co.kr": "YTN", "sbs.co.kr": "SBS", "kbs.co.kr": "KBS",
+    "imbc.com": "MBC", "mtn.co.kr": "머니투데이방송",
+    # 경제/증권 일간
+    "hankyung.com": "한국경제", "wowtv.co.kr": "한국경제TV", "mk.co.kr": "매일경제",
+    "mt.co.kr": "머니투데이", "moneys.co.kr": "머니S", "sedaily.com": "서울경제",
+    "fnnews.com": "파이낸셜뉴스", "asiae.co.kr": "아시아경제", "heraldcorp.com": "헤럴드경제",
+    "edaily.co.kr": "이데일리", "etoday.co.kr": "이투데이", "ajunews.com": "아주경제",
+    "g-enews.com": "글로벌이코노믹", "viva100.com": "브릿지경제", "economist.co.kr": "이코노미스트",
+    # 경제 전문/주식
+    "bizwatch.co.kr": "비즈워치", "thebell.co.kr": "더벨", "businesspost.co.kr": "비즈니스포스트",
+    "paxnetnews.com": "팍스넷뉴스", "infostockdaily.co.kr": "인포스탁데일리",
+    "dealsite.co.kr": "딜사이트", "bizhankook.com": "비즈한국", "theguru.co.kr": "더구루",
+    "greened.kr": "녹색경제신문", "webeconomy.co.kr": "웹이코노미", "ftoday.co.kr": "금융투데이",
+    # IT/테크
+    "etnews.com": "전자신문", "ddaily.co.kr": "디지털데일리", "dt.co.kr": "디지털타임스",
+    "zdnet.co.kr": "ZDNet코리아", "bloter.net": "블로터", "techm.kr": "테크M",
+    "it.chosun.com": "IT조선",
+    # 가상자산
+    "tokenpost.kr": "토큰포스트", "blockmedia.co.kr": "블록미디어",
+    # 종합 일간
+    "biz.chosun.com": "조선비즈", "chosun.com": "조선일보", "joongang.co.kr": "중앙일보",
+    "donga.com": "동아일보", "hani.co.kr": "한겨레", "khan.co.kr": "경향신문",
+    "kmib.co.kr": "국민일보", "seoul.co.kr": "서울신문", "munhwa.com": "문화일보",
+    "hankookilbo.com": "한국일보", "segye.com": "세계일보", "ohmynews.com": "오마이뉴스",
+    "dailian.co.kr": "데일리안", "pressian.com": "프레시안", "tf.co.kr": "더팩트",
+    "wikitree.co.kr": "위키트리", "insight.co.kr": "인사이트",
+    # 네이버 호스팅(원문 도메인 없을 때 폴백)
+    "news.naver.com": "네이버뉴스",
+    # 해외
+    "bloomberg.com": "Bloomberg", "reuters.com": "Reuters",
+}
+
+
+def _press_from_url(url: str) -> str:
+    """기사 URL 도메인 → 언론사명. 미등록이면 호스트(www. 제거)를 그대로 반환."""
+    if not url:
+        return ""
+    host = urlparse(url).netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if host in _PRESS_BY_DOMAIN:
+        return _PRESS_BY_DOMAIN[host]
+    for domain, name in _PRESS_BY_DOMAIN.items():
+        if host.endswith("." + domain):
+            return name
+    return host
 
 
 def build_query(stock_name: str) -> str:
@@ -134,7 +191,7 @@ def extract_body(html: str) -> str:
             body = _clean(raw)
             body = _NL.sub("\n\n", body)
             if len(body) > 40:        # 너무 짧으면 잘못 잡은 것
-                return body
+                return body[:MAX_BODY_CHARS]
     return ""
 
 
@@ -160,12 +217,15 @@ def search_news(
     data = json.loads(raw)
     out: list[NaverArticle] = []
     for it in data.get("items", []):
+        origin = it.get("originallink", "").strip()
+        link = it.get("link", "").strip()
         out.append(NaverArticle(
             title=_clean(it.get("title", "")),
-            naver_link=it.get("link", "").strip(),
-            origin_link=it.get("originallink", "").strip(),
+            naver_link=link,
+            origin_link=origin,
             published_at=_parse_dt(it.get("pubDate", "")),
             summary=_clean(it.get("description", "")),
+            source=_press_from_url(origin or link),
         ))
     return out
 
@@ -190,7 +250,7 @@ def enrich_bodies(
             except Exception:
                 body = ""
         enriched.append(NaverArticle(
-            a.title, a.naver_link, a.origin_link, a.published_at, a.summary, body
+            a.title, a.naver_link, a.origin_link, a.published_at, a.summary, body, a.source
         ))
     return enriched
 

@@ -1,6 +1,6 @@
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -15,7 +15,8 @@ from newses.topic_sector import CANONICAL_SECTORS
 _COMMON_PARAMS = [
     OpenApiParameter('display', int, description='기사 수 (기본 10, 1~100)'),
     OpenApiParameter('sort', str, description='date(최신, 기본) | sim(정확도)'),
-    OpenApiParameter('body', bool, description='true면 네이버 호스팅 기사 본문 전체 포함 (느림)'),
+    OpenApiParameter('content', bool,
+                     description='true면 기사 본문(news.naver.com 호스팅분, 최대 2000자) 포함 (느림)'),
 ]
 
 
@@ -31,7 +32,8 @@ def _news_params(request) -> tuple[int, str, bool]:
     sort = request.query_params.get('sort') or 'date'
     if sort not in ('date', 'sim'):
         sort = 'date'
-    with_body = (request.query_params.get('body') or '').lower() in ('1', 'true', 'yes')
+    raw = (request.query_params.get('content') or request.query_params.get('body') or '')
+    with_body = raw.lower() in ('1', 'true', 'yes')
     return display, sort, with_body
 
 
@@ -153,3 +155,33 @@ class SectorNewsView(APIView):
         items = services.feed_news(sector=sector, limit=limit)
         body = {'sector': sector, 'category': None, 'count': len(items), 'items': items}
         return Response(s.FeedNewsResponseSerializer(body).data)
+
+
+@extend_schema(tags=['News'])
+class WatchlistNewsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary='관심종목 뉴스 (네이버, 종목별 병합)',
+        parameters=[OpenApiParameter('limit', int, description='개수 (기본 10, 1~30)')],
+        responses={200: s.StockNewsFeedResponseSerializer},
+    )
+    def get(self, request):
+        limit = _clamp_int(request.query_params.get('limit'), default=10, lo=1, hi=30)
+        items = services.watchlist_news(request.user, limit=limit)
+        return Response(s.StockNewsFeedResponseSerializer({'count': len(items), 'items': items}).data)
+
+
+@extend_schema(tags=['News'])
+class HoldingsNewsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary='보유종목 뉴스 (네이버, 종목별 병합)',
+        parameters=[OpenApiParameter('limit', int, description='개수 (기본 10, 1~30)')],
+        responses={200: s.StockNewsFeedResponseSerializer},
+    )
+    def get(self, request):
+        limit = _clamp_int(request.query_params.get('limit'), default=10, lo=1, hi=30)
+        items = services.holdings_news(request.user, limit=limit)
+        return Response(s.StockNewsFeedResponseSerializer({'count': len(items), 'items': items}).data)

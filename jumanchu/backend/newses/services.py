@@ -6,17 +6,48 @@ view 는 얇게 두고 외부 호출/가공은 여기서 처리한다. (recommen
 from __future__ import annotations
 
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
+from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 
 from stocks.models import NewsRelatedStock, Stock, StockNews
 
+from portfolio.models import Holding
+from recommend.models import UserLikedStock
+
 from newses import rss
 from newses.models import FeedNews, NewsSector
-from newses.naver_news import build_query, fetch_stock_articles, search_news
+from newses.naver_news import build_query, enrich_bodies, search_news
 from newses.news_sector import StockRef, extract_sectors
 from newses.topic_sector import extract_topic_sectors
+
+# 집계(관심/보유) 시 종목당 네이버 호출 1회 → 호출 폭주/지연 방지 상한
+_MAX_AGG_STOCKS = 15
+
+_KST = ZoneInfo("Asia/Seoul")
+
+
+def _news_ttl() -> int:
+    """외부 뉴스 캐시 TTL: 장중(평일 09:00~15:30 KST) 60초, 장외 300초."""
+    now = timezone.now().astimezone(_KST)
+    in_session = now.weekday() < 5 and (9, 0) <= (now.hour, now.minute) <= (15, 30)
+    return 60 if in_session else 300
+
+
+def _cache_get(key):
+    try:
+        return cache.get(key)
+    except Exception:
+        return None  # 캐시 백엔드 장애(Redis 다운 등) → 캐시 미사용으로 폴백
+
+
+def _cache_set(key, value, ttl):
+    try:
+        cache.set(key, value, ttl)
+    except Exception:
+        pass
 
 
 def search_stock_news(
@@ -31,14 +62,21 @@ def search_stock_news(
 
     with_body=False: 검색 스니펫(summary)만 — 빠름(네이버 호출 1회).
     with_body=True : news.naver.com 호스팅 기사 본문 전체까지 — 느림(기사당 추가 호출).
+    외부 호출이라 캐시(장중 1분/장외 5분) 적용 — 종목상세·검색·집계가 공유.
     """
+    cache_key = f"news:naver:{query}:{display}:{sort}:{int(with_body)}:{limit}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    articles = search_news(build_query(query), display=display, sort=sort)
     if with_body:
-        articles = fetch_stock_articles(
-            query, display=max(display, 30), sort=sort, limit=limit, body_limit=limit
-        )
-    else:
-        articles = search_news(build_query(query), display=display, sort=sort)
-    return [a.to_dict() for a in articles]
+        # 본문 채움: news.naver.com 호스팅 기사만 추출(상한 limit개, 최대 2000자).
+        # 비호스팅 기사는 전체 결과에 그대로 두되 본문은 빈값(요약으로 대체).
+        articles = enrich_bodies(articles, limit=limit)
+    result = [a.to_dict() for a in articles]
+    _cache_set(cache_key, result, _news_ttl())
+    return result
 
 
 def _load_stock_refs() -> list[StockRef]:
@@ -165,3 +203,48 @@ def feed_news(*, category: str | None = None, sector: str | None = None,
             "sectors": sectors,
         })
     return out
+
+
+def stocks_news(stocks, *, per_stock: int = 3, limit: int = 10, sort: str = "date") -> list[dict]:
+    """여러 종목 → 종목별 네이버 뉴스 병합. 각 item에 stock 배지 부착, 최신순 top limit.
+
+    종목당 네트워크 1회(캐시 적용 — 반복/공유 호출은 캐시에서 응답) → 호출부에서 종목 수 제한.
+
+    시장 전체 기사가 여러 종목 검색에 겹쳐 나오므로 url 기준으로 중복 제거한다
+    (배지는 먼저 매칭된 종목 = 종목 순회 순서상 첫 종목).
+    """
+    items: list[dict] = []
+    seen_urls: set[str] = set()
+    for st in stocks:
+        try:
+            arts = search_stock_news(st.name, display=per_stock, sort=sort)  # 종목별 캐시 재사용
+        except Exception:
+            continue  # 한 종목 실패가 전체를 막지 않음
+        for d in arts[:per_stock]:
+            url = d["url"]
+            if url in seen_urls:        # 중복 기사 → 1건만 유지
+                continue
+            seen_urls.add(url)
+            items.append({**d, "stock": {"code": st.code, "name": st.name}})
+    items.sort(key=lambda d: d["published_at"] or "", reverse=True)
+    return items[:limit]
+
+
+def watchlist_news(user, *, per_stock: int = 3, limit: int = 10) -> list[dict]:
+    """유저 관심종목(UserLikedStock) → 종목별 네이버 뉴스 병합."""
+    stocks = [
+        liked.stock
+        for liked in UserLikedStock.objects.filter(user=user, is_active=True)
+        .select_related("stock").order_by("-liked_at")[:_MAX_AGG_STOCKS]
+    ]
+    return stocks_news(stocks, per_stock=per_stock, limit=limit)
+
+
+def holdings_news(user, *, per_stock: int = 3, limit: int = 10) -> list[dict]:
+    """유저 보유종목(Holding) → 종목별 네이버 뉴스 병합."""
+    stocks = [
+        h.stock
+        for h in Holding.objects.filter(user=user, quantity__gt=0)
+        .select_related("stock").order_by("-updated_at")[:_MAX_AGG_STOCKS]
+    ]
+    return stocks_news(stocks, per_stock=per_stock, limit=limit)

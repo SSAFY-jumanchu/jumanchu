@@ -1,23 +1,42 @@
 from datetime import datetime, timezone as dt_timezone
 from unittest.mock import patch
 
-from django.test import SimpleTestCase, TestCase
-from rest_framework.test import APIRequestFactory
+from django.contrib.auth import get_user_model
+from django.core.cache import cache
+from django.test import SimpleTestCase, TestCase, override_settings
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from stocks.models import NewsRelatedStock, Stock, StockNews
+from portfolio.models import Holding
+from recommend.models import UserLikedStock
 from newses import services
 from newses.models import FeedNews, NewsSector
+from newses.naver_news import NaverArticle, _press_from_url, extract_body, MAX_BODY_CHARS
+from newses import rss
 from newses.rss import FeedArticle
 from newses.views import (
-    FeedNewsView, SectorNewsView, StockNewsSearchView, StockNewsView,
+    FeedNewsView, HoldingsNewsView, SectorNewsView, StockNewsSearchView,
+    StockNewsView, WatchlistNewsView,
 )
 from newses.topic_sector import (
     CANONICAL_SECTORS, TOPIC_KEYWORDS, extract_topic_sectors,
 )
 
+_LOCMEM_CACHE = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
+
+_RSS_BYTES = (
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    '<rss version="2.0"><channel><title>c</title>'
+    '<item><title>테스트 기사</title><link>https://example.com/a</link>'
+    '<pubDate>Thu, 18 Jun 2026 09:00:00 +0900</pubDate>'
+    '<description>요약</description></item>'
+    '</channel></rss>'
+).encode('utf-8')
+
 _FAKE_ARTICLE = {
     'title': '삼성전자 신고가',
     'url': 'https://n.example/1',
+    'source': '이데일리',
     'published_at': '2026-06-18T09:00:00+00:00',
     'summary': '요약 스니펫',
     'body': '',
@@ -51,7 +70,14 @@ class StockNewsSearchViewTests(SimpleTestCase):
         self.assertEqual(response.data['query'], '삼성전자')
         self.assertEqual(response.data['count'], 1)
         self.assertEqual(response.data['items'][0]['title'], '삼성전자 신고가')
+        self.assertIn('content', response.data['items'][0])   # 본문 필드 노출
         mock_search.assert_called_once()
+
+    @patch('newses.services.search_stock_news', return_value=[_FAKE_ARTICLE])
+    def test_content_param_requests_full_body(self, mock_search):
+        req = self.factory.get('/api/v1/news/', {'query': '삼성전자', 'content': 'true'})
+        StockNewsSearchView.as_view()(req)
+        self.assertTrue(mock_search.call_args.kwargs['with_body'])
 
     @patch('newses.services.search_stock_news', side_effect=RuntimeError('키 없음'))
     def test_missing_credentials_returns_503(self, _mock):
@@ -197,3 +223,145 @@ class TopicSectorTests(SimpleTestCase):
 
     def test_no_topic_returns_empty(self):
         self.assertEqual(extract_topic_sectors('홍명보호, 멕시코전 준비 완료'), [])
+
+
+class PressSourceTests(SimpleTestCase):
+    """originallink 도메인 → 언론사명 역산."""
+
+    def test_known_domains(self):
+        self.assertEqual(_press_from_url('https://www.edaily.co.kr/news/x'), '이데일리')
+        self.assertEqual(_press_from_url('https://biz.chosun.com/site/x'), '조선비즈')
+        self.assertEqual(_press_from_url('https://stock.hankyung.com/a'), '한국경제')
+        # 정확매칭이 .chosun.com 서브도메인 폴백을 이김
+        self.assertEqual(_press_from_url('https://it.chosun.com/x'), 'IT조선')
+        self.assertEqual(_press_from_url('https://www.tokenpost.kr/x'), '토큰포스트')
+
+    def test_unknown_domain_falls_back_to_host(self):
+        self.assertEqual(_press_from_url('https://unknown.example.com/a'), 'unknown.example.com')
+
+    def test_empty(self):
+        self.assertEqual(_press_from_url(''), '')
+
+
+def _naver_article(title='제목', source='이데일리', url='https://www.edaily.co.kr/a'):
+    return NaverArticle(
+        title, 'https://n.naver/x', url,
+        datetime(2026, 6, 18, 9, 0, tzinfo=dt_timezone.utc), '요약', '', source,
+    )
+
+
+@override_settings(CACHES=_LOCMEM_CACHE)
+class AggregatedNewsTests(TestCase):
+    """관심/보유 종목 뉴스 집계 (네이버 search_news 모킹)."""
+
+    def setUp(self):
+        cache.clear()
+        self.factory = APIRequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username='newsu', password='pw', nickname='뉴스유저', birth_year=1990,
+            email='n@e.com',
+        )
+        self.s1 = Stock.objects.create(code='005930', name='삼성전자', market='KOSPI',
+                                       sector='전기·전자', currency='KRW')
+        self.s2 = Stock.objects.create(code='000660', name='SK하이닉스', market='KOSPI',
+                                       sector='전기·전자', currency='KRW')
+
+    @patch('newses.services.search_news')
+    def test_watchlist_news_aggregates_with_badges(self, mock_search):
+        mock_search.side_effect = [
+            [_naver_article(url='https://news/1')],
+            [_naver_article(url='https://news/2')],
+        ]
+        UserLikedStock.objects.create(user=self.user, stock=self.s1)
+        UserLikedStock.objects.create(user=self.user, stock=self.s2)
+
+        request = self.factory.get('/api/v1/news/watchlist/')
+        force_authenticate(request, user=self.user)
+        response = WatchlistNewsView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 2)  # 서로 다른 기사 2건
+        self.assertEqual(
+            {it['stock']['code'] for it in response.data['items']}, {'005930', '000660'}
+        )
+        self.assertEqual(response.data['items'][0]['source'], '이데일리')
+
+    @patch('newses.services.search_news', return_value=[_naver_article(url='https://same/x')])
+    def test_aggregation_dedups_market_wide_article(self, mock_search):
+        # 같은 기사가 두 종목 검색에 겹쳐 나와도 url 기준 1건만
+        UserLikedStock.objects.create(user=self.user, stock=self.s1)
+        UserLikedStock.objects.create(user=self.user, stock=self.s2)
+
+        request = self.factory.get('/api/v1/news/watchlist/')
+        force_authenticate(request, user=self.user)
+        response = WatchlistNewsView.as_view()(request)
+
+        self.assertEqual(response.data['count'], 1)
+
+    @patch('newses.services.search_news', return_value=[_naver_article()])
+    def test_holdings_news_aggregates(self, mock_search):
+        Holding.objects.create(user=self.user, stock=self.s1, quantity=10)
+
+        request = self.factory.get('/api/v1/news/holdings/')
+        force_authenticate(request, user=self.user)
+        response = HoldingsNewsView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['items'][0]['stock']['name'], '삼성전자')
+
+    def test_watchlist_news_requires_auth(self):
+        response = WatchlistNewsView.as_view()(self.factory.get('/api/v1/news/watchlist/'))
+        self.assertEqual(response.status_code, 401)
+
+
+@override_settings(CACHES=_LOCMEM_CACHE)
+class NewsCacheTests(SimpleTestCase):
+    """search_stock_news 캐시 동작 (LocMem로 격리)."""
+
+    def setUp(self):
+        cache.clear()
+
+    @patch('newses.services.search_news', return_value=[_naver_article(url='https://c/1')])
+    def test_search_stock_news_is_cached(self, mock_search):
+        first = services.search_stock_news('삼성전자', display=5)
+        second = services.search_stock_news('삼성전자', display=5)
+        self.assertEqual(first, second)
+        mock_search.assert_called_once()  # 2번째는 캐시에서
+
+    @patch('newses.services.search_news', return_value=[_naver_article(url='https://c/2')])
+    def test_distinct_params_not_shared(self, mock_search):
+        services.search_stock_news('삼성전자', display=5)
+        services.search_stock_news('삼성전자', display=10)  # 다른 display → 다른 키
+        self.assertEqual(mock_search.call_count, 2)
+
+
+class BodyExtractionTests(SimpleTestCase):
+    """본문 추출 + 2000자 컷."""
+
+    def test_truncates_to_max(self):
+        html = '<article id="dic_area">' + ('가' * 5000) + '</article>'
+        self.assertEqual(len(extract_body(html)), MAX_BODY_CHARS)
+
+    def test_empty_when_no_container(self):
+        self.assertEqual(extract_body('<div>본문 컨테이너 없음</div>'), '')
+
+
+class FetchFeedTests(SimpleTestCase):
+    """여러 매체 RSS 병합 + 실패 내성 (rss.fetch_feed)."""
+
+    @patch('newses.rss._get', return_value=_RSS_BYTES)
+    def test_combines_all_sources_with_source_name(self, mock_get):
+        arts = rss.fetch_feed('economy')
+        n = len(rss.FEEDS['economy'])
+        self.assertEqual(len(arts), n)                                   # 매체당 1건
+        self.assertEqual({a.source for a in arts}, {s for s, _ in rss.FEEDS['economy']})
+        self.assertEqual(mock_get.call_count, n)
+
+    @patch('newses.rss._get', side_effect=RuntimeError('network'))
+    def test_resilient_when_all_fail(self, mock_get):
+        self.assertEqual(rss.fetch_feed('economy'), [])                  # 예외 없이 빈 리스트
+
+    def test_unknown_category_raises(self):
+        with self.assertRaises(ValueError):
+            rss.fetch_feed('nope')

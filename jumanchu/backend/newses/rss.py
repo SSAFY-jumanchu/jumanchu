@@ -20,12 +20,23 @@ _NS = {
 }
 _UA = "Mozilla/5.0 (compatible; JumanchuNewsBot/1.0)"
 
-# 내부 카테고리 → 피드 URL (연합뉴스TV 패턴: /category/news/<slug>/feed/)
-# 주의: '세계'는 연합뉴스 슬러그가 international (world 슬러그는 비정상 응답).
-FEEDS: dict[str, str] = {
-    "economy": "http://www.yonhapnewstv.co.kr/category/news/economy/feed/",
-    "politics": "http://www.yonhapnewstv.co.kr/category/news/politics/feed/",
-    "world": "http://www.yonhapnewstv.co.kr/category/news/international/feed/",
+# 카테고리 → [(언론사명, 피드 URL), ...]. 같은 카테고리에 여러 매체를 둘 수 있다.
+# 주의: 연합뉴스 '세계'는 슬러그가 international (world 슬러그는 비정상 응답).
+FEEDS: dict[str, list[tuple[str, str]]] = {
+    "economy": [
+        ("연합뉴스TV", "http://www.yonhapnewstv.co.kr/category/news/economy/feed/"),
+        ("JTBC", "https://news-ex.jtbc.co.kr/v1/get/rss/section/economy"),
+        ("동아일보", "https://rss.donga.com/economy.xml"),
+        ("조선일보", "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/?outputType=xml"),
+        ("한국경제", "https://www.hankyung.com/feed/economy"),
+        ("SBS", "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=02&plink=RSSREADER"),
+    ],
+    "politics": [
+        ("연합뉴스TV", "http://www.yonhapnewstv.co.kr/category/news/politics/feed/"),
+    ],
+    "world": [
+        ("연합뉴스TV", "http://www.yonhapnewstv.co.kr/category/news/international/feed/"),
+    ],
 }
 DEFAULT_SOURCE = "연합뉴스TV"
 
@@ -82,8 +93,14 @@ def parse_feed(xml_bytes: bytes, *, source: str = DEFAULT_SOURCE) -> list[FeedAr
 
 
 def fetch_feed(category: str = "economy") -> list[FeedArticle]:
-    """카테고리 피드를 받아 파싱해 반환."""
-    url = FEEDS.get(category)
-    if not url:
+    """카테고리의 모든 매체 피드를 받아 파싱·병합. 한 매체 실패는 건너뜀(나머지 유지)."""
+    specs = FEEDS.get(category)
+    if specs is None:
         raise ValueError(f"알 수 없는 피드 카테고리: {category!r} (가능: {list(FEEDS)})")
-    return parse_feed(_get(url))
+    out: list[FeedArticle] = []
+    for source, url in specs:
+        try:
+            out.extend(parse_feed(_get(url), source=source))
+        except Exception:
+            continue  # 한 매체 실패(타임아웃/포맷 등)가 전체를 막지 않음
+    return out

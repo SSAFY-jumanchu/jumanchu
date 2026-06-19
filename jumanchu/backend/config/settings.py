@@ -94,16 +94,30 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',   # Vite dev
 ]
 
-CACHES = {
-    'default': {
-        # django_ratelimit은 원자적 increment 지원 캐시 필요 → Redis 사용 (docker-compose).
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': f"redis://{os.environ.get('REDIS_HOST', 'localhost')}:{os.environ.get('REDIS_PORT', '6379')}/1",
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+# 기본은 Redis(django_ratelimit 원자적 increment용). 로컬에서 Redis 없이 띄울 땐
+# .env 에 CACHE_BACKEND=locmem 을 주면 인메모리 캐시로 폴백(로컬 전용 토글).
+if os.environ.get('CACHE_BACKEND') == 'locmem':
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         },
-    },
-}
+    }
+    # LocMem은 멀티프로세스 공유가 안 돼 django_ratelimit가 E003/W001을 낸다.
+    # 로컬(단일 프로세스) 전용 폴백이므로 이 체크만 무음(운영=Redis는 영향 없음).
+    SILENCED_SYSTEM_CHECKS = ['django_ratelimit.E003', 'django_ratelimit.W001']
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': f"redis://{os.environ.get('REDIS_HOST', 'localhost')}:{os.environ.get('REDIS_PORT', '6379')}/1",
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                # Redis 장애 시 무한 대기 방지 — 빨리 실패하고 캐시 폴백.
+                'SOCKET_CONNECT_TIMEOUT': 1,
+                'SOCKET_TIMEOUT': 1,
+            },
+        },
+    }
 
 SPECTACULAR_SETTINGS = {
     'TITLE': '주만추 API',
