@@ -1,11 +1,24 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import SparklineChart from '../components/SparklineChart.vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
 const auth = useAuthStore()
+
+// 비로그인 랜딩 배너 캐러셀 (5초 자동 슬라이드)
+const slides = [
+  { visual: 'swipe', theme: 'th-swipe', label: '스와이핑 추천', title: '나만의 주식 매칭!', desc: '카드를 넘기기만 하면 내 투자 성향에 맞는 종목을 추천해드려요. 관심·저장으로 나만의 종목 리스트를 완성하세요.' },
+  { visual: 'care', theme: 'th-care', label: '장투 케어', title: '우리 오늘 며칠?', desc: '건강한 투자 습관을 함께 만들어가요. 보유 종목을 꾸준히 점검하고, 장기 보유 점수를 기록해드려요.' },
+  { visual: 'ai', theme: 'th-ai', label: 'AI 분석 서비스', title: '지금 이대로 괜찮을까요?', desc: 'AI가 재무·성장·궁합을 분석해 보유 종목의 장기 적합성을 알려드려요. 매수·매도 판단을 똑똑하게.' },
+]
+const currentSlide = ref(0)
+let slideTimer = null
+function nextSlide() { currentSlide.value = (currentSlide.value + 1) % slides.length }
+function startSlideTimer() { clearInterval(slideTimer); slideTimer = setInterval(nextSlide, 5000) }
+onMounted(() => { if (!auth.isAuthenticated) startSlideTimer() })
+onUnmounted(() => clearInterval(slideTimer))
 
 // 검색 바
 const searchQuery = ref('')
@@ -256,8 +269,8 @@ const watchlistNews = [
 <template>
   <div class="home-page">
 
-    <!-- ===== 검색 바 ===== -->
-    <section class="panel home-search" aria-label="종목 검색">
+    <!-- ===== 검색 바 (로그인 시 상단 노출) ===== -->
+    <section v-if="auth.isAuthenticated" class="panel home-search" aria-label="종목 검색">
       <form class="search-box" @submit.prevent="goSearch">
         <svg class="search-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="2" />
@@ -282,8 +295,8 @@ const watchlistNews = [
       </div>
     </section>
 
-    <!-- ===== 섹션 1: 자산 목표 + 스와이핑 추천 ===== -->
-    <div class="hero-grid">
+    <!-- ===== 섹션 1: 자산 목표 + 스와이핑 추천 (로그인 시) ===== -->
+    <div v-if="auth.isAuthenticated" class="hero-grid">
 
       <!-- 왼쪽: 현재 총 자산 가치 및 다음 목표 -->
       <section class="panel goal-panel" aria-label="자산 현황 및 목표">
@@ -388,7 +401,6 @@ const watchlistNews = [
           <article
             ref="cardEl"
             class="match-card"
-            :class="{ blurred: !auth.isAuthenticated }"
             :style="{ background: current.gradient }"
             @pointerdown="onPointerDown"
             @pointermove="onPointerMove"
@@ -444,22 +456,97 @@ const watchlistNews = [
             <div class="mc-reason">🐤 성장 선호와 {{ current.sector }} 모멘텀(성장 {{ current.dna[1].value }})이 맞아요.</div>
             <div class="mc-interest">❤️ {{ current.interest.toLocaleString('ko-KR') }}명이 이 종목에 관심 있어요</div>
           </article>
-
-          <!-- 미로그인: 카드 블러 + 로그인 버튼 -->
-          <div v-if="!auth.isAuthenticated" class="match-login-overlay">
-            <button class="match-login-btn" type="button" @click="router.push('/login')">로그인을 해주세요</button>
-          </div>
         </div>
 
         <!-- 액션 버튼 -->
         <div class="match-controls">
-          <button class="match-btn pass" type="button" aria-label="관심없음" :disabled="!auth.isAuthenticated" @click="swipe('left')">✕</button>
-          <button class="match-btn save" type="button" aria-label="관심 종목 저장" :disabled="!auth.isAuthenticated" @click="swipe('save')">♥</button>
-          <button class="match-btn like" type="button" aria-label="관심" :disabled="!auth.isAuthenticated" @click="swipe('right')">↗</button>
+          <button class="match-btn pass" type="button" aria-label="관심없음" @click="swipe('left')">✕</button>
+          <button class="match-btn save" type="button" aria-label="관심 종목 저장" @click="swipe('save')">♥</button>
+          <button class="match-btn like" type="button" aria-label="관심" @click="swipe('right')">↗</button>
         </div>
         <p class="match-hint">카드를 좌우로 드래그하거나 버튼을 눌러 넘길 수 있어요</p>
       </section>
     </div>
+
+    <!-- ===== 비로그인: 100vh 풀스크린 배너 (5초 자동 슬라이드) + 로그인 CTA ===== -->
+    <template v-else>
+      <section class="lp-banner" aria-label="서비스 소개">
+        <!-- 검색바 오버레이 (배너 위에 떠 있음) -->
+        <div class="lp-search-overlay">
+          <section class="panel home-search" aria-label="종목 검색">
+            <form class="search-box" @submit.prevent="goSearch">
+              <svg class="search-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="2" />
+                <path d="M14 14l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>
+              <input
+                v-model="searchQuery"
+                type="text"
+                class="search-input"
+                placeholder="종목명 또는 코드로 검색 (예: 삼성전자, 005930, NVDA)"
+              />
+            </form>
+            <div class="search-popular">
+              <span class="popular-label">🔥 인기검색</span>
+              <button
+                v-for="kw in popularKeywords"
+                :key="kw"
+                type="button"
+                class="popular-kw"
+                @click="goSearch"
+              >{{ kw }}</button>
+            </div>
+          </section>
+        </div>
+
+        <div class="lp-track" :style="{ transform: `translateX(-${currentSlide * 100}%)` }">
+          <div v-for="(s, i) in slides" :key="i" class="lp-slide" :class="s.theme">
+            <div class="lp-slide-inner">
+              <div class="lp-slide-text">
+                <div class="lp-slide-meta">
+                  <span class="lp-num">0{{ i + 1 }} / 03</span>
+                  <span class="lp-label">{{ s.label }}</span>
+                </div>
+                <h1 class="lp-slide-title">{{ s.title }}</h1>
+                <p class="lp-slide-desc">{{ s.desc }}</p>
+              </div>
+              <div class="lp-slide-visual">
+                <div v-if="s.visual === 'swipe'" class="lp-vis">
+                  <div class="demo-card c3"></div>
+                  <div class="demo-card c2"></div>
+                  <div class="demo-card c1">
+                    <span class="demo-badge">KOSPI · 전기·전자</span>
+                    <strong class="demo-name">SK하이닉스</strong>
+                    <span class="demo-pill">궁합 94점</span>
+                    <span class="demo-like">❤️</span>
+                  </div>
+                </div>
+                <div v-else-if="s.visual === 'care'" class="lp-vis">
+                  <div class="care-card">
+                    <span class="care-label">투자 STREAK</span>
+                    <strong class="care-day">D+128</strong>
+                    <div class="care-dots"><i v-for="n in 14" :key="n" :class="{ on: n <= 11 }"></i></div>
+                    <span class="care-sub">11일 연속 점검 중 🔥</span>
+                  </div>
+                </div>
+                <div v-else class="lp-vis">
+                  <div class="ai-card">
+                    <div class="ai-robot">🤖</div>
+                    <div class="ai-bubble"><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span></div>
+                    <div class="ai-line">재무 80 · 성장 92 · 궁합 87</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 로그인 CTA: 배너 하단 그라데이션 밴드 -->
+        <div class="lp-login">
+          <span class="lp-login-text">나만의 주식을 만나보아요!</span>
+          <button class="lp-login-btn" type="button" @click="router.push('/login')">로그인하기 →</button>
+        </div>
+      </section>
+    </template>
 
     <!-- ===== 섹션 2: 시장 지표 ===== -->
     <section class="panel market-section" aria-label="시장 지표">
@@ -610,8 +697,156 @@ const watchlistNews = [
 <style scoped>
 /* ===== 페이지 레이아웃 ===== */
 .home-page {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 18px;
+}
+
+/* ===== 비로그인: 100vh 풀스크린 배너 캐러셀 ===== */
+.lp-banner {
+  position: relative;
+  width: 100vw;
+  max-width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  /* 네비(64 + border 1) + main 상단 패딩(24)만큼 끌어올려 화면 최상단에 붙이고 네비/검색바가 위로 겹치게 */
+  margin-top: -89px;
+  min-height: 100vh;
+  overflow: hidden;
+}
+.lp-track {
+  display: flex;
+  min-height: 100vh;
+  transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.lp-slide {
+  flex: 0 0 100%;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 배너 배경: 라이트 모드 (밝고 선명한 브랜드 톤) */
+.lp-slide.th-swipe { background: linear-gradient(135deg, #7c4dff 0%, #b35cd6 52%, #ff5fa2 100%); }
+.lp-slide.th-care { background: linear-gradient(135deg, #14b88a 0%, #2f8fe0 55%, #5566e8 100%); }
+.lp-slide.th-ai { background: linear-gradient(135deg, #3f74ff 0%, #7b57f0 52%, #ad5ce0 100%); }
+
+/* 배너 배경: 다크 모드 (깊고 차분한 톤) */
+html[data-theme='dark'] .lp-slide.th-swipe { background: linear-gradient(135deg, #2a1560 0%, #561d83 52%, #7a1f55 100%); }
+html[data-theme='dark'] .lp-slide.th-care { background: linear-gradient(135deg, #06382b 0%, #0c3b66 55%, #181f6b 100%); }
+html[data-theme='dark'] .lp-slide.th-ai { background: linear-gradient(135deg, #122259 0%, #281c68 52%, #441d66 100%); }
+
+/* 배너 위에 떠 있는 검색바 오버레이 */
+.lp-search-overlay {
+  position: absolute;
+  top: 76px;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+  padding: 0 28px;
+  pointer-events: none;
+}
+.lp-search-overlay .home-search { width: min(1480px, 100%); pointer-events: auto; }
+.lp-slide::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(50% 60% at 78% 28%, rgba(255,255,255,0.12), transparent 60%);
+}
+.lp-slide-inner {
+  position: relative;
+  width: min(1480px, 100%);
+  margin: 0 auto;
+  padding: 0 60px;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 40px;
+  align-items: center;
+}
+.lp-slide-text { color: #fff; }
+.lp-slide-meta { display: flex; align-items: center; gap: 12px; }
+.lp-num { font-size: 13px; font-weight: 900; color: rgba(255,255,255,0.6); letter-spacing: 0.1em; }
+.lp-label {
+  padding: 5px 14px; border-radius: 999px;
+  background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.24);
+  color: #fff; font-size: 13px; font-weight: 900;
+}
+.lp-slide-title { margin: 20px 0 16px; font-size: clamp(38px, 6vw, 76px); font-weight: 900; line-height: 1.05; letter-spacing: -2px; color: #fff; }
+.lp-slide-desc { margin: 0; max-width: 480px; font-size: 16px; font-weight: 600; line-height: 1.7; color: rgba(255,255,255,0.82); word-break: keep-all; }
+.lp-slide-visual { display: flex; align-items: center; justify-content: center; }
+.lp-vis { position: relative; width: 280px; height: 300px; display: flex; align-items: center; justify-content: center; }
+
+/* 비주얼: 스와이프 데모 */
+.demo-card { position: absolute; width: 200px; height: 240px; border-radius: 20px; box-shadow: 0 16px 44px rgba(0,0,0,0.35); }
+.demo-card.c1 {
+  z-index: 3; padding: 18px; color: #fff;
+  background: linear-gradient(135deg, #6d28d9, #db2777);
+  display: flex; flex-direction: column; gap: 8px;
+  animation: demoSway 3.2s ease-in-out infinite;
+}
+.demo-card.c2 { z-index: 2; background: rgba(255,255,255,0.45); transform: rotate(6deg) translateX(14px) scale(0.96); }
+.demo-card.c3 { z-index: 1; background: rgba(255,255,255,0.25); transform: rotate(-7deg) translateX(-16px) scale(0.92); }
+@keyframes demoSway { 0%, 100% { transform: rotate(-7deg) translateX(-10px); } 50% { transform: rotate(7deg) translateX(10px); } }
+.demo-badge { align-self: flex-start; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.2); font-size: 10px; font-weight: 900; }
+.demo-name { margin-top: auto; font-size: 22px; font-weight: 900; letter-spacing: -0.5px; }
+.demo-pill { align-self: flex-start; padding: 3px 10px; border-radius: 999px; background: rgba(255,255,255,0.22); font-size: 12px; font-weight: 900; }
+.demo-like { position: absolute; right: 16px; bottom: 16px; font-size: 26px; }
+
+/* 비주얼: 장투 케어 */
+.care-card {
+  width: 220px; padding: 24px; border-radius: 22px; text-align: center;
+  background: #fff; box-shadow: 0 18px 50px rgba(0,0,0,0.3);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.care-label { font-size: 11px; font-weight: 900; color: var(--muted); letter-spacing: 0.08em; }
+.care-day { font-size: 42px; font-weight: 900; letter-spacing: -2px; background: linear-gradient(135deg, #0f9f6e, #315dff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.care-dots { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 168px; }
+.care-dots i { width: 12px; height: 12px; border-radius: 4px; background: #e6ecf5; }
+.care-dots i.on { background: #0f9f6e; }
+.care-sub { font-size: 12px; font-weight: 800; color: #0f9f6e; }
+
+/* 비주얼: AI 로봇 */
+.ai-card { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.ai-robot { font-size: 96px; filter: drop-shadow(0 16px 30px rgba(0,0,0,0.4)); animation: aiFloat 3s ease-in-out infinite; }
+@keyframes aiFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+.ai-bubble { display: flex; gap: 6px; padding: 10px 18px; border-radius: 999px; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+.ai-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: aiBlink 1.4s ease-in-out infinite; }
+.ai-dot:nth-child(2) { animation-delay: 0.2s; }
+.ai-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes aiBlink { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
+.ai-line { padding: 7px 16px; border-radius: 999px; background: rgba(255,255,255,0.16); color: #fff; font-size: 13px; font-weight: 900; }
+
+/* ===== 로그인 유도 CTA (배너 하단 그라데이션 밴드) ===== */
+.lp-login {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+  display: flex; align-items: center; justify-content: center; gap: 20px; flex-wrap: wrap;
+  padding: 30px 24px 42px;
+  background: linear-gradient(to top, rgba(12,14,34,0.8) 0%, rgba(12,14,34,0.35) 55%, transparent 100%);
+}
+.lp-login-text { font-size: clamp(16px, 2.2vw, 22px); font-weight: 900; color: #fff; letter-spacing: -0.3px; }
+.lp-login-btn {
+  height: 48px; padding: 0 28px; border: 0; border-radius: 999px;
+  background: linear-gradient(135deg, #315dff, #7d4ee8 60%, #ff3d8b);
+  color: #fff; font-size: 15px; font-weight: 900; cursor: pointer;
+  box-shadow: 0 12px 30px rgba(49,93,255,0.45);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.lp-login-btn:hover { transform: translateY(-2px); box-shadow: 0 16px 38px rgba(49,93,255,0.55); }
+
+@media (max-width: 800px) {
+  .lp-slide-inner { grid-template-columns: 1fr; padding: 0 22px; text-align: center; justify-items: center; gap: 22px; }
+  /* 번호(01/03) 위, 라벨(스와이핑 추천) 아래로 — 가운데 정렬 */
+  .lp-slide-meta { flex-direction: column; gap: 8px; }
+  .lp-slide-title { margin: 12px 0 12px; font-size: clamp(32px, 8vw, 52px); letter-spacing: -1px; }
+  .lp-slide-desc { margin: 0 auto; font-size: 15px; }
+  .lp-vis { width: 240px; height: 250px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-track { transition: none; }
+  .demo-card.c1, .ai-robot { animation: none; }
 }
 
 /* ===== 검색 바 ===== */
@@ -988,7 +1223,6 @@ const watchlistNews = [
   will-change: transform, opacity;
 }
 .match-card:active { cursor: grabbing; }
-.match-card.blurred { filter: blur(7px); pointer-events: none; }
 .match-card::before {
   content: '';
   position: absolute;
@@ -1139,30 +1373,6 @@ const watchlistNews = [
 
 .mc-reason { margin-top: 14px; font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3); }
 .mc-interest { margin-top: 12px; font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3); }
-
-/* 로그인 오버레이 */
-.match-login-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10;
-}
-.match-login-btn {
-  padding: 0 22px;
-  height: 48px;
-  border: 0;
-  border-radius: 999px;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 900;
-  cursor: pointer;
-  box-shadow: 0 10px 30px rgba(49, 93, 255, 0.4);
-  transition: transform 0.18s ease;
-}
-.match-login-btn:hover { transform: translateY(-2px); }
 
 /* 컨트롤 버튼 */
 .match-controls {

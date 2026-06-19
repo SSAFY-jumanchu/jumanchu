@@ -120,6 +120,9 @@ a { color: inherit; text-decoration: none; }
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  /* 100vw 풀블리드(.lp-banner)가 세로 스크롤바 폭만큼 넘쳐 우측에 여백이
+     생기는 것 방지. clip은 스크롤 컨테이너를 만들지 않아 sticky 네비에 무해. */
+  overflow-x: clip;
 }
 
 .main-area {

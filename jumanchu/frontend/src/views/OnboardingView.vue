@@ -194,8 +194,7 @@ function displayScore(q, score) {
 
       <!-- 헤더 -->
       <div class="ob-page-header">
-        <p class="eyebrow" style="text-align:center; font-size:13px;">김주만님 만의 주식투자 스타일 알아가기</p>
-        <h1 class="ob-page-title">온보딩</h1>
+        <h1 class="ob-page-title">나의 투자 DNA 분석하기</h1>
       </div>
 
       <!-- 진행 바 -->
