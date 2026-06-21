@@ -3,6 +3,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import SparklineChart from '../components/SparklineChart.vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import logoWall from '../../0621ref/q.png'
+import notebookBg from '../../0621ref/2.png'
+import aiHandImg from '../../0621ref/3.jpg'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -11,14 +14,118 @@ const auth = useAuthStore()
 const slides = [
   { visual: 'swipe', theme: 'th-swipe', label: '스와이핑 추천', title: '나만의 주식 매칭!', desc: '카드를 넘기기만 하면 내 투자 성향에 맞는 종목을 추천해드려요. 관심·저장으로 나만의 종목 리스트를 완성하세요.' },
   { visual: 'care', theme: 'th-care', label: '장투 케어', title: '우리 오늘 며칠?', desc: '건강한 투자 습관을 함께 만들어가요. 보유 종목을 꾸준히 점검하고, 장기 보유 점수를 기록해드려요.' },
-  { visual: 'ai', theme: 'th-ai', label: 'AI 분석 서비스', title: '지금 이대로 괜찮을까요?', desc: 'AI가 재무·성장·궁합을 분석해 보유 종목의 장기 적합성을 알려드려요. 매수·매도 판단을 똑똑하게.' },
+  { visual: 'ai', theme: 'th-ai', label: 'AI 분석 서비스', title: '지금 이대로\n괜찮을까요?', desc: 'AI가 재무·성장·궁합을 분석해 보유 종목의 장기 적합성을 알려드려요. 매수·매도 판단을 똑똑하게.' },
 ]
 const currentSlide = ref(0)
 let slideTimer = null
 function nextSlide() { currentSlide.value = (currentSlide.value + 1) % slides.length }
+function prevSlide() { currentSlide.value = (currentSlide.value - 1 + slides.length) % slides.length }
 function startSlideTimer() { clearInterval(slideTimer); slideTimer = setInterval(nextSlide, 5000) }
-onMounted(() => { if (!auth.isAuthenticated) startSlideTimer() })
+// 좌우 버튼 수동 이동 — 이동 후 자동 슬라이드 타이머 리셋
+function goPrev() { prevSlide(); startSlideTimer() }
+function goNext() { nextSlide(); startSlideTimer() }
+// 지금 이대로 괜찮을까요?: 손+칩을 배경(하늘색)에서 분리(런타임 canvas 키잉) → 단일 하늘색 위에 올려 좌우 분할 제거
+const aiCutout = ref(aiHandImg)
+function buildAiCutout() {
+  const img = new Image()
+  img.onload = () => {
+    try {
+      const c = document.createElement('canvas')
+      c.width = img.naturalWidth
+      c.height = img.naturalHeight
+      const ctx = c.getContext('2d', { willReadFrequently: true })
+      ctx.drawImage(img, 0, 0)
+      const d = ctx.getImageData(0, 0, c.width, c.height)
+      const p = d.data
+      // 네 모서리 평균 = 배경 하늘색
+      const corners = [0, (c.width - 1) * 4, c.width * (c.height - 1) * 4, (c.width * c.height - 1) * 4]
+      let br = 0, bg = 0, bb = 0
+      for (const k of corners) { br += p[k]; bg += p[k + 1]; bb += p[k + 2] }
+      br /= 4; bg /= 4; bb /= 4
+      const t0 = 24, t1 = 62 // 배경과의 색거리: t0 이하=투명, t1 이상=불투명(가장자리 페더링)
+      for (let i = 0; i < p.length; i += 4) {
+        const dr = p[i] - br, dg = p[i + 1] - bg, db = p[i + 2] - bb
+        const dist = Math.sqrt(dr * dr + dg * dg + db * db)
+        if (dist <= t0) p[i + 3] = 0
+        else if (dist < t1) p[i + 3] = Math.round((255 * (dist - t0)) / (t1 - t0))
+      }
+      ctx.putImageData(d, 0, 0)
+      aiCutout.value = c.toDataURL('image/png')
+    } catch (e) {
+      /* 캔버스 미지원/보안 시 원본 유지 */
+    }
+  }
+  img.src = aiHandImg
+}
+
+// 스와이핑 추천: q.png 어두운 배경을 키잉(투명화) → 로고 모양 그대로 발광시키기 위한 알파 소스
+const keyedWall = ref(logoWall)
+function buildLogoWallKey() {
+  const img = new Image()
+  img.onload = () => {
+    try {
+      const c = document.createElement('canvas')
+      c.width = img.naturalWidth
+      c.height = img.naturalHeight
+      const ctx = c.getContext('2d', { willReadFrequently: true })
+      ctx.drawImage(img, 0, 0)
+      const d = ctx.getImageData(0, 0, c.width, c.height)
+      const p = d.data
+      const corners = [0, (c.width - 1) * 4, c.width * (c.height - 1) * 4, (c.width * c.height - 1) * 4]
+      let br = 0, bg = 0, bb = 0
+      for (const k of corners) { br += p[k]; bg += p[k + 1]; bb += p[k + 2] }
+      br /= 4; bg /= 4; bb /= 4
+      const t0 = 34, t1 = 78
+      for (let i = 0; i < p.length; i += 4) {
+        const dr = p[i] - br, dg = p[i + 1] - bg, db = p[i + 2] - bb
+        const dist = Math.sqrt(dr * dr + dg * dg + db * db)
+        if (dist <= t0) p[i + 3] = 0
+        else if (dist < t1) p[i + 3] = Math.round((255 * (dist - t0)) / (t1 - t0))
+      }
+      ctx.putImageData(d, 0, 0)
+      keyedWall.value = c.toDataURL('image/png')
+    } catch (e) { /* 미지원/보안 시 원본 유지 */ }
+  }
+  img.src = logoWall
+}
+
+onMounted(() => {
+  if (!auth.isAuthenticated) startSlideTimer()
+  buildAiCutout()
+  buildLogoWallKey()
+})
 onUnmounted(() => clearInterval(slideTimer))
+
+// 슬라이드별 배경: 공책(우리 오늘 며칠?) / AI손(지금 이대로 괜찮을까요?)
+// 스와이핑 추천은 우주배경 대신 다크 그라데이션 + 아래 로고 클라우드 사용
+// 스와이핑 추천 로고월(q.png) — 화이트 위에 흐릿하게 (채도/블러/투명도는 .swipe-bg CSS)
+const swipeBgStyle = { backgroundImage: `url(${logoWall})` }
+// 각 로고 위 hover 핫스팟 — 마우스 올리면 브랜드 색으로 로고 모양 그대로 발광
+// x,y=화면 % 중심, w,h=로고 박스 크기(%) → 이 영역만 클립해 모양 알파 확보 (위치/크기 조정 가능)
+const swipeLogos = [
+  { key: 'lg', x: 16, y: 24, w: 18, h: 14, color: '#e23b6d' },
+  { key: 'sk', x: 42, y: 23, w: 16, h: 14, color: '#ff4d3d' },
+  { key: 'hyundai', x: 72, y: 24, w: 22, h: 14, color: '#3f74e6' },
+  { key: 'samsung', x: 18, y: 38, w: 20, h: 13, color: '#3b5bd9' },
+  { key: 'posco', x: 45, y: 38, w: 16, h: 13, color: '#19a7e6' },
+  { key: 'soil', x: 63, y: 38, w: 16, h: 13, color: '#ff4d4d' },
+  { key: 'kia', x: 85, y: 39, w: 16, h: 14, color: '#9aa6b6' },
+  { key: 'shinhan', x: 24, y: 52, w: 19, h: 13, color: '#2a5bff' },
+  { key: 'gs', x: 50, y: 52, w: 16, h: 13, color: '#13b5b1' },
+  { key: 'hanwha', x: 79, y: 52, w: 19, h: 13, color: '#ff8a2a' },
+  { key: 'kakao', x: 18, y: 67, w: 17, h: 13, color: '#ffd400' },
+  { key: 'kb', x: 47, y: 67, w: 22, h: 13, color: '#ffc01e' },
+  { key: 'naver', x: 77, y: 67, w: 19, h: 13, color: '#19c95f' },
+]
+const keyedBg = computed(() => `url(${keyedWall.value})`)
+// 로고를 부드러운 타원 마스크로 (사각형 경계 없이 로고 전체가 빛나게) — vw/vh로 로고 크기에 맞춤
+function logoMask(lg) {
+  return `radial-gradient(ellipse ${lg.w}vw ${lg.h * 1.15}vh at ${lg.x}% ${lg.y}%, #000 48%, rgba(0,0,0,0) 84%)`
+}
+// 공책 — 줄(라인)이 오른쪽(다이어리)에 오도록 좌우 반전해서 배경 레이어로
+const careBgStyle = { backgroundImage: `url(${notebookBg})` }
+// 손+칩 누끼 결과를 .ai-hand 배경으로 (처리 전엔 원본)
+const aiHandStyle = computed(() => ({ backgroundImage: `url(${aiCutout.value})` }))
 
 // 검색 바
 const searchQuery = ref('')
@@ -471,6 +578,8 @@ const watchlistNews = [
     <!-- ===== 비로그인: 100vh 풀스크린 배너 (5초 자동 슬라이드) + 로그인 CTA ===== -->
     <template v-else>
       <section class="lp-banner" aria-label="서비스 소개">
+        <!-- 상단 흰 영역: 네비/검색 영역까지는 세 화면 모두 흰 배경 -->
+        <div class="lp-top-white" aria-hidden="true"></div>
         <!-- 검색바 오버레이 (배너 위에 떠 있음) -->
         <div class="lp-search-overlay">
           <section class="panel home-search" aria-label="종목 검색">
@@ -501,6 +610,31 @@ const watchlistNews = [
 
         <div class="lp-track" :style="{ transform: `translateX(-${currentSlide * 100}%)` }">
           <div v-for="(s, i) in slides" :key="i" class="lp-slide" :class="s.theme">
+            <!-- 스와이핑 추천: q.png 로고월 배경 + 로고별 hover 발광 핫스팟 -->
+            <template v-if="s.visual === 'swipe'">
+              <div class="swipe-bg" :style="swipeBgStyle" aria-hidden="true"></div>
+              <div class="logo-hots">
+                <span
+                  v-for="lg in swipeLogos"
+                  :key="lg.key"
+                  class="logo-hot"
+                  :style="{ '--glow': lg.color }"
+                >
+                  <span class="logo-hit" :style="{ left: lg.x + '%', top: lg.y + '%', width: lg.w + '%', height: lg.h + '%' }"></span>
+                  <span class="logo-hot-img" :style="{ backgroundImage: keyedBg, maskImage: logoMask(lg), WebkitMaskImage: logoMask(lg) }"></span>
+                </span>
+              </div>
+            </template>
+            <!-- 우리 오늘 며칠?: 공책 줄을 오른쪽에 두려 좌우 반전한 배경 레이어 -->
+            <div v-else-if="s.visual === 'care'" class="care-bg" :style="careBgStyle" aria-hidden="true"></div>
+            <!-- 지금 이대로 괜찮을까요?: 흐릿한 하늘색 풀배경 + 선명한 로봇팔(오른쪽) + 'AI' 글자 발광 -->
+            <template v-else>
+              <div class="ai-hand" :style="aiHandStyle" aria-hidden="true"></div>
+              <!-- 손이 든 칩만 따로 분리(같은 배경을 칩 영역만 클립) → 그 칩이 빛남 -->
+              <div class="ai-chip-wrap" aria-hidden="true">
+                <div class="ai-chip" :style="aiHandStyle"></div>
+              </div>
+            </template>
             <div class="lp-slide-inner">
               <div class="lp-slide-text">
                 <div class="lp-slide-meta">
@@ -511,34 +645,36 @@ const watchlistNews = [
                 <p class="lp-slide-desc">{{ s.desc }}</p>
               </div>
               <div class="lp-slide-visual">
-                <div v-if="s.visual === 'swipe'" class="lp-vis">
-                  <div class="demo-card c3"></div>
-                  <div class="demo-card c2"></div>
-                  <div class="demo-card c1">
-                    <span class="demo-badge">KOSPI · 전기·전자</span>
-                    <strong class="demo-name">SK하이닉스</strong>
-                    <span class="demo-pill">궁합 94점</span>
-                    <span class="demo-like">❤️</span>
-                  </div>
-                </div>
-                <div v-else-if="s.visual === 'care'" class="lp-vis">
-                  <div class="care-card">
-                    <span class="care-label">투자 STREAK</span>
-                    <strong class="care-day">D+128</strong>
-                    <div class="care-dots"><i v-for="n in 14" :key="n" :class="{ on: n <= 11 }"></i></div>
-                    <span class="care-sub">11일 연속 점검 중 🔥</span>
-                  </div>
-                </div>
-                <div v-else class="lp-vis">
-                  <div class="ai-card">
-                    <div class="ai-robot">🤖</div>
-                    <div class="ai-bubble"><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span></div>
-                    <div class="ai-line">재무 80 · 성장 92 · 궁합 87</div>
+                <div v-if="s.visual === 'care'" class="lp-vis lp-vis-care">
+                  <div class="diary-note" :class="{ 'is-active': currentSlide === i }">
+                    <span class="dw-line dw-date">6월 21일</span>
+                    <span class="dw-line dw-head">매매일지 기록</span>
+                    <span class="dw-line dw-l1">주만추 매수</span>
+                    <span class="dw-line dw-l2">장기성장성 / 목표 100%</span>
+                    <svg class="dw-check" viewBox="0 0 52 40" aria-hidden="true">
+                      <path d="M6 22 L20 35 L46 6" />
+                    </svg>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- 좌우 스와이프 버튼 -->
+        <button class="lp-nav lp-nav-prev" type="button" aria-label="이전 화면" @click="goPrev">‹</button>
+        <button class="lp-nav lp-nav-next" type="button" aria-label="다음 화면" @click="goNext">›</button>
+        <!-- 슬라이드 인디케이터 -->
+        <div class="lp-dots" role="tablist" aria-label="화면 선택">
+          <button
+            v-for="(s, i) in slides"
+            :key="i"
+            type="button"
+            class="lp-dot"
+            :class="{ active: currentSlide === i }"
+            :aria-label="`${i + 1}번 화면`"
+            @click="currentSlide = i; startSlideTimer()"
+          ></button>
         </div>
         <!-- 로그인 CTA: 배너 하단 그라데이션 밴드 -->
         <div class="lp-login">
@@ -546,6 +682,8 @@ const watchlistNews = [
           <button class="lp-login-btn" type="button" @click="router.push('/login')">로그인하기 →</button>
         </div>
       </section>
+      <!-- 배너(다크) → 흰 콘텐츠로 자연스럽게 잇는 전환 띠 -->
+      <div class="lp-fade-out" aria-hidden="true"></div>
     </template>
 
     <!-- ===== 섹션 2: 시장 지표 ===== -->
@@ -729,14 +867,45 @@ const watchlistNews = [
 }
 
 /* 배너 배경: 라이트 모드 (밝고 선명한 브랜드 톤) */
-.lp-slide.th-swipe { background: linear-gradient(135deg, #7c4dff 0%, #b35cd6 52%, #ff5fa2 100%); }
+/* 스와이핑 추천: 화이트 배경 (로고월 .swipe-bg는 그 위에 흐릿하게) */
+.lp-slide.th-swipe { background: #ffffff; }
 .lp-slide.th-care { background: linear-gradient(135deg, #14b88a 0%, #2f8fe0 55%, #5566e8 100%); }
-.lp-slide.th-ai { background: linear-gradient(135deg, #3f74ff 0%, #7b57f0 52%, #ad5ce0 100%); }
+.lp-slide.th-ai { background: #aec1d6; }
 
-/* 배너 배경: 다크 모드 (깊고 차분한 톤) */
-html[data-theme='dark'] .lp-slide.th-swipe { background: linear-gradient(135deg, #2a1560 0%, #561d83 52%, #7a1f55 100%); }
+/* 배너 배경: 다크 모드 (깊고 차분한 톤) — care/ai는 인라인 이미지 배경이 우선 적용됨 */
+html[data-theme='dark'] .lp-slide.th-swipe { background: #ffffff; }
 html[data-theme='dark'] .lp-slide.th-care { background: linear-gradient(135deg, #06382b 0%, #0c3b66 55%, #181f6b 100%); }
-html[data-theme='dark'] .lp-slide.th-ai { background: linear-gradient(135deg, #122259 0%, #281c68 52%, #441d66 100%); }
+html[data-theme='dark'] .lp-slide.th-ai { background: #aec1d6; }
+
+/* 스와이핑 추천: 텍스트 뒤 로고를 흰 그라데이션으로 흐리게 덮어 글씨 명시성 ↑ */
+.lp-slide.th-swipe::before {
+  background: linear-gradient(to right, #fff 0%, rgba(255, 255, 255, 0.9) 32%, rgba(255, 255, 255, 0.35) 58%, rgba(255, 255, 255, 0) 80%);
+}
+/* 메인 타이틀: 주만추 브랜드와 동일한 그라디언트 컬러 */
+.lp-slide.th-swipe .lp-slide-title {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.lp-slide.th-swipe .lp-slide-desc { color: #4a5365; }
+.lp-slide.th-swipe .lp-num { color: #8a93a6; }
+.lp-slide.th-swipe .lp-label {
+  background: rgba(49, 93, 255, 0.1);
+  border-color: rgba(49, 93, 255, 0.25);
+  color: var(--accent);
+}
+/* 지금 이대로 괜찮을까요?: 하늘색을 화면 전체에 균일하게 — 스크림 제거 + 텍스트는 하늘색 위에서 읽히게 어둡게 */
+.lp-slide.th-ai::before { background: none; }
+.lp-slide.th-ai .lp-slide-title { color: #16233f; text-shadow: none; }
+.lp-slide.th-ai .lp-slide-desc { color: #2c3c5c; }
+.lp-slide.th-ai .lp-num { color: #5a6a86; }
+.lp-slide.th-ai .lp-label {
+  background: rgba(20, 40, 90, 0.1);
+  border-color: rgba(20, 40, 90, 0.22);
+  color: #20407a;
+}
 
 /* 배너 위에 떠 있는 검색바 오버레이 */
 .lp-search-overlay {
@@ -750,13 +919,52 @@ html[data-theme='dark'] .lp-slide.th-ai { background: linear-gradient(135deg, #1
   padding: 0 28px;
   pointer-events: none;
 }
-.lp-search-overlay .home-search { width: min(1480px, 100%); pointer-events: auto; }
+.lp-search-overlay .home-search {
+  width: min(1480px, 100%);
+  pointer-events: auto;
+  /* 검색박스: 흰 배경 + 검정 글씨 (테마 무관) */
+  background: #fff;
+  border: 1px solid #e3e8f0;
+  box-shadow: 0 6px 22px rgba(20, 30, 60, 0.1);
+}
+/* 검색 박스 텍스트: 주만추 브랜드처럼 그라디언트 컬러로, 확실하게 보이게 */
+.lp-search-overlay .home-search .popular-label,
+.lp-search-overlay .home-search .popular-kw,
+.lp-search-overlay .home-search .search-input {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  font-weight: 800;
+}
+.lp-search-overlay .home-search .popular-kw:not(:last-child)::after { -webkit-text-fill-color: #b9b1e6; }
+/* 입력 캐럿/플레이스홀더도 또렷한 브랜드 톤 */
+.lp-search-overlay .home-search .search-input { caret-color: var(--accent); }
+.lp-search-overlay .home-search .search-input::placeholder { -webkit-text-fill-color: #7b6fe0; color: #7b6fe0; opacity: 1; }
+.lp-search-overlay .home-search .search-icon { color: var(--accent); }
+
+/* 상단 흰 영역 — 세 화면 모두 네비/검색 영역까지는 흰 배경 */
+.lp-top-white {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 150px;
+  z-index: 4;
+  pointer-events: none;
+  background: linear-gradient(to bottom, #fff 0%, #fff 80%, rgba(255, 255, 255, 0) 100%);
+}
+/* 텍스트 가독성 스크림 — 왼쪽(텍스트)은 어둡게, 오른쪽(비주얼/이미지)은 투명하게 */
 .lp-slide::before {
-  content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(50% 60% at 78% 28%, rgba(255,255,255,0.12), transparent 60%);
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background: linear-gradient(to right, rgba(8,12,28,0.82) 0%, rgba(8,12,28,0.45) 42%, rgba(8,12,28,0.05) 70%, transparent 100%);
 }
 .lp-slide-inner {
   position: relative;
+  z-index: 3;
+  /* 내부에 인터랙션 요소가 없어 포인터를 통과시켜 뒤쪽 로고 클라우드 hover를 모두 허용 */
+  pointer-events: none;
   width: min(1480px, 100%);
   margin: 0 auto;
   padding: 0 60px;
@@ -773,59 +981,225 @@ html[data-theme='dark'] .lp-slide.th-ai { background: linear-gradient(135deg, #1
   background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.24);
   color: #fff; font-size: 13px; font-weight: 900;
 }
-.lp-slide-title { margin: 20px 0 16px; font-size: clamp(38px, 6vw, 76px); font-weight: 900; line-height: 1.05; letter-spacing: -2px; color: #fff; }
+.lp-slide-title { margin: 20px 0 16px; font-size: clamp(38px, 6vw, 76px); font-weight: 900; line-height: 1.05; letter-spacing: -2px; color: #fff; white-space: pre-line; }
 .lp-slide-desc { margin: 0; max-width: 480px; font-size: 16px; font-weight: 600; line-height: 1.7; color: rgba(255,255,255,0.82); word-break: keep-all; }
 .lp-slide-visual { display: flex; align-items: center; justify-content: center; }
 .lp-vis { position: relative; width: 280px; height: 300px; display: flex; align-items: center; justify-content: center; }
 
-/* 비주얼: 스와이프 데모 */
-.demo-card { position: absolute; width: 200px; height: 240px; border-radius: 20px; box-shadow: 0 16px 44px rgba(0,0,0,0.35); }
-.demo-card.c1 {
-  z-index: 3; padding: 18px; color: #fff;
-  background: linear-gradient(135deg, #6d28d9, #db2777);
-  display: flex; flex-direction: column; gap: 8px;
-  animation: demoSway 3.2s ease-in-out infinite;
+/* 비주얼: 스와이핑 추천 q.png 로고월 — 화이트 위에 흐릿하게 (채도/블러/투명도) */
+.swipe-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.72;
+  filter: saturate(1.35);
+  pointer-events: none;
 }
-.demo-card.c2 { z-index: 2; background: rgba(255,255,255,0.45); transform: rotate(6deg) translateX(14px) scale(0.96); }
-.demo-card.c3 { z-index: 1; background: rgba(255,255,255,0.25); transform: rotate(-7deg) translateX(-16px) scale(0.92); }
-@keyframes demoSway { 0%, 100% { transform: rotate(-7deg) translateX(-10px); } 50% { transform: rotate(7deg) translateX(10px); } }
-.demo-badge { align-self: flex-start; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.2); font-size: 10px; font-weight: 900; }
-.demo-name { margin-top: auto; font-size: 22px; font-weight: 900; letter-spacing: -0.5px; }
-.demo-pill { align-self: flex-start; padding: 3px 10px; border-radius: 999px; background: rgba(255,255,255,0.22); font-size: 12px; font-weight: 900; }
-.demo-like { position: absolute; right: 16px; bottom: 16px; font-size: 26px; }
-
-/* 비주얼: 장투 케어 */
-.care-card {
-  width: 220px; padding: 24px; border-radius: 22px; text-align: center;
-  background: #fff; box-shadow: 0 18px 50px rgba(0,0,0,0.3);
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
+/* 로고별 hover — 마우스 올리면 브랜드 색으로 로고 전체가 부드럽게(사각형 경계 없이) 발광 */
+.logo-hots { position: absolute; inset: 0; z-index: 2; }
+/* wrap: 전체 슬라이드. drop-shadow를 여기(마스크 안 됨)에 줘 로고 외형을 따라 글로우가 바깥까지 퍼짐 */
+.logo-hot { position: absolute; inset: 0; pointer-events: none; }
+/* hit: 로고 위 투명 hover 영역 */
+.logo-hit {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  cursor: pointer;
 }
-.care-label { font-size: 11px; font-weight: 900; color: var(--muted); letter-spacing: 0.08em; }
-.care-day { font-size: 42px; font-weight: 900; letter-spacing: -2px; background: linear-gradient(135deg, #0f9f6e, #315dff); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.care-dots { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 168px; }
-.care-dots i { width: 12px; height: 12px; border-radius: 4px; background: #e6ecf5; }
-.care-dots i.on { background: #0f9f6e; }
-.care-sub { font-size: 12px; font-weight: 800; color: #0f9f6e; }
+/* inner: 키잉된 로고월을 .swipe-bg와 동일 cover/center로, 해당 로고를 부드러운 타원 마스크로 표시 */
+.logo-hot-img {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.22s ease, filter 0.22s ease;
+}
+.logo-hot:has(.logo-hit:hover) .logo-hot-img {
+  opacity: 1;
+  filter: brightness(1.18) saturate(1.2);
+}
+.logo-hot:has(.logo-hit:hover) {
+  filter: drop-shadow(0 0 6px var(--glow)) drop-shadow(0 0 16px var(--glow))
+    drop-shadow(0 0 32px var(--glow));
+}
 
-/* 비주얼: AI 로봇 */
-.ai-card { display: flex; flex-direction: column; align-items: center; gap: 16px; }
-.ai-robot { font-size: 96px; filter: drop-shadow(0 16px 30px rgba(0,0,0,0.4)); animation: aiFloat 3s ease-in-out infinite; }
-@keyframes aiFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
-.ai-bubble { display: flex; gap: 6px; padding: 10px 18px; border-radius: 999px; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
-.ai-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: aiBlink 1.4s ease-in-out infinite; }
-.ai-dot:nth-child(2) { animation-delay: 0.2s; }
-.ai-dot:nth-child(3) { animation-delay: 0.4s; }
-@keyframes aiBlink { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
-.ai-line { padding: 7px 16px; border-radius: 999px; background: rgba(255,255,255,0.16); color: #fff; font-size: 13px; font-weight: 900; }
+/* 비주얼: 우리 오늘 며칠? — 공책 배경(줄을 오른쪽에 두려 좌우 반전) */
+.care-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transform: scaleX(-1);
+  pointer-events: none;
+}
+
+/* 비주얼: 우리 오늘 며칠? — 공책 줄에 맞춰 손글씨로 써지는 매매일지 */
+.lp-vis-care { width: auto; height: auto; align-items: flex-start; justify-content: flex-start; }
+.diary-note {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  /* 공책 줄 기울기에 맞춤 (조정 가능) */
+  transform: rotate(2deg) translateY(-6px);
+  font-family: 'Nanum Pen Script', 'Gaegu', 'Segoe Script', cursive;
+}
+.dw-line {
+  display: flex;
+  align-items: flex-end;
+  /* 공책 줄 간격에 맞춰 한 줄=한 칸, 글자는 줄 위에 얹힘 (조정 가능) */
+  height: 58px;
+  padding-bottom: 2px;
+  white-space: nowrap;
+  /* 기본은 왼→오로 숨김 → 활성 시 써지는 애니메이션으로 드러남 */
+  clip-path: inset(0 100% 0 0);
+}
+.diary-note.is-active .dw-line { animation: writeIn 0.95s steps(26, end) forwards; }
+.diary-note.is-active .dw-date { animation-delay: 0.25s; }
+.diary-note.is-active .dw-head { animation-delay: 1.15s; }
+.diary-note.is-active .dw-l1 { animation-delay: 2s; }
+.diary-note.is-active .dw-l2 { animation-delay: 2.85s; }
+.dw-date { font-size: 42px; font-weight: 700; color: #c0392b; }
+.dw-head { font-size: 40px; font-weight: 700; color: #1f2d6e; }
+.dw-l1 { font-size: 40px; font-weight: 700; color: #15803d; }
+.dw-l2 { font-size: 37px; font-weight: 700; color: #2436a8; }
+/* 매매일지 체크표시 — 글이 다 써진 뒤 손으로 그어지듯 그려짐 */
+.dw-check { position: absolute; right: -46px; bottom: 4px; width: 50px; height: 38px; overflow: visible; }
+.dw-check path {
+  fill: none;
+  stroke: #16a34a;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 66;
+  stroke-dashoffset: 66;
+}
+.diary-note.is-active .dw-check path { animation: checkDraw 0.5s ease-out 3.8s forwards; }
+@keyframes checkDraw { to { stroke-dashoffset: 0; } }
+@keyframes writeIn { to { clip-path: inset(0 0 0 0); } }
+@media (prefers-reduced-motion: reduce) {
+  .diary-note .dw-line { clip-path: inset(0 0 0 0); }
+  .diary-note.is-active .dw-line { animation: none; }
+}
+
+/* 비주얼: 지금 이대로 괜찮을까요? */
+/* 손+칩 누끼(투명 배경) — 단일 하늘색(th-ai) 위에 올려 화면 전체가 하나의 하늘색으로 통일 */
+.ai-hand {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background-size: auto 100%;
+  background-position: right center;
+  background-repeat: no-repeat;
+}
+/* 칩만 따로 분리해 발광 — 손과 동일 배경을 칩 영역만 클립해 겹친 뒤, 그 칩에 밝기/글로우 펄스 */
+.ai-chip-wrap {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  animation: aiChipGlow 1.7s ease-in-out infinite;
+}
+.ai-chip {
+  position: absolute;
+  inset: 0;
+  background-size: auto 100%;
+  background-position: right center;
+  background-repeat: no-repeat;
+  /* 칩 영역만 보이게: inset(top right bottom left) — 위치/크기 조정 가능 */
+  clip-path: inset(30% 36% 50% 50% round 14px);
+  -webkit-clip-path: inset(30% 36% 50% 50% round 14px);
+}
+@keyframes aiChipGlow {
+  0%, 100% {
+    filter: brightness(1) saturate(1) drop-shadow(0 0 2px rgba(95, 227, 255, 0.35));
+  }
+  50% {
+    filter: brightness(1.4) saturate(1.6)
+      drop-shadow(0 0 12px #7ef0ff) drop-shadow(0 0 26px rgba(95, 227, 255, 0.85));
+  }
+}
+
+/* ===== 좌우 스와이프 버튼 ===== */
+.lp-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  background: rgba(12, 16, 34, 0.42);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #fff;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+.lp-nav-prev { left: 24px; }
+.lp-nav-next { right: 24px; }
+.lp-nav:hover {
+  background: rgba(49, 93, 255, 0.55);
+  transform: translateY(-50%) scale(1.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+.lp-nav:active { transform: translateY(-50%) scale(0.96); }
+
+/* ===== 슬라이드 인디케이터 ===== */
+.lp-dots {
+  position: absolute;
+  left: 50%;
+  bottom: 132px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  gap: 10px;
+}
+.lp-dot {
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  transition: width 0.25s ease, background 0.25s ease;
+}
+.lp-dot.active { width: 28px; background: #fff; }
 
 /* ===== 로그인 유도 CTA (배너 하단 그라데이션 밴드) ===== */
 .lp-login {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
-  display: flex; align-items: center; justify-content: center; gap: 20px; flex-wrap: wrap;
-  padding: 30px 24px 42px;
-  background: linear-gradient(to top, rgba(12,14,34,0.8) 0%, rgba(12,14,34,0.35) 55%, transparent 100%);
+  display: flex; align-items: flex-end; justify-content: center; gap: 20px; flex-wrap: wrap;
+  /* 위로 길고 부드럽게 어두워져 슬라이드와 경계를 모호하게, 아래로 갈수록 진하게(텍스트 가독성), CTA는 아래쪽 배치 */
+  padding: 170px 24px 44px;
+  background: linear-gradient(to bottom,
+    transparent 0%,
+    rgba(8, 10, 26, 0.32) 40%,
+    rgba(8, 10, 26, 0.7) 72%,
+    rgba(8, 10, 26, 0.92) 100%);
 }
-.lp-login-text { font-size: clamp(16px, 2.2vw, 22px); font-weight: 900; color: #fff; letter-spacing: -0.3px; }
+.lp-login-text {
+  font-size: clamp(16px, 2.2vw, 22px);
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -0.3px;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
 .lp-login-btn {
   height: 48px; padding: 0 28px; border: 0; border-radius: 999px;
   background: linear-gradient(135deg, #315dff, #7d4ee8 60%, #ff3d8b);
@@ -835,6 +1209,21 @@ html[data-theme='dark'] .lp-slide.th-ai { background: linear-gradient(135deg, #1
 }
 .lp-login-btn:hover { transform: translateY(-2px); box-shadow: 0 16px 38px rgba(49,93,255,0.55); }
 
+/* 배너(다크) → 흰 콘텐츠 전환 띠 — 풀블리드, 배너 하단에 바로 붙여 다크에서 흰색으로 자연스럽게 */
+.lp-fade-out {
+  width: 100vw;
+  max-width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  margin-top: -18px; /* .home-page flex gap(18px) 상쇄 → 배너 하단에 밀착 */
+  height: 160px;
+  pointer-events: none;
+  background: linear-gradient(to bottom,
+    rgb(20, 22, 37) 0%,
+    rgba(20, 22, 37, 0.5) 34%,
+    rgba(255, 255, 255, 0) 100%);
+}
+
 @media (max-width: 800px) {
   .lp-slide-inner { grid-template-columns: 1fr; padding: 0 22px; text-align: center; justify-items: center; gap: 22px; }
   /* 번호(01/03) 위, 라벨(스와이핑 추천) 아래로 — 가운데 정렬 */
@@ -842,11 +1231,17 @@ html[data-theme='dark'] .lp-slide.th-ai { background: linear-gradient(135deg, #1
   .lp-slide-title { margin: 12px 0 12px; font-size: clamp(32px, 8vw, 52px); letter-spacing: -1px; }
   .lp-slide-desc { margin: 0 auto; font-size: 15px; }
   .lp-vis { width: 240px; height: 250px; }
+  /* 모바일은 가운데 정렬이라 스크림을 전체적으로 균일하게 어둡게 */
+  .lp-slide::before { background: rgba(8, 12, 28, 0.6); }
+  .lp-nav { width: 42px; height: 42px; font-size: 24px; }
+  .lp-nav-prev { left: 10px; }
+  .lp-nav-next { right: 10px; }
+  .lp-dots { bottom: 118px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .lp-track { transition: none; }
-  .demo-card.c1, .ai-robot { animation: none; }
+  .ai-chip-wrap { animation: none !important; }
 }
 
 /* ===== 검색 바 ===== */

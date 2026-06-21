@@ -53,7 +53,7 @@ async function handleLogout() {
 </script>
 
 <template>
-  <header class="topnav" :class="{ 'is-scrolled': solid, 'over-hero': overBanner && !solid }">
+  <header class="topnav" :class="{ 'is-scrolled': solid, 'over-white': overBanner && !solid }">
     <!-- 모바일 메뉴 열렸을 때 바깥 클릭 → 닫기 -->
     <div v-if="menuOpen" class="nav-backdrop" @click="closeMenu"></div>
 
@@ -138,36 +138,33 @@ async function handleLogout() {
   box-shadow: 0 2px 20px rgba(60, 80, 200, 0.07), var(--glass-inset);
 }
 
-/* 비로그인 홈 배너 위(최상단)에서는 투명 배경 + 흰색 텍스트 */
-.topnav.over-hero .brand-wordmark {
-  background: none;
-  -webkit-text-fill-color: #fff;
-  color: #fff;
+/* 비로그인 홈: 상단이 흰 영역 → 네비는 흰 배경 + 검정 글씨 (테마 무관 고정) */
+.topnav.over-white { background: #fff; border-bottom-color: var(--glass-border); }
+.topnav.over-white .nav-links a { color: #3a4256; }
+.topnav.over-white .nav-links a:hover {
+  background: rgba(20, 30, 60, 0.07);
+  color: #11161f;
 }
-.topnav.over-hero .nav-links a { color: rgba(255, 255, 255, 0.82); }
-.topnav.over-hero .nav-links a:hover {
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
+.topnav.over-white .nav-links a.is-active {
+  background: rgba(49, 93, 255, 0.12);
+  border-color: rgba(49, 93, 255, 0.2);
+  color: var(--accent);
 }
-.topnav.over-hero .nav-links a.is-active {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.45);
-  color: #fff;
+.topnav.over-white .user-welcome { color: #5a6273; }
+.topnav.over-white .user-welcome strong { color: #11161f; }
+.topnav.over-white .user-btn {
+  color: #2a3346;
+  border-color: rgba(20, 30, 60, 0.2);
+  background: #fff;
 }
-.topnav.over-hero .user-welcome { color: rgba(255, 255, 255, 0.78); }
-.topnav.over-hero .user-welcome strong { color: #fff; }
-.topnav.over-hero .user-btn {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.12);
+.topnav.over-white .user-btn:hover { background: rgba(20, 30, 60, 0.06); }
+.topnav.over-white .user-btn.accent {
+  color: var(--accent);
+  border-color: rgba(49, 93, 255, 0.3);
+  background: rgba(49, 93, 255, 0.08);
 }
-.topnav.over-hero .user-btn:hover { background: rgba(255, 255, 255, 0.24); }
-.topnav.over-hero .user-btn.accent {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.16);
-}
-.topnav.over-hero .user-btn.accent:hover { background: rgba(255, 255, 255, 0.26); }
+.topnav.over-white .user-btn.accent:hover { background: rgba(49, 93, 255, 0.16); }
+.topnav.over-white .nav-toggle span { background: #11161f; }
 
 .topnav-inner {
   position: relative;
@@ -434,10 +431,10 @@ async function handleLogout() {
     padding: 0 14px;
     font-size: 15px;
   }
-  /* 드로어는 항상 glass 배경 → over-hero 흰색 글자 무효화 */
-  .topnav.over-hero .nav-collapse .nav-links a { color: var(--muted); }
-  .topnav.over-hero .nav-collapse .user-welcome,
-  .topnav.over-hero .nav-collapse .user-welcome strong { color: var(--ink); }
+  /* 드로어는 항상 흰/glass 시트 → 기본 텍스트 색 사용 */
+  .topnav.over-white .nav-collapse .nav-links a { color: var(--muted); }
+  .topnav.over-white .nav-collapse .user-welcome,
+  .topnav.over-white .nav-collapse .user-welcome strong { color: var(--ink); }
 
   .user-area {
     flex-direction: column;
