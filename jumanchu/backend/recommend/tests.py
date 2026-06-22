@@ -98,8 +98,7 @@ class SwipeRecommendTests(TestCase):
         self.user = _make_user("rec")
         InvestmentProfile.objects.create(
             user=self.user, risk_tolerance=5, investment_term=5, experience=5,
-            loss_aversion=1, behavior=5,
-            risk_type=InvestmentProfile.RiskType.AGGRESSIVE, profiled_at=timezone.now(),
+            loss_aversion=1, behavior=5, profiled_at=timezone.now(),
         )
         UserPreferredSector.objects.create(user=self.user, sector="전기·전자", weight=Decimal("1.0"))
         today = date.today()

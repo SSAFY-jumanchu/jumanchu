@@ -36,7 +36,7 @@
 | `LongTermScores.financial / growth` | `recommend_longtermscore` *또는* 지표로 `longterm_score`가 산출 |
 | `LongTermScores.userfit` (궁합/적합도) | **`recommend_recommendationcache.match_score` (rec_type=`onboarding`)** — 온보딩에서 산출/입력된 궁합 |
 | `LongTermScores.total` (종합) | **`longterm_score`가 산출**: 종목소계(재무·성장)×0.7 + 궁합×0.3 |
-| `UserProfile.risk_type / preferred_period_months` | `accounts_investmentprofile.risk_type / preferred_period` |
+| `UserProfile.risk_type / preferred_period_months` | `accounts_investmentprofile.investment_style / preferred_period` |
 | `UserProfile.preferred_sectors` | `accounts_userpreferredsector.sector[]` |
 | `UserProfile.portfolio_weight_pct` | `portfolio_holding` 계산값 (이 종목 평가액 / 총평가액 × 100) |
 
@@ -127,7 +127,7 @@ class LongTermReportView(APIView):
         ob = RecommendationCache.objects.filter(
             user=user, stock=stock, rec_type="onboarding").first()
         userfit = float(ob.match_score) if ob else None
-        profile = (UserProfile(prof.risk_type, prof.preferred_period,
+        profile = (UserProfile(prof.investment_style, prof.preferred_period,
                                [s.sector for s in user.preferred_sectors.all()],
                                weight_pct(holding))
                    if userfit is not None else None)

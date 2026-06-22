@@ -40,7 +40,7 @@ class OnboardingTests(APITestCase):
             (p.risk_tolerance, p.experience, p.loss_aversion, p.investment_term, p.behavior),
             (5, 5, 5, 5, 5),  # (q1 5 + q4 5)//2=5, 나머지 1:1
         )
-        self.assertEqual(p.risk_type, InvestmentProfile.RiskType.AGGRESSIVE)  # 총점 35
+        self.assertEqual(p.investment_style, '성장 동반형')  # 전부 5점 → 공격·장기
         self.assertIsNotNone(p.profiled_at)
         self.assertEqual(p.onboarding_answers['q5'], 5)
 
@@ -50,11 +50,11 @@ class OnboardingTests(APITestCase):
         self.assertEqual(weights['반도체'], Decimal('1.0'))
         self.assertEqual(weights['바이오'], Decimal('0.6'))
 
-    def test_conservative_grade(self):
-        # 전부 1점 → 총점 5 + 1*2 = 7 → 안정형
+    def test_cautious_type(self):
+        # 전부 1점 → 위험축 1·기간 1 → 안정·단기 = 신중 탐색형
         self.client.post(self.url, self._payload(q1=1, q2=1, q3=1, q4=1, q5=1, q6=1), format='json')
         p = InvestmentProfile.objects.get(user=self.user)
-        self.assertEqual(p.risk_type, InvestmentProfile.RiskType.CONSERVATIVE)
+        self.assertEqual(p.investment_style, '신중 탐색형')
 
     def test_double_onboarding_returns_409(self):
         self.client.post(self.url, self._payload(), format='json')

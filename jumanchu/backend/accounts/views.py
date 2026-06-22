@@ -289,15 +289,6 @@ class OnboardingView(APIView):
         investment_term = q5
         behavior = q6
 
-        # 총점(q5 가중 ×2, 7~35) → 3등급
-        total = q1 + q2 + q3 + q4 + q6 + q5 * 2
-        if total <= 13:
-            risk_type = InvestmentProfile.RiskType.CONSERVATIVE
-        elif total <= 22:
-            risk_type = InvestmentProfile.RiskType.MODERATE
-        else:
-            risk_type = InvestmentProfile.RiskType.AGGRESSIVE
-
         sectors = data.get('preferred_sectors', [])
         weights = [Decimal('1.0'), Decimal('0.6'), Decimal('0.3')]
         sector_weights = {sec: float(weights[i]) for i, sec in enumerate(sectors[:3])}
@@ -306,7 +297,6 @@ class OnboardingView(APIView):
             profile, _ = InvestmentProfile.objects.update_or_create(
                 user=request.user,
                 defaults={
-                    'risk_type': risk_type,
                     'risk_tolerance': risk_tolerance,
                     'investment_term': investment_term,
                     'experience': experience,
@@ -318,6 +308,10 @@ class OnboardingView(APIView):
                     'profiled_at': timezone.now(),
                 },
             )
+            # 성향 4유형 라벨 (5벡터 → 가치 파트너형/성장 동반형/…)
+            investor_type = classify_investor_type(profile)
+            profile.investment_style = investor_type['type']
+            update_fields = ['investment_style']
             # 복수 관심 섹터 (상위 3개 가중 1.0/0.6/0.3)
             UserPreferredSector.objects.filter(user=request.user).delete()
             for i, sector in enumerate(sectors[:3]):
@@ -330,9 +324,9 @@ class OnboardingView(APIView):
             )
             if sig_dna:
                 profile.signature_stock = sig_dna.stock
-                profile.save(update_fields=['signature_stock'])
+                update_fields.append('signature_stock')
+            profile.save(update_fields=update_fields)
 
-        investor_type = classify_investor_type(profile)
         request.user.refresh_from_db()
         if sig_dna:
             request.user.profile_stock_code = sig_dna.stock.code

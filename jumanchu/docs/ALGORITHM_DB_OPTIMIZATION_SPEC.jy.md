@@ -29,7 +29,7 @@
 | 도메인 | 테이블 | 목적 / 현재 컬럼 요약 |
 |---|---|---|
 | 사용자 | `user` | id, username, password, email, nickname, birth_year, created_at |
-| 사용자 | `user_investment_profile` | (1:1) **risk_type, investment_style, preferred_period(개월), preferred_sector** |
+| 사용자 | `user_investment_profile` | (1:1) **investment_style(성향 4유형), preferred_period(개월), preferred_sector** + 온보딩 5벡터 |
 | 종목 | `stock` | code, name, market, sector, industry, market_cap, listed_at, currency, kis_short_code, is_active, is_sp500, is_nasdaq100, description… |
 | 종목 | `stock_price` | (일봉) stock_id, price_date, OHLC, volume |
 | 종목 | `stock_indicator` | **per, pbr, eps, roe, roa, dividend_yield, beta, volatility, high_52w, low_52w, calculated_date** |
