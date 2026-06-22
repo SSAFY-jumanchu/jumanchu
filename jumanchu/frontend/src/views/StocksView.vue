@@ -226,17 +226,18 @@ function deriveCard(s) {
   }
 }
 const currentCard = computed(() => deriveCard(stocks.value[swipeIndex.value % stocks.value.length]))
-const dnaPolygon = computed(() => {
+const dnaVertices = computed(() => {
   const d = currentCard.value?.dna
-  if (!d) return ''
+  if (!d) return []
   const cx = 60, cy = 60, R = 46
   return [
-    `${cx},${cy - (R * d[0].value) / 100}`,
-    `${cx + (R * d[1].value) / 100},${cy}`,
-    `${cx},${cy + (R * d[2].value) / 100}`,
-    `${cx - (R * d[3].value) / 100},${cy}`,
-  ].join(' ')
+    { x: cx, y: cy - (R * d[0].value) / 100 },
+    { x: cx + (R * d[1].value) / 100, y: cy },
+    { x: cx, y: cy + (R * d[2].value) / 100 },
+    { x: cx - (R * d[3].value) / 100, y: cy },
+  ]
 })
+const dnaPolygon = computed(() => dnaVertices.value.map(({ x, y }) => `${x},${y}`).join(' '))
 
 function cardGradient(s) {
   if (!s) return ''
@@ -571,20 +572,60 @@ const popularStocks = computed(() => {
 
               <!-- Stock DNA -->
               <div class="mc-dna">
-                <svg class="dna-radar" viewBox="0 0 120 120" aria-hidden="true">
-                  <polygon class="dna-grid" points="60,14 106,60 60,106 14,60" />
-                  <polygon class="dna-grid" points="60,37 83,60 60,83 37,60" />
-                  <line class="dna-axis" x1="60" y1="14" x2="60" y2="106" />
-                  <line class="dna-axis" x1="14" y1="60" x2="106" y2="60" />
-                  <polygon class="dna-shape" :points="dnaPolygon" />
-                </svg>
-                <div class="dna-info">
-                  <div class="dna-title">🧬 Stock DNA</div>
-                  <div class="dna-vals">
-                    <template v-for="d in currentCard.dna" :key="d.label">
-                      <span class="dna-k">{{ d.label }}</span>
-                      <span class="dna-v">{{ d.value }}</span>
-                    </template>
+                <div class="dna-head">
+                  <span class="dna-head-icon" aria-hidden="true">✦</span>
+                  <div>
+                    <strong class="dna-title">Stock DNA</strong>
+                    <span class="dna-caption">투자 성향 밸런스</span>
+                  </div>
+                </div>
+                <div class="dna-body">
+                  <div class="dna-chart-shell">
+                    <svg class="dna-radar" viewBox="0 0 120 120" aria-hidden="true">
+                      <defs>
+                        <linearGradient id="dnaAreaGradient" x1="0" y1="0" x2="1" y2="1">
+                          <stop offset="0%" stop-color="#8b5cf6" stop-opacity=".9" />
+                          <stop offset="55%" stop-color="#4f7cff" stop-opacity=".7" />
+                          <stop offset="100%" stop-color="#22d3ee" stop-opacity=".82" />
+                        </linearGradient>
+                        <linearGradient id="dnaStrokeGradient" x1="0" y1="0" x2="1" y2="1">
+                          <stop offset="0%" stop-color="#a78bfa" />
+                          <stop offset="50%" stop-color="#4f7cff" />
+                          <stop offset="100%" stop-color="#22d3ee" />
+                        </linearGradient>
+                        <filter id="dnaGlow" x="-50%" y="-50%" width="200%" height="200%">
+                          <feGaussianBlur stdDeviation="2.5" result="blur" />
+                          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                        </filter>
+                      </defs>
+                      <polygon class="dna-grid dna-grid-outer" points="60,8 112,60 60,112 8,60" />
+                      <polygon class="dna-grid" points="60,25 95,60 60,95 25,60" />
+                      <polygon class="dna-grid" points="60,42 78,60 60,78 42,60" />
+                      <line class="dna-axis" x1="60" y1="8" x2="60" y2="112" />
+                      <line class="dna-axis" x1="8" y1="60" x2="112" y2="60" />
+                      <polygon class="dna-shape-glow" :points="dnaPolygon" />
+                      <polygon class="dna-shape" :points="dnaPolygon" />
+                      <circle
+                        v-for="(point, pointIndex) in dnaVertices"
+                        :key="pointIndex"
+                        class="dna-point"
+                        :cx="point.x"
+                        :cy="point.y"
+                        r="2.8"
+                      />
+                      <circle class="dna-center" cx="60" cy="60" r="2" />
+                    </svg>
+                  </div>
+                  <div class="dna-metrics">
+                    <div v-for="d in currentCard.dna" :key="d.label" class="dna-metric">
+                      <div class="dna-metric-head">
+                        <span class="dna-k">{{ d.label }}</span>
+                        <strong class="dna-v">{{ d.value }}</strong>
+                      </div>
+                      <div class="dna-track" aria-hidden="true">
+                        <i :style="{ width: `${d.value}%` }"></i>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1572,7 +1613,7 @@ const popularStocks = computed(() => {
 
 .sv-deck { position: relative; display: flex; justify-content: center; }
 .sv-card {
-  position: relative; width: 100%; max-width: 460px; border-radius: 24px; padding: 22px; color: #fff;
+  position: relative; width: 100%; max-width: 460px; border-radius: 24px; padding: 26px; color: #fff;
   box-shadow: 0 16px 44px rgba(109,40,217,0.28), 0 6px 14px rgba(0,0,0,0.12);
   overflow: hidden; user-select: none; touch-action: none; cursor: grab; will-change: transform, opacity;
 }
@@ -1591,27 +1632,121 @@ const popularStocks = computed(() => {
 .mc-badge { display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 999px; background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.28); color: rgba(255,255,255,0.92); font-size: 12px; font-weight: 900; }
 .mc-score { text-align: right; font-size: 36px; font-weight: 900; line-height: 0.9; letter-spacing: -2px; color: #fff; flex-shrink: 0; text-shadow: 0 2px 10px rgba(0,0,0,0.28); }
 .mc-score span { display: block; font-size: 11px; letter-spacing: 0; font-weight: 900; color: rgba(255,255,255,0.75); margin-top: 4px; }
-.mc-name-block { margin-top: 18px; }
+.mc-name-block { margin-top: 20px; }
 .mc-name { margin: 0; color: #fff; font-size: 28px; font-weight: 900; letter-spacing: -1px; line-height: 1.1; text-shadow: 0 2px 12px rgba(0,0,0,0.32), 0 1px 2px rgba(0,0,0,0.25); }
 .mc-code { margin-top: 4px; color: rgba(255,255,255,0.85); font-size: 13px; font-weight: 900; text-shadow: 0 1px 6px rgba(0,0,0,0.28); }
-.mc-prices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
-.mc-price-box { padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); }
-.mc-price-box span { display: block; color: rgba(255,255,255,0.65); font-size: 11px; font-weight: 900; margin-bottom: 4px; }
-.mc-price-box strong { display: block; color: #fff; font-size: 15px; font-weight: 900; }
-.mc-price-box strong.up { color: #6effc9; }
-.mc-price-box strong.down { color: #93b8ff; }
-.mc-dna { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 14px; border-radius: 18px; background: rgba(255,255,255,0.94); }
-.dna-radar { width: 96px; height: 96px; flex-shrink: 0; }
-.dna-grid { fill: rgba(49,93,255,0.05); stroke: rgba(49,93,255,0.2); stroke-width: 1; }
-.dna-axis { stroke: rgba(49,93,255,0.18); stroke-width: 1; }
-.dna-shape { fill: rgba(49,93,255,0.45); stroke: var(--accent); stroke-width: 2; }
-.dna-info { flex: 1; min-width: 0; }
-.dna-title { font-size: 13px; font-weight: 900; color: var(--ink); margin-bottom: 10px; }
-.dna-vals { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 8px 10px; align-items: center; }
-.dna-k { font-size: 12px; font-weight: 800; color: var(--muted); }
-.dna-v { font-size: 13px; font-weight: 900; color: var(--accent); text-align: right; }
-.mc-reason { margin-top: 14px; font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.3); }
-.mc-interest { margin-top: 12px; font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.3); }
+.mc-prices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+.mc-price-box {
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.52), rgba(244, 248, 255, 0.28));
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  box-shadow: 0 10px 24px rgba(16, 22, 62, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.74);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+}
+.mc-price-box span { display: block; color: rgba(23, 33, 61, 0.62); font-size: 11px; font-weight: 900; margin-bottom: 4px; }
+.mc-price-box strong { display: block; color: #17213d; font-size: 15px; font-weight: 900; }
+.mc-price-box strong.up { color: #b6193c; }
+.mc-price-box strong.down { color: #075db8; }
+html[data-theme='dark'] .mc-price-box {
+  background: linear-gradient(145deg, rgba(9, 18, 40, 0.46), rgba(16, 24, 52, 0.24));
+  border-color: rgba(214, 224, 255, 0.2);
+  box-shadow: 0 12px 26px rgba(5, 8, 24, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.13);
+}
+html[data-theme='dark'] .mc-price-box span { color: rgba(235, 240, 255, 0.7); }
+html[data-theme='dark'] .mc-price-box strong { color: #fff; }
+html[data-theme='dark'] .mc-price-box strong.up { color: #ff8298; }
+html[data-theme='dark'] .mc-price-box strong.down { color: #86bcff; }
+
+/* Stock DNA (메인 페이지와 동일) */
+.mc-dna {
+  --dna-ink: #17213d;
+  --dna-muted: #69758f;
+  --dna-accent: #4f6fff;
+  --dna-track: rgba(79, 111, 255, 0.12);
+  margin-top: 18px;
+  padding: 18px 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.62), rgba(244, 248, 255, 0.34));
+  box-shadow: 0 16px 36px rgba(20, 30, 75, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  color: var(--dna-ink);
+  backdrop-filter: blur(26px) saturate(170%);
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+}
+.dna-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.dna-head-icon {
+  display: grid; place-items: center;
+  width: 30px; height: 30px; border-radius: 10px;
+  background: linear-gradient(135deg, #7c3aed, #4f7cff 58%, #22d3ee);
+  color: #fff; font-size: 15px;
+  box-shadow: 0 6px 14px rgba(79, 111, 255, 0.28);
+}
+.dna-title { display: block; color: var(--dna-ink); font-size: 14px; font-weight: 950; line-height: 1.15; letter-spacing: -0.1px; }
+.dna-caption { display: block; margin-top: 2px; color: var(--dna-muted); font-size: 10px; font-weight: 750; }
+.dna-body { display: grid; grid-template-columns: 126px minmax(0, 1fr); gap: 16px; align-items: center; }
+.dna-chart-shell {
+  position: relative; display: grid; place-items: center; aspect-ratio: 1; border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(99, 102, 241, 0.12), transparent 56%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.42), rgba(229, 236, 255, 0.18));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.46), 0 8px 24px rgba(49, 93, 255, 0.1);
+}
+.dna-chart-shell::after { content: ''; position: absolute; inset: 9px; border: 1px solid rgba(79, 111, 255, 0.1); border-radius: 50%; pointer-events: none; }
+.dna-radar { width: 88%; height: 88%; overflow: visible; }
+.dna-grid { fill: rgba(79, 111, 255, 0.018); stroke: rgba(79, 111, 255, 0.16); stroke-width: 0.8; }
+.dna-grid-outer { fill: rgba(79, 111, 255, 0.025); stroke: rgba(79, 111, 255, 0.24); stroke-width: 1; }
+.dna-axis { stroke: rgba(79, 111, 255, 0.13); stroke-width: 0.8; stroke-dasharray: 2 3; }
+.dna-shape-glow { fill: none; stroke: rgba(79, 124, 255, 0.38); stroke-width: 6; filter: url(#dnaGlow); }
+.dna-shape { fill: url(#dnaAreaGradient); fill-opacity: 0.54; stroke: url(#dnaStrokeGradient); stroke-width: 2.2; stroke-linejoin: round; }
+.dna-point { fill: #fff; stroke: #5877ff; stroke-width: 1.8; filter: url(#dnaGlow); }
+.dna-center { fill: #4f7cff; }
+.dna-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.dna-metric {
+  min-width: 0; padding: 10px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.38); border-radius: 12px;
+  background: rgba(255, 255, 255, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.dna-metric-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dna-k { color: var(--dna-muted); font-size: 11px; font-weight: 850; white-space: nowrap; }
+.dna-v { color: var(--dna-accent); font-size: 15px; font-weight: 950; line-height: 1; }
+.dna-track { height: 5px; margin-top: 8px; overflow: hidden; border-radius: 999px; background: var(--dna-track); }
+.dna-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #7c3aed, #4f7cff 62%, #22d3ee); box-shadow: 0 0 10px rgba(79, 124, 255, 0.38); }
+
+html[data-theme='dark'] .mc-dna {
+  --dna-ink: #f5f7ff; --dna-muted: #aeb9d7; --dna-accent: #aabaff; --dna-track: rgba(149, 169, 255, 0.14);
+  border-color: rgba(214, 224, 255, 0.2);
+  background: linear-gradient(145deg, rgba(9, 18, 40, 0.54), rgba(16, 24, 52, 0.3));
+  box-shadow: 0 18px 40px rgba(5, 8, 24, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.13);
+}
+html[data-theme='dark'] .dna-chart-shell {
+  background:
+    radial-gradient(circle at 50% 48%, rgba(113, 105, 255, 0.22), transparent 58%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025));
+  box-shadow: inset 0 0 0 1px rgba(214, 224, 255, 0.1), 0 10px 26px rgba(0, 0, 0, 0.18);
+}
+html[data-theme='dark'] .dna-chart-shell::after { border-color: rgba(171, 186, 255, 0.12); }
+html[data-theme='dark'] .dna-grid { fill: rgba(150, 168, 255, 0.025); stroke: rgba(171, 186, 255, 0.2); }
+html[data-theme='dark'] .dna-grid-outer { stroke: rgba(171, 186, 255, 0.34); }
+html[data-theme='dark'] .dna-axis { stroke: rgba(171, 186, 255, 0.18); }
+html[data-theme='dark'] .dna-metric {
+  border-color: rgba(214, 224, 255, 0.11);
+  background: rgba(255, 255, 255, 0.075);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.mc-reason { margin-top: 16px; font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.3); }
+.mc-interest { margin-top: 14px; font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.3); }
+
+@media (max-width: 600px) {
+  .dna-body { grid-template-columns: 100px minmax(0, 1fr); gap: 12px; }
+  .dna-metrics { grid-template-columns: 1fr; gap: 6px; }
+  .dna-metric { padding: 7px 9px; }
+  .dna-track { margin-top: 5px; }
+}
 
 .sv-controls { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 18px; }
 .sv-ctrl { width: 56px; height: 56px; border-radius: 50%; border: 1.5px solid var(--glass-border); background: var(--surface-soft); font-size: 22px; font-weight: 900; color: var(--ink); cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.1); transition: transform 0.18s ease; }

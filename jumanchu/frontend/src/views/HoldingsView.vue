@@ -301,11 +301,21 @@ const communityPost = { user: 'TECL미친놈', time: '6분 전', content: 'SK하
 .hv-holding-row {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 14px;
   padding: 14px 10px; border-bottom: 1px solid var(--faint); border-left: 3px solid transparent;
-  cursor: pointer; transition: background 0.16s, border-color 0.16s;
+  cursor: pointer; transition: background 0.16s, border-color 0.16s, box-shadow 0.2s ease;
 }
 .hv-holding-row:last-child { border-bottom: 0; }
 .hv-holding-row:hover { background: var(--surface-soft); }
-.hv-holding-row.active { background: rgba(49,93,255,0.06); border-left-color: var(--accent); }
+.hv-holding-row.active {
+  background: linear-gradient(135deg, rgba(49,93,255,0.15) 0%, rgba(125,78,232,0.09) 100%);
+  border-bottom-color: transparent;
+  border-radius: 12px;
+  box-shadow:
+    0 6px 16px rgba(49,93,255,0.18),
+    inset 0 1px 1px rgba(255,255,255,0.55),
+    inset 0 -4px 10px rgba(49,93,255,0.10);
+  backdrop-filter: blur(6px) saturate(1.3);
+  -webkit-backdrop-filter: blur(6px) saturate(1.3);
+}
 .hv-logo { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; font-weight: 900; flex-shrink: 0; }
 .hv-h-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .hv-h-name { font-size: 15px; font-weight: 900; color: var(--ink); }

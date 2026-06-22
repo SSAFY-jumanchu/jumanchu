@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 
 // ===== 작성 대기 (와이어프레임: 미작성 매매가 있다고 가정) =====
 const pendingTrade = { name: '로보스타', logo: '로', color: '#0f9f6e', side: '매수', date: '06.09' }
@@ -9,17 +9,17 @@ const entries = ref([
   {
     id: 1, name: '로보스타', logo: '로', color: '#0f9f6e', date: '2026.06.09', side: '매수',
     reasons: ['장기 성장성', '테마/모멘텀'], target: '+20%', stop: '-10%', confidence: 4,
-    actual: '+5.2%', review: null,
+    actual: '+5.2%', review: null, note: '',
   },
   {
     id: 2, name: '삼성전자', logo: '삼', color: '#3b5bdb', date: '2026.05.28', side: '매수',
     reasons: ['저평가'], target: '+15%', stop: '-10%', confidence: 3,
-    actual: '+2.4%', review: { verdict: '보류', learned: '단기 변동성에 흔들려 추가 매수를 못 했다. 다음엔 분할매수로 접근하자.' },
+    actual: '+2.4%', review: { verdict: '보류', learned: '단기 변동성에 흔들려 추가 매수를 못 했다. 다음엔 분할매수로 접근하자.' }, note: '',
   },
   {
     id: 3, name: 'NVIDIA', logo: 'NV', color: '#76b900', date: '2026.05.15', side: '매수',
     reasons: ['실적 개선', '테마/모멘텀'], target: '+30%', stop: '-15%', confidence: 5,
-    actual: '+8.2%', review: { verdict: '성공', learned: '실적 모멘텀에 대한 확신이 맞았다. 비중을 더 실어도 좋았을 듯.' },
+    actual: '+8.2%', review: { verdict: '성공', learned: '실적 모멘텀에 대한 확신이 맞았다. 비중을 더 실어도 좋았을 듯.' }, note: '',
   },
 ])
 
@@ -33,7 +33,7 @@ const typeOptions = [
   { key: '관심', color: '#7d4ee8' },
 ]
 
-const newDiary = ref({ type: '매수', reasons: ['장기 성장성', '테마/모멘텀'], confidence: 4, target: '+20%', stop: '-10%' })
+const newDiary = ref({ type: '매수', reasons: ['장기 성장성', '테마/모멘텀'], confidence: 4, target: '+20%', stop: '-10%', note: '' })
 
 function toggleReason(r) {
   const arr = newDiary.value.reasons
@@ -51,22 +51,24 @@ function saveDiary() {
     reasons: [...newDiary.value.reasons],
     target: newDiary.value.target, stop: newDiary.value.stop,
     confidence: newDiary.value.confidence,
-    actual: '+0.0%', review: null,
+    actual: '+0.0%', review: null, note: newDiary.value.note,
   })
-  newDiary.value = { type: '매수', reasons: [], confidence: 3, target: '+20%', stop: '-10%' }
+  newDiary.value = { type: '매수', reasons: [], confidence: 3, target: '+20%', stop: '-10%', note: '' }
 }
 
-// ===== 복기 (가장 오래된 미복기 일기 대상) =====
-const reviewTarget = computed(() => entries.value.find(e => e.review === null) || null)
-const reviewVerdict = ref('보류')
-const reviewLearned = ref('')
-
-function saveReview() {
-  const t = reviewTarget.value
-  if (!t) return
-  t.review = { verdict: reviewVerdict.value, learned: reviewLearned.value.trim() || '복기 메모 없음' }
-  reviewVerdict.value = '보류'
-  reviewLearned.value = ''
+// ===== 일기 인라인 수정 (복기 박스 작성/수정) =====
+const editingId = ref(null)
+const editText = ref('')
+function startEdit(e) {
+  if (editingId.value === e.id) { editingId.value = null; return }
+  editingId.value = e.id
+  editText.value = e.review?.learned ?? ''
+}
+function saveEdit(e) {
+  const text = editText.value.trim()
+  if (e.review) e.review.learned = text          // 기존 복기 메모 수정
+  else if (text) e.review = { verdict: '보류', learned: text } // 복기 박스 신규 생성
+  editingId.value = null
 }
 
 // ===== 상태 헬퍼 =====
@@ -115,6 +117,7 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
                 <div class="td-name-row">
                   <strong class="td-name">{{ e.name }}</strong>
                   <span class="td-side buy">{{ e.side }}</span>
+                  <button type="button" class="td-edit-btn" @click="startEdit(e)">수정</button>
                 </div>
                 <span class="td-date">{{ e.date }}</span>
               </div>
@@ -137,11 +140,22 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
               </p>
               <p class="td-review-learned">{{ e.review.learned }}</p>
             </div>
+
+            <div v-if="editingId === e.id" class="td-edit-box">
+              <textarea
+                v-model="editText"
+                class="td-textarea"
+                placeholder="이번 매매에서 배운 점을 적어보세요. (더 정확한 추천이 가능해집니다!)"
+              ></textarea>
+              <div class="td-edit-actions">
+                <button type="button" class="td-edit-save" @click="saveEdit(e)">저장</button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- ===== 우: 작성 + 복기 ===== -->
+      <!-- ===== 우: 작성 ===== -->
       <div class="td-right">
 
         <!-- 새 매매일기 작성 -->
@@ -219,40 +233,16 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
             </div>
           </div>
 
+          <div class="td-field">
+            <textarea
+              v-model="newDiary.note"
+              class="td-textarea"
+              placeholder="일지를 작성해 주세요. (더 정확한 추천이 가능해집니다!)"
+            ></textarea>
+          </div>
+
           <button class="td-save-btn" type="button" @click="saveDiary">매매일기 저장</button>
           <p class="td-form-hint">자유 서술·눈치 전부 없이, 선택만으로 1초 작성</p>
-        </section>
-
-        <!-- 복기 -->
-        <section class="panel td-review-form" aria-label="복기">
-          <template v-if="reviewTarget">
-            <p class="td-form-title">🔍 복기 — {{ reviewTarget.name }} {{ reviewTarget.side }} ({{ reviewTarget.date.slice(5) }})</p>
-            <div class="td-review-actual">
-              실제 수익률 <strong :class="reviewTarget.actual.startsWith('-') ? 'is-down' : 'is-up'">{{ reviewTarget.actual }}</strong> · 판단은?
-            </div>
-            <div class="td-chips">
-              <button
-                v-for="v in ['보류', '성공', '실패']"
-                :key="v"
-                type="button"
-                class="td-chip-btn"
-                :class="{ on: reviewVerdict === v }"
-                @click="reviewVerdict = v"
-              >{{ v }}</button>
-            </div>
-            <div class="td-field" style="margin-top: 14px">
-              <span class="td-field-label">배운 점 (자유 서술)</span>
-              <textarea
-                v-model="reviewLearned"
-                class="td-review-textarea"
-                placeholder="이번 매매에서 배운 점을 적어보세요."
-              ></textarea>
-            </div>
-            <button class="td-save-btn" type="button" @click="saveReview">복기 저장</button>
-          </template>
-          <div v-else class="td-review-empty">
-            🎉 복기할 매매일기가 없어요. 모두 복기 완료!
-          </div>
         </section>
       </div>
     </div>
@@ -319,8 +309,8 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 .td-review-line { margin: 0 0 5px; font-size: 12px; font-weight: 800; color: var(--muted); }
 .td-review-learned { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.5; word-break: keep-all; }
 
-/* 작성/복기 폼 공통 */
-.td-form, .td-review-form { padding: 18px 20px; }
+/* 작성 폼 */
+.td-form { padding: 18px 20px; }
 .td-form-title { font-size: 14px; font-weight: 900; color: var(--ink); margin: 0 0 14px; word-break: keep-all; }
 .td-field { margin-bottom: 14px; }
 .td-field-label { display: block; font-size: 12px; font-weight: 900; color: var(--muted); margin-bottom: 8px; }
@@ -347,16 +337,30 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 .td-save-btn:hover { opacity: 0.92; transform: translateY(-1px); }
 .td-form-hint { margin: 10px 0 0; text-align: center; font-size: 11px; font-weight: 700; color: var(--faint); }
 
-/* 복기 */
-.td-review-actual { font-size: 13px; font-weight: 800; color: var(--muted); margin-bottom: 10px; }
-.td-review-textarea {
+/* 일지 textarea (작성/수정 공통) */
+.td-textarea {
   width: 100%; min-height: 84px; padding: 12px 14px; border-radius: var(--radius);
   border: 1px solid var(--glass-border); background: var(--surface-soft); color: var(--ink);
   font-size: 13px; font-weight: 700; line-height: 1.6; outline: none; resize: vertical;
   box-sizing: border-box; font-family: inherit; transition: border-color 0.18s;
 }
-.td-review-textarea:focus { border-color: var(--accent); }
-.td-review-empty { padding: 28px 12px; text-align: center; font-size: 14px; font-weight: 800; color: var(--muted); }
+.td-textarea::placeholder { color: var(--faint); font-weight: 700; }
+.td-textarea:focus { border-color: var(--accent); }
+
+/* 일기 인라인 수정 */
+.td-edit-btn {
+  margin-left: 2px; padding: 0; border: 0; background: none;
+  font-size: 11px; font-weight: 800; color: var(--muted); cursor: pointer; transition: color 0.14s;
+}
+.td-edit-btn:hover { color: var(--accent); }
+.td-edit-box { margin-top: 12px; }
+.td-edit-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+.td-edit-save {
+  padding: 7px 16px; border-radius: 999px; border: 0;
+  background: var(--accent); color: #fff; font-size: 12px; font-weight: 900; cursor: pointer;
+  transition: opacity 0.16s;
+}
+.td-edit-save:hover { opacity: 0.9; }
 
 /* 색상 */
 .is-up { color: #e3344f; }

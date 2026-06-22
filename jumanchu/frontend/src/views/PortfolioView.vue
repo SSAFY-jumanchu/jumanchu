@@ -166,10 +166,9 @@ function grade(score) {
   return 'C'
 }
 function gradeColor(score) {
-  if (score >= 90) return '#0f9f6e'
-  if (score >= 80) return '#315dff'
-  if (score >= 70) return '#e58b10'
-  return '#cf3d3d'
+  if (score >= 80) return '#e3344f'    // 빨강 — 장기 보유 핵심·강력 추천 (80~100)
+  if (score >= 40) return 'var(--positive)' // 초록 — 보유 적합 (40~80)
+  return '#2b59d6'                      // 파랑 — 40 미만
 }
 function gradeClass(score) {
   if (score >= 90) return 'g-a'
@@ -320,10 +319,18 @@ const scoreCards = computed(() => [
 .lt-list-item {
   display: flex; align-items: center; gap: 10px; width: 100%;
   padding: 12px; border: 0; border-left: 3px solid transparent; border-radius: var(--radius);
-  background: transparent; cursor: pointer; text-align: left; transition: background 0.16s;
+  background: transparent; cursor: pointer; text-align: left; transition: background 0.16s, box-shadow 0.2s ease, border-color 0.16s;
 }
 .lt-list-item:hover { background: var(--surface-soft); }
-.lt-list-item.active { background: rgba(49,93,255,0.07); border-left-color: var(--accent); }
+.lt-list-item.active {
+  background: linear-gradient(135deg, rgba(49,93,255,0.15) 0%, rgba(125,78,232,0.09) 100%);
+  box-shadow:
+    0 6px 16px rgba(49,93,255,0.18),
+    inset 0 1px 1px rgba(255,255,255,0.55),
+    inset 0 -4px 10px rgba(49,93,255,0.10);
+  backdrop-filter: blur(6px) saturate(1.3);
+  -webkit-backdrop-filter: blur(6px) saturate(1.3);
+}
 .lt-logo { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 13px; font-weight: 900; flex-shrink: 0; }
 .lt-list-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .lt-list-info strong { font-size: 14px; font-weight: 900; color: var(--ink); }
@@ -425,5 +432,11 @@ const scoreCards = computed(() => [
   .lt-list-item { flex: 1; min-width: 200px; }
   .lt-score-row { grid-template-columns: 1fr; }
   .lt-mid-row { grid-template-columns: 1fr; }
+}
+
+/* 모바일: 보유 종목 리스트를 1열로 */
+@media (max-width: 800px) {
+  .lt-list { flex-direction: column; }
+  .lt-list-item { flex: none; min-width: 0; }
 }
 </style>
