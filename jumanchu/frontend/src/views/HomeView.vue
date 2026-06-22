@@ -629,6 +629,17 @@ const watchlistNews = [
               aria-hidden="true"
             ></video>
             <video
+              v-if="s.visual === 'care'"
+              class="lp-slide-video"
+              src="/videos/movie.mp4"
+              autoplay
+              loop
+              muted
+              playsinline
+              preload="metadata"
+              aria-hidden="true"
+            ></video>
+            <video
               v-if="s.visual === 'ai'"
               class="lp-slide-video"
               src="/videos/ai-analysis.mp4"
@@ -650,16 +661,6 @@ const watchlistNews = [
                   <template v-else>{{ s.title }}</template>
                 </h1>
                 <p class="lp-slide-desc">{{ s.desc }}</p>
-              </div>
-              <div v-if="s.visual === 'care'" class="lp-slide-visual">
-                <div class="lp-vis">
-                  <div class="care-card">
-                    <span class="care-label">투자 STREAK</span>
-                    <strong class="care-day">D+128</strong>
-                    <div class="care-dots"><i v-for="n in 14" :key="n" :class="{ on: n <= 11 }"></i></div>
-                    <span class="care-sub">11일 연속 점검 중 🔥</span>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -948,6 +949,11 @@ html[data-theme='dark'] .lp-slide.th-ai { background: linear-gradient(135deg, #1
 .lp-slide.th-swipe::before {
   background: linear-gradient(90deg, rgba(8, 6, 24, 0.34) 0%, rgba(8, 6, 24, 0.12) 50%, transparent 100%);
 }
+.lp-slide.th-care::before {
+  background:
+    linear-gradient(90deg, rgba(4, 18, 14, 0.78) 0%, rgba(6, 24, 18, 0.58) 40%, rgba(6, 24, 18, 0.2) 74%, rgba(4, 18, 14, 0.42) 100%),
+    linear-gradient(180deg, rgba(3, 14, 11, 0.4) 0%, transparent 36%, rgba(3, 14, 11, 0.32) 100%);
+}
 .lp-slide-inner {
   position: relative;
   z-index: 2;
@@ -960,9 +966,11 @@ html[data-theme='dark'] .lp-slide.th-ai { background: linear-gradient(135deg, #1
   align-items: center;
 }
 .lp-slide.th-ai .lp-slide-inner,
-.lp-slide.th-swipe .lp-slide-inner { grid-template-columns: minmax(0, 760px); }
+.lp-slide.th-swipe .lp-slide-inner,
+.lp-slide.th-care .lp-slide-inner { grid-template-columns: minmax(0, 760px); }
 .lp-slide.th-ai .lp-slide-text,
-.lp-slide.th-swipe .lp-slide-text { text-shadow: 0 3px 24px rgba(0, 0, 0, 0.4); }
+.lp-slide.th-swipe .lp-slide-text,
+.lp-slide.th-care .lp-slide-text { text-shadow: 0 3px 24px rgba(0, 0, 0, 0.4); }
 .lp-slide-text { color: #fff; }
 .lp-slide-meta { display: flex; align-items: center; gap: 12px; }
 .lp-num { font-size: 13px; font-weight: 900; color: rgba(255,255,255,0.6); letter-spacing: 0.1em; }
@@ -1025,7 +1033,8 @@ html[data-theme='dark'] .lp-slide.th-ai { background: linear-gradient(135deg, #1
 @media (max-width: 800px) {
   .lp-slide-inner { grid-template-columns: 1fr; padding: 0 22px; text-align: center; justify-items: center; gap: 22px; }
   .lp-slide.th-ai .lp-slide-inner,
-  .lp-slide.th-swipe .lp-slide-inner { grid-template-columns: 1fr; }
+  .lp-slide.th-swipe .lp-slide-inner,
+  .lp-slide.th-care .lp-slide-inner { grid-template-columns: 1fr; }
   .lp-slide.th-ai::before {
     background:
       linear-gradient(180deg, rgba(6, 9, 25, 0.52) 0%, rgba(8, 11, 29, 0.48) 50%, rgba(5, 8, 22, 0.68) 100%),
