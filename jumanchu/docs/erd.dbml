@@ -29,8 +29,7 @@ Table investment_profile {      // [기존 + 신규컬럼] accounts_investmentpr
   id integer [pk]
   user_id integer [unique]
   // --- 기존 컬럼 ---
-  risk_type varchar             [note: '기존: CONSERVATIVE/MODERATE/AGGRESSIVE']
-  investment_style varchar      [note: '기존']
+  investment_style varchar      [note: '성향 4유형 라벨: 가치 파트너형/성장 동반형/단기 승부형/신중 탐색형 — 5벡터에서 산출']
   preferred_period smallint     [note: '기존: 선호기간(개월)']
   preferred_sector varchar      [note: '기존: 단일 섹터']
   // --- 신규: 온보딩 5벡터 (1~5) ---

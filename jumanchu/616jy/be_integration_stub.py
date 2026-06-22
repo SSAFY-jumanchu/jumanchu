@@ -70,7 +70,7 @@ def _load_inputs(user, holding):
         #        compute_scores 대신 lt 점수 + longterm_total(소계, userfit) 로 결합해도 됨.
 
         profile = UserProfile(
-            risk_type=prof.risk_type, preferred_period_months=prof.preferred_period,
+            risk_type=prof.investment_style, preferred_period_months=prof.preferred_period,
             preferred_sectors=[s.sector for s in user.preferred_sectors.all()],
             portfolio_weight_pct=_weight_pct(holding))
         return meta, fin, grw, scores, profile

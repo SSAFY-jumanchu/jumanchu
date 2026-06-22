@@ -38,8 +38,8 @@
 | birth_year | int | US-02 "생년=상장연도" 프로필 추천에 활용 (신규 권장) |
 | created_at | datetime | |
 
-#### `USER_INVESTMENT_PROFILE` (변경 없음)
-1:1 USER. risk_type, investment_style, preferred_period, preferred_sector.
+#### `USER_INVESTMENT_PROFILE`
+1:1 USER. investment_style(성향 4유형 라벨), preferred_period, preferred_sector + 온보딩 5벡터(risk_tolerance·investment_term·experience·loss_aversion·behavior)·signature_stock. (상세 컬럼은 `erd.dbml`)
 
 ---
 

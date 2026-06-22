@@ -79,14 +79,17 @@ interface User {
 }
 
 interface InvestmentProfile {       // ERD: USER_INVESTMENT_PROFILE
-  risk_type: RiskType
-  investment_style?: string         // "장기 투자", "단기 트레이딩" 등
+  investment_style?: string         // 성향 4유형 라벨: "가치 파트너형" | "성장 동반형" | "단기 승부형" | "신중 탐색형"
   preferred_period?: number         // 선호 보유 기간(개월)
   preferred_sector?: string         // "반도체", "2차전지" 등
+  risk_tolerance?: number           // 온보딩 5벡터 (각 1~5)
+  investment_term?: number
+  experience?: number
+  loss_aversion?: number
+  behavior?: number
+  profiled_at?: ISODateTime         // 온보딩 완료 시각
   updated_at: ISODateTime
 }
-
-type RiskType = "CONSERVATIVE" | "MODERATE" | "AGGRESSIVE"
 ```
 
 ### 1.2 Stock
@@ -429,11 +432,16 @@ interface Account {
 **Request**
 ```typescript
 {
-  risk_type: RiskType
-  investment_style?: string
-  preferred_period?: number      // 보유 기간(개월)
-  preferred_sector?: string
+  q1: 1 | 3 | 5                  // 투자 목적
+  q2: 1 | 3 | 5                  // 투자 경험
+  q3: 1 | 3 | 5                  // 손실 허용 범위
+  q4: 1 | 3 | 5                  // 자금 의존도
+  q5: 1 | 3 | 5                  // 투자 기간 (총점 가중 ×2)
+  q6: 1 | 3 | 5                  // 시장 하락 반응
+  preferred_sectors?: string[]   // 관심 섹터 우선순위 순 (상위 3개 가중 1.0/0.6/0.3)
+  preferred_period?: number      // 선호 보유 기간(개월)
 }
+// 5벡터·성향 4유형(investment_style)은 서버에서 q1~q6으로 산출
 ```
 
 **Response 200 OK**

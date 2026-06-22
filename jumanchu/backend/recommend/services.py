@@ -11,13 +11,20 @@ from datetime import timedelta
 from decimal import InvalidOperation
 
 import requests
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
 
 from accounts.models import UserPreferredSector
-from recommend.matching import recommend_for_user
-from recommend.models import RecommendationCache, UserLikedStock
+from recommend import scoring
+from recommend.gms_client import make_gms_caller
+from recommend.longterm_report import (
+    FinancialMetrics, GrowthMetrics, LongTermScores, StockMeta, UserProfile,
+    build_longterm_report,
+)
+from recommend.matching import compute_match_score, recommend_for_user
+from recommend.models import LongTermScore, RecommendationCache, StockDna, UserLikedStock
 from stocks.models import Stock, StockPrice
 from stocks.services.price_dispatch import fetch_price
 
@@ -180,3 +187,165 @@ def swipe_recommendations(user, limit: int = 30) -> list:
             "like_count": likes.get(stock.id, 0),
         })
     return cards
+
+
+def longterm_ranking(user, limit: int | None = None, offset: int = 0) -> list:
+    """개인별 전체 종목 장투 랭킹 (on-demand, 저장 안 함).
+
+    종목 소계(LongTermScore.total_score, 70%) + 개인 궁합(compute_match_score, 30%)을
+    longterm_total로 결합해 내림차순 정렬. LLM 호출 없음(숫자·등급만).
+    → [{rank, stock_code, stock_name, market, sector, longterm_total, subtotal, userfit, financial, growth}]
+    """
+    profile = getattr(user, "investment_profile", None)
+    if profile is None or profile.profiled_at is None:
+        raise OnboardingRequired()
+    sector_weights = {
+        p.sector: float(p.weight) for p in UserPreferredSector.objects.filter(user=user)
+    }
+    # 각 배치의 최신 일자 (StockDna=궁합 입력, LongTermScore=70% 소계)
+    dna_date = (StockDna.objects.order_by("-calculated_date")
+                .values_list("calculated_date", flat=True).first())
+    lt_date = (LongTermScore.objects.order_by("-calculated_date")
+               .values_list("calculated_date", flat=True).first())
+    if dna_date is None or lt_date is None:
+        return []  # 배치 미적재
+
+    # 종목 소계(70%): {stock_id: (total_score, financial, growth)}
+    lt_map = {
+        row[0]: (float(row[1]), row[2], row[3])
+        for row in LongTermScore.objects.filter(calculated_date=lt_date)
+        .values_list("stock_id", "total_score", "financial_score", "growth_score")
+    }
+    # 궁합 입력 DNA — LongTermScore 있는 종목만 (양쪽 다 있어야 랭킹 가능)
+    qs = (StockDna.objects.filter(calculated_date=dna_date, stock_id__in=lt_map.keys())
+          .select_related("stock"))
+
+    scored = []
+    for dna in qs:
+        subtotal, fin, grw = lt_map[dna.stock_id]
+        userfit = compute_match_score(profile, dna, sector_weights)      # 30% (개인)
+        total = scoring.longterm_total(subtotal, userfit)               # 소계×0.7 + 궁합×0.3
+        scored.append((total, userfit, subtotal, fin, grw, dna.stock))
+    scored.sort(key=lambda t: t[0], reverse=True)
+
+    page = scored[offset: offset + limit if limit else None]
+    return [
+        {
+            "rank": offset + i,
+            "stock_code": stock.code, "stock_name": stock.name,
+            "market": stock.market, "sector": stock.sector,
+            "longterm_total": round(total, 1),
+            "subtotal": round(subtotal, 1),       # 종목 70% 베이스 (개인 무관)
+            "userfit": round(userfit, 1),         # 궁합 30% (개인)
+            "financial": float(fin) if fin is not None else None,
+            "growth": float(grw) if grw is not None else None,
+        }
+        for i, (total, userfit, subtotal, fin, grw, stock) in enumerate(page, start=1)
+    ]
+
+
+def _metric(obj, attr) -> float | None:
+    """obj.attr 를 fraction(0.1088) → %(10.88). obj/값 없으면 None."""
+    if obj is None:
+        return None
+    v = getattr(obj, attr)
+    return None if v is None else float(v) * 100
+
+
+def _portfolio_weight(user, stock) -> float | None:
+    """이 종목의 포트폴리오 비중 %(취득원가 기준). 보유 없으면 None."""
+    from portfolio.models import Holding
+    rows = list(Holding.objects.filter(user=user, quantity__gt=0)
+                .values_list("stock_id", "quantity", "average_price"))
+    basis = {sid: float(q) * float(p) for sid, q, p in rows}
+    total = sum(basis.values())
+    if total <= 0 or stock.id not in basis:
+        return None
+    return basis[stock.id] / total * 100
+
+
+def longterm_report(user, code, *, llm=None, force: bool = False) -> dict:
+    """보유/관심 종목 1개 → 장투 케어 AI 리포트(4문장). rec_type='long_term' 캐시(TTL 1일).
+
+    재무·성장 점수는 LongTermScore(일배치), 궁합(userfit)은 on-demand. LLM 1콜.
+    llm 미지정 시 GMS GPT-4o. force=True면 캐시 무시·재생성.
+    """
+    stock = Stock.objects.filter(code=code, is_active=True).first()
+    if stock is None:
+        raise StockNotFound()
+
+    # ① 캐시 히트 (rec_type='long_term', 미만료) → LLM 재호출 없이 즉시 반환
+    if not force:
+        cached = (RecommendationCache.objects
+                  .filter(user=user, stock=stock, rec_type=RecommendationCache.RecType.LONG_TERM)
+                  .first())
+        if cached and cached.reason and cached.expires_at > timezone.now():
+            return cached.reason
+
+    # ② 입력 로드 (DB는 fraction 저장 → ×100)
+    fs = stock.financials.order_by("-fiscal_period").first()
+    ind = stock.indicators.order_by("-calculated_date").first()
+    meta = StockMeta(stock.code, stock.name, stock.market, stock.sector, stock.currency)
+    fin = FinancialMetrics(
+        debt_ratio=_metric(fs, "debt_ratio"), current_ratio=_metric(fs, "current_ratio"),
+        operating_margin=_metric(fs, "operating_margin"), net_margin=_metric(fs, "net_margin"),
+        roe=_metric(ind, "roe"), roa=_metric(ind, "roa"),
+        dividend_yield=_metric(ind, "dividend_yield"), payout_ratio=_metric(fs, "payout_ratio"),
+        fiscal_period=fs.fiscal_period if fs else "",
+    )
+    grw = GrowthMetrics(
+        revenue_yoy=_metric(fs, "revenue_yoy"),
+        operating_profit_yoy=_metric(fs, "operating_profit_yoy"),
+        net_profit_yoy=_metric(fs, "net_profit_yoy"),
+    )
+
+    # ③ 점수 — 소계(70%)는 LongTermScore(일배치), 없으면 지표로 즉석 폴백
+    lt = LongTermScore.objects.filter(stock=stock).order_by("-calculated_date").first()
+    if lt is not None:
+        fin_s = float(lt.financial_score) if lt.financial_score is not None else 0.0
+        grw_s = float(lt.growth_score) if lt.growth_score is not None else 0.0
+        subtotal = float(lt.total_score) if lt.total_score is not None else None
+    else:
+        fin_s = scoring.financial_score(
+            debt_ratio=fin.debt_ratio, current_ratio=fin.current_ratio,
+            operating_margin=fin.operating_margin, net_margin=fin.net_margin, roe=fin.roe) or 0.0
+        grw_s = scoring.growth_score(
+            revenue_yoy=grw.revenue_yoy, operating_profit_yoy=grw.operating_profit_yoy,
+            net_profit_yoy=grw.net_profit_yoy) or 0.0
+        subtotal = scoring.stock_subtotal(fin_s or None, grw_s or None)
+
+    # 궁합(30%) on-demand — 온보딩 프로필 + 그 종목 DNA가 있어야 적합도 포함
+    userfit = None
+    report_profile = None
+    profile = getattr(user, "investment_profile", None)
+    if profile is not None and profile.profiled_at is not None:
+        dna = StockDna.objects.filter(stock=stock).order_by("-calculated_date").first()
+        if dna is not None:
+            prefs = list(UserPreferredSector.objects.filter(user=user))
+            userfit = compute_match_score(
+                profile, dna, {p.sector: float(p.weight) for p in prefs})
+            report_profile = UserProfile(
+                risk_type=profile.investment_style,
+                preferred_period_months=profile.preferred_period,
+                preferred_sectors=[p.sector for p in prefs],
+                portfolio_weight_pct=_portfolio_weight(user, stock),
+            )
+
+    total = scoring.longterm_total(subtotal, userfit)
+    scores = LongTermScores(
+        financial=fin_s, growth=grw_s,
+        total=total if total is not None else 0.0, userfit=userfit,
+    )
+
+    # ④ 리포트 생성 (LLM 1콜) — llm 미지정 시 GMS GPT-4o
+    if llm is None:
+        llm = make_gms_caller(api_key=settings.GMS_API_KEY)
+    payload = build_longterm_report(meta, fin, grw, scores, report_profile, llm=llm).to_dict()
+
+    # ⑤ 캐시 저장 (match_score=종합 total, reason=문장 JSON, TTL 1일)
+    RecommendationCache.objects.update_or_create(
+        user=user, stock=stock, rec_type=RecommendationCache.RecType.LONG_TERM,
+        defaults=dict(match_score=round(scores.total, 2), reason=payload,
+                      expires_at=timezone.now() + timedelta(days=1)),
+    )
+    return payload

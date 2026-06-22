@@ -15,16 +15,14 @@ class User(AbstractUser):
 
 
 class InvestmentProfile(models.Model):
-    class RiskType(models.TextChoices):
-        CONSERVATIVE = "CONSERVATIVE", "안정형"
-        MODERATE = "MODERATE", "중립형"
-        AGGRESSIVE = "AGGRESSIVE", "공격형"
-
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="investment_profile"
     )
-    risk_type = models.CharField(max_length=16, choices=RiskType.choices)
-    investment_style = models.CharField(max_length=50, blank=True)
+    investment_style = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="성향 4유형 라벨(가치 파트너형/성장 동반형/단기 승부형/신중 탐색형). 5벡터에서 산출해 저장",
+    )
     preferred_period = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
@@ -79,7 +77,7 @@ class InvestmentProfile(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.user.username} · {self.risk_type}"
+        return f"{self.user.username} · {self.investment_style}"
 
 
 class Goal(models.Model):

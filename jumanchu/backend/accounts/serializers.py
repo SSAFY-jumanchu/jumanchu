@@ -6,7 +6,7 @@ from accounts.models import InvestmentProfile, User
 class InvestmentProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = InvestmentProfile
-        fields = ['risk_type', 'investment_style', 'preferred_period', 'preferred_sector',
+        fields = ['investment_style', 'preferred_period', 'preferred_sector',
                   'risk_tolerance', 'investment_term', 'experience', 'loss_aversion', 'behavior',
                   'profiled_at', 'updated_at']
 
