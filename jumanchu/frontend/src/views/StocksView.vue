@@ -2,8 +2,10 @@
 import { ref, computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import SparklineChart from '../components/SparklineChart.vue'
+import { useCopy } from '../composables/useCopy'
 
 const router = useRouter()
+const { t } = useCopy()
 
 // ===== 필터 상태 =====
 const marketFilter = ref('all')   // all | domestic | overseas
@@ -528,8 +530,8 @@ const popularStocks = computed(() => {
         <!-- ===== 스와이프 모드 (관심종목 고르기) ===== -->
         <template v-if="!swipeDone">
           <div class="sv-match-header">
-            <h2 class="sv-match-title">오늘의 궁합 추천 💝</h2>
-            <p class="sv-match-sub">당신의 투자 성향과 잘 맞는 종목이에요. 넘기면서 관심 종목을 골라보세요.</p>
+            <h2 class="sv-match-title">{{ t('home.match.title', '오늘의 추천 종목') }}</h2>
+            <p class="sv-match-sub">{{ t('home.match.sub', '투자 성향에 맞는 종목이에요. 넘기면서 관심 종목을 골라보세요.') }}</p>
             <span class="sv-match-count">추천 {{ swipedCount + 1 }} / {{ SWIPE_GOAL }}</span>
           </div>
 

@@ -1,5 +1,8 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
+import { useCopy } from '../composables/useCopy'
+
+const { t } = useCopy()
 
 // ===== 작성 대기 (와이어프레임: 미작성 매매가 있다고 가정) =====
 const pendingTrade = { name: '로보스타', logo: '로', color: '#0f9f6e', side: '매수', date: '06.09' }
@@ -56,21 +59,8 @@ function saveDiary() {
   newDiary.value = { type: '매수', reasons: [], confidence: 3, target: '+20%', stop: '-10%' }
 }
 
-// ===== 복기 (가장 오래된 미복기 일기 대상) =====
-const reviewTarget = computed(() => entries.value.find(e => e.review === null) || null)
-const reviewVerdict = ref('보류')
-const reviewLearned = ref('')
-
-function saveReview() {
-  const t = reviewTarget.value
-  if (!t) return
-  t.review = { verdict: reviewVerdict.value, learned: reviewLearned.value.trim() || '복기 메모 없음' }
-  reviewVerdict.value = '보류'
-  reviewLearned.value = ''
-}
-
 // ===== 상태 헬퍼 =====
-function statusLabel(e) { return e.review ? '복기 완료' : '복기 대기' }
+function statusLabel(e) { return e.review ? t('td.status.done', '복기 완료') : t('td.status.pending', '복기 대기') }
 const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 </script>
 
@@ -79,8 +69,8 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 
     <!-- 헤더 -->
     <header class="td-header">
-      <h1>매매일기</h1>
-      <p class="td-sub">왜 샀는지 고르기만 하면 끝 — 나중에 결과로 복기하며 투자 습관을 만들어요.</p>
+      <h1>{{ t('td.title', '매매일기') }}</h1>
+      <p class="td-sub">{{ t('td.sub', '왜 샀는지 고르기만 하면 끝 — 나중에 결과로 복기하며 투자 습관을 만들어요.') }}</p>
     </header>
 
     <!-- 작성 대기 알림 -->
@@ -88,8 +78,8 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
       <div class="td-pending-left">
         <span class="td-pending-ico">📝</span>
         <div>
-          <strong>작성 대기 1건</strong>
-          <span class="td-pending-desc">매매했는데 아직 일기를 안 쓴 거래예요.</span>
+          <strong>{{ t('td.pending.title', '작성 대기 1건') }}</strong>
+          <span class="td-pending-desc">{{ t('td.pending.desc', '매매했는데 아직 일기를 안 쓴 거래예요.') }}</span>
         </div>
       </div>
       <button class="td-pending-chip">
@@ -103,8 +93,8 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
       <!-- ===== 좌: 나의 매매일기 ===== -->
       <section class="panel td-list" aria-label="나의 매매일기">
         <div class="td-list-head">
-          <h2>나의 매매일기</h2>
-          <span class="td-list-count">총 {{ entries.length }}건</span>
+          <h2>{{ t('td.list.title', '나의 매매일기') }}</h2>
+          <span class="td-list-count">{{ t('td.list.countPre', '총') }} {{ entries.length }}{{ t('td.list.countSuf', '건') }}</span>
         </div>
 
         <div class="td-entries">
@@ -123,8 +113,8 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 
             <div class="td-tags">
               <span v-for="r in e.reasons" :key="r" class="td-reason">{{ r }}</span>
-              <span class="td-metric">목표 {{ e.target }}</span>
-              <span class="td-metric">손절 {{ e.stop }}</span>
+              <span class="td-metric">{{ t('td.tag.target', '목표') }} {{ e.target }}</span>
+              <span class="td-metric">{{ t('td.tag.stop', '손절') }} {{ e.stop }}</span>
               <span class="td-stars">
                 <span v-for="n in 5" :key="n" :class="n <= e.confidence ? 'on' : ''">★</span>
               </span>
@@ -132,8 +122,8 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 
             <div v-if="e.review" class="td-review-box">
               <p class="td-review-line">
-                🔍 실제 <strong :class="e.actual.startsWith('-') ? 'is-down' : 'is-up'">{{ e.actual }}</strong>
-                · 판단 <strong :style="{ color: verdictColor[e.review.verdict] }">{{ e.review.verdict }}</strong>
+                {{ t('td.review.actualLabel', '🔍 실제') }} <strong :class="e.actual.startsWith('-') ? 'is-down' : 'is-up'">{{ e.actual }}</strong>
+                · {{ t('td.review.verdictLabel', '판단') }} <strong :style="{ color: verdictColor[e.review.verdict] }">{{ t('td.verdict.' + e.review.verdict, e.review.verdict) }}</strong>
               </p>
               <p class="td-review-learned">{{ e.review.learned }}</p>
             </div>
@@ -146,10 +136,10 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 
         <!-- 새 매매일기 작성 -->
         <section class="panel td-form" aria-label="새 매매일기 작성">
-          <p class="td-form-title">🔍 새 매매일기 ({{ pendingTrade.name }} · {{ pendingTrade.date }}) — 다 고르기만!</p>
+          <p class="td-form-title">{{ t('td.form.titlePre', '🔍 새 매매일기') }} ({{ pendingTrade.name }} · {{ pendingTrade.date }}) — {{ t('td.form.titleSuf', '다 고르기만!') }}</p>
 
           <div class="td-field">
-            <span class="td-field-label">매매 유형</span>
+            <span class="td-field-label">{{ t('td.field.type', '매매 유형') }}</span>
             <div class="td-chips">
               <button
                 v-for="t in typeOptions"
@@ -164,7 +154,7 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
           </div>
 
           <div class="td-field">
-            <span class="td-field-label">이유 (복수 선택)</span>
+            <span class="td-field-label">{{ t('td.field.reason', '이유 (복수 선택)') }}</span>
             <div class="td-chips">
               <button
                 v-for="r in reasonOptions"
@@ -178,7 +168,7 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
           </div>
 
           <div class="td-field">
-            <span class="td-field-label">확신도</span>
+            <span class="td-field-label">{{ t('td.field.confidence', '확신도') }}</span>
             <div class="td-star-pick">
               <button
                 v-for="n in 5"
@@ -192,7 +182,7 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
           </div>
 
           <div class="td-field">
-            <span class="td-field-label">목표 수익률</span>
+            <span class="td-field-label">{{ t('td.field.target', '목표 수익률') }}</span>
             <div class="td-chips">
               <button
                 v-for="o in targetOptions"
@@ -206,7 +196,7 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
           </div>
 
           <div class="td-field">
-            <span class="td-field-label">손절 라인</span>
+            <span class="td-field-label">{{ t('td.field.stop', '손절 라인') }}</span>
             <div class="td-chips">
               <button
                 v-for="o in stopOptions"
@@ -219,40 +209,8 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
             </div>
           </div>
 
-          <button class="td-save-btn" type="button" @click="saveDiary">매매일기 저장</button>
-          <p class="td-form-hint">자유 서술·눈치 전부 없이, 선택만으로 1초 작성</p>
-        </section>
-
-        <!-- 복기 -->
-        <section class="panel td-review-form" aria-label="복기">
-          <template v-if="reviewTarget">
-            <p class="td-form-title">🔍 복기 — {{ reviewTarget.name }} {{ reviewTarget.side }} ({{ reviewTarget.date.slice(5) }})</p>
-            <div class="td-review-actual">
-              실제 수익률 <strong :class="reviewTarget.actual.startsWith('-') ? 'is-down' : 'is-up'">{{ reviewTarget.actual }}</strong> · 판단은?
-            </div>
-            <div class="td-chips">
-              <button
-                v-for="v in ['보류', '성공', '실패']"
-                :key="v"
-                type="button"
-                class="td-chip-btn"
-                :class="{ on: reviewVerdict === v }"
-                @click="reviewVerdict = v"
-              >{{ v }}</button>
-            </div>
-            <div class="td-field" style="margin-top: 14px">
-              <span class="td-field-label">배운 점 (자유 서술)</span>
-              <textarea
-                v-model="reviewLearned"
-                class="td-review-textarea"
-                placeholder="이번 매매에서 배운 점을 적어보세요."
-              ></textarea>
-            </div>
-            <button class="td-save-btn" type="button" @click="saveReview">복기 저장</button>
-          </template>
-          <div v-else class="td-review-empty">
-            🎉 복기할 매매일기가 없어요. 모두 복기 완료!
-          </div>
+          <button class="td-save-btn" type="button" @click="saveDiary">{{ t('td.save', '매매일기 저장') }}</button>
+          <p class="td-form-hint">{{ t('td.form.hint', '자유 서술·눈치 전부 없이, 선택만으로 1초 작성') }}</p>
         </section>
       </div>
     </div>
@@ -319,8 +277,8 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 .td-review-line { margin: 0 0 5px; font-size: 12px; font-weight: 800; color: var(--muted); }
 .td-review-learned { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.5; word-break: keep-all; }
 
-/* 작성/복기 폼 공통 */
-.td-form, .td-review-form { padding: 18px 20px; }
+/* 작성 폼 */
+.td-form { padding: 18px 20px; }
 .td-form-title { font-size: 14px; font-weight: 900; color: var(--ink); margin: 0 0 14px; word-break: keep-all; }
 .td-field { margin-bottom: 14px; }
 .td-field-label { display: block; font-size: 12px; font-weight: 900; color: var(--muted); margin-bottom: 8px; }
@@ -346,17 +304,6 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 }
 .td-save-btn:hover { opacity: 0.92; transform: translateY(-1px); }
 .td-form-hint { margin: 10px 0 0; text-align: center; font-size: 11px; font-weight: 700; color: var(--faint); }
-
-/* 복기 */
-.td-review-actual { font-size: 13px; font-weight: 800; color: var(--muted); margin-bottom: 10px; }
-.td-review-textarea {
-  width: 100%; min-height: 84px; padding: 12px 14px; border-radius: var(--radius);
-  border: 1px solid var(--glass-border); background: var(--surface-soft); color: var(--ink);
-  font-size: 13px; font-weight: 700; line-height: 1.6; outline: none; resize: vertical;
-  box-sizing: border-box; font-family: inherit; transition: border-color 0.18s;
-}
-.td-review-textarea:focus { border-color: var(--accent); }
-.td-review-empty { padding: 28px 12px; text-align: center; font-size: 14px; font-weight: 800; color: var(--muted); }
 
 /* 색상 */
 .is-up { color: #e3344f; }

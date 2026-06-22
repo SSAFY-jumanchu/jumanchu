@@ -1,8 +1,10 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useCopy } from '../composables/useCopy'
 
 const router = useRouter()
+const { t } = useCopy()
 
 // ===== 보유 종목 (재무 30% · 성장 40% · 궁합 30%) =====
 const holdings = [
@@ -190,15 +192,15 @@ const scoreCards = computed(() => [
 
     <!-- 헤더 -->
     <header class="lt-header">
-      <h1>장투 페이지</h1>
-      <p class="lt-sub">내가 산 종목, 계속 들고 갈 만한가요? — 재무 30% · 성장 40% · 궁합 30% 가중으로 점검해드려요.</p>
+      <h1>{{ t('lt.title', '장투 페이지') }}</h1>
+      <p class="lt-sub">{{ t('lt.sub', '내가 산 종목, 계속 들고 갈 만한가요? — 재무 30% · 성장 40% · 궁합 30% 가중으로 점검해드려요.') }}</p>
     </header>
 
     <div class="lt-grid">
 
       <!-- ===== 좌: 보유 종목 ===== -->
       <aside class="panel lt-list" aria-label="보유 종목">
-        <p class="lt-list-title">보유 종목</p>
+        <p class="lt-list-title">{{ t('lt.list.title', '보유 종목') }}</p>
         <button
           v-for="(h, i) in holdings"
           :key="h.code"
@@ -237,7 +239,7 @@ const scoreCards = computed(() => [
             <p class="lt-ov-summary">🐤 {{ s.summary }}</p>
           </div>
           <button class="lt-ov-go" type="button" @click="router.push(`/stocks/${s.code}`)">
-            종목 상세 →
+            {{ t('lt.overview.go', '종목 상세 →') }}
           </button>
         </section>
 
@@ -245,7 +247,7 @@ const scoreCards = computed(() => [
         <div class="lt-score-row">
           <div v-for="card in scoreCards" :key="card.name" class="panel lt-score-card">
             <div class="lt-score-top">
-              <span class="lt-score-name">{{ card.name }} <span class="lt-weight">{{ card.weight }}</span></span>
+              <span class="lt-score-name">{{ t('lt.score.' + card.name, card.name) }} <span class="lt-weight">{{ card.weight }}</span></span>
               <strong class="lt-score-num">{{ card.score }}</strong>
             </div>
             <div class="lt-score-bar"><div :style="{ width: card.score + '%' }"></div></div>
@@ -262,11 +264,11 @@ const scoreCards = computed(() => [
         <!-- 매매일지 + 점수 히스토리 -->
         <div class="lt-mid-row">
           <section class="panel lt-card">
-            <p class="lt-card-title">📒 이 종목 매매일지</p>
+            <p class="lt-card-title">{{ t('lt.journal.title', '📒 이 종목 매매일지') }}</p>
             <div class="lt-journal-list">
               <div v-for="(j, i) in s.journal" :key="i" class="lt-journal-item">
                 <div class="lt-j-head">
-                  <span class="lt-j-side" :class="j.side">{{ j.side === 'buy' ? '매수' : '매도' }}</span>
+                  <span class="lt-j-side" :class="j.side">{{ j.side === 'buy' ? t('lt.side.buy', '매수') : t('lt.side.sell', '매도') }}</span>
                   <span class="lt-j-date">{{ j.date }}</span>
                 </div>
                 <p class="lt-j-note">{{ j.note }}</p>
@@ -275,7 +277,7 @@ const scoreCards = computed(() => [
           </section>
 
           <section class="panel lt-card">
-            <p class="lt-card-title">📈 장투 점수 히스토리</p>
+            <p class="lt-card-title">{{ t('lt.history.title', '📈 장투 점수 히스토리') }}</p>
             <div class="lt-history-list">
               <div v-for="(hi, i) in s.history" :key="hi.month" class="lt-history-row">
                 <span class="lt-h-month">{{ hi.month }}</span>
@@ -290,7 +292,7 @@ const scoreCards = computed(() => [
 
         <!-- 종목 관련 뉴스 -->
         <section class="panel lt-card">
-          <p class="lt-card-title">📰 종목 관련 뉴스</p>
+          <p class="lt-card-title">{{ t('lt.news.title', '📰 종목 관련 뉴스') }}</p>
           <div class="lt-news-list">
             <article v-for="(n, i) in s.news" :key="i" class="lt-news-item">
               <strong class="lt-news-headline">{{ n.headline }}</strong>

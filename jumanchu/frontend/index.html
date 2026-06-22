@@ -17,6 +17,9 @@
           ? saved
           : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
         document.documentElement.setAttribute('data-theme', theme)
+        // 연애모드(장기연애 컨셉) — 저장값 없으면 normal(기본 주식 서비스)
+        var mode = localStorage.getItem('jmc_mode') === 'dating' ? 'dating' : 'normal'
+        document.documentElement.setAttribute('data-mode', mode)
       })()
     </script>
   </head>

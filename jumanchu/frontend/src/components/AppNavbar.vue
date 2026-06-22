@@ -3,20 +3,24 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
+import { useModeStore } from '../stores/mode'
+import { useCopy } from '../composables/useCopy'
 
 const navItems = [
-  { to: '/', label: '홈' },
-  { to: '/community', label: '커뮤니티' },
-  { to: '/stocks', label: '주식 조회' },
-  { to: '/holdings', label: '보유 종목' },
-  { to: '/trading-diary', label: '매매일기' },
-  { to: '/portfolio', label: '장투 케어' },
+  { to: '/', key: 'home', label: '홈' },
+  { to: '/community', key: 'community', label: '커뮤니티' },
+  { to: '/stocks', key: 'stocks', label: '주식 조회' },
+  { to: '/holdings', key: 'holdings', label: '보유 종목' },
+  { to: '/trading-diary', key: 'diary', label: '매매일기' },
+  { to: '/portfolio', key: 'portfolio', label: '장투 케어' },
 ]
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const theme = useThemeStore()
+const mode = useModeStore()
+const { t } = useCopy()
 
 // 비로그인 홈에는 풀스크린 배너가 네비 뒤로 깔린다 → 최상단에선 글자를 흰색으로
 const overBanner = computed(() => route.name === 'home' && !auth.isAuthenticated)
@@ -84,7 +88,7 @@ async function handleLogout() {
             active-class="is-active"
             exact-active-class="is-active"
           >
-            {{ item.label }}
+            {{ t('nav.' + item.key, item.label) }}
           </RouterLink>
         </nav>
 
@@ -94,6 +98,19 @@ async function handleLogout() {
             <span class="user-welcome">환영합니다 <strong>{{ user.name }}</strong></span>
           </div>
           <div class="user-actions">
+            <button
+              class="mode-toggle"
+              type="button"
+              role="switch"
+              :aria-checked="mode.isDating"
+              :aria-label="mode.isDating ? '기본 모드로 전환' : '연애 모드로 전환'"
+              :title="mode.isDating ? '기본 모드로 전환' : '연애 모드로 전환'"
+              @click="mode.toggle()"
+            >
+              <span class="mode-toggle-track" :class="{ 'is-dating': mode.isDating }">
+                <span class="mode-toggle-thumb">{{ mode.isDating ? '💝' : '📈' }}</span>
+              </span>
+            </button>
             <button
               class="theme-toggle"
               type="button"
@@ -313,6 +330,51 @@ async function handleLogout() {
   display: inline-flex;
   align-items: center;
   margin-right: 4px;
+}
+
+/* 연애모드 토글 — 테마 토글과 동일 패턴, 활성 시 로즈 트랙 */
+.mode-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
+.mode-toggle-track {
+  width: 52px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--surface-soft);
+  box-shadow: var(--glass-inset);
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  transition: background 0.25s ease;
+}
+
+.mode-toggle-track.is-dating {
+  background: rgba(236, 77, 126, 0.18);
+}
+
+.mode-toggle-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--glass-strong);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  transition: transform 0.25s ease;
+}
+
+.mode-toggle-track.is-dating .mode-toggle-thumb {
+  transform: translateX(24px);
 }
 
 .theme-toggle-track {

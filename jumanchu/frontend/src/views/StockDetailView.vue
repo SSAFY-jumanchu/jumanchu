@@ -1,8 +1,10 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useCopy } from '../composables/useCopy'
 
 const router = useRouter()
+const { t } = useCopy()
 
 // 초기값은 와이어프레임 목업(삼성전자) — onMounted에서 실데이터로 교체
 const stock = ref({
@@ -337,7 +339,7 @@ function fmtCompact(v) {
           <div class="sd-name-price">
             <h1>{{ stock.name }}</h1>
             <span class="sd-code">{{ stock.code }}</span>
-            <button class="watch-toggle-btn">☆ 관심종목 추가</button>
+            <button class="watch-toggle-btn">{{ t('sd.watch', '☆ 관심종목 추가') }}</button>
           </div>
           <div class="sd-price-row">
             <strong class="sd-price">₩{{ fmt(stock.price) }}</strong>
@@ -470,7 +472,7 @@ function fmtCompact(v) {
           <div class="community-head">
             <div>
               <p class="eyebrow">Community</p>
-              <h3>종목토론방</h3>
+              <h3>{{ t('sd.community.title', '종목토론방') }}</h3>
             </div>
             <button class="text-btn">전체보기 ›</button>
           </div>
@@ -835,7 +837,7 @@ function fmtCompact(v) {
             <div class="comm-stock-change" :class="change >= 0 ? 'is-up' : 'is-down'">
               ▲ {{ fmt(Math.abs(change)) }} ({{ change >= 0 ? '+' : '' }}{{ changeRate.toFixed(2) }}%)
             </div>
-            <button class="comm-stock-btn" type="button" @click="selectedTab = '종목 홈'">종목 상세 보기 →</button>
+            <button class="comm-stock-btn" type="button" @click="selectedTab = '종목 홈'">{{ t('sd.comm.detailBtn', '종목 상세 보기 →') }}</button>
           </div>
 
           <div class="panel comm-popular">

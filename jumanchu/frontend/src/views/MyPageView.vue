@@ -1,5 +1,8 @@
 <script setup>
 import { ref, computed, reactive } from 'vue'
+import { useCopy } from '../composables/useCopy'
+
+const { t } = useCopy()
 
 const activeSection = ref('invest')
 
@@ -135,7 +138,7 @@ const isEditingInfo = ref(false)
             :class="{ active: activeSection === tab.key }"
             @click="activeSection = tab.key"
           >
-            {{ tab.label }}
+            {{ t('mp.tab.' + tab.key, tab.label) }}
           </li>
         </ul>
       </aside>
@@ -160,7 +163,7 @@ const isEditingInfo = ref(false)
 
             <!-- 수익분석 -->
             <div class="acc-analysis">
-              <div class="acc-label">수익분석</div>
+              <div class="acc-label">{{ t('mp.invest.analysis', '수익분석') }}</div>
               <div class="analysis-bars">
                 <div v-for="m in monthlyReturns" :key="m.label" class="ab-col">
                   <div class="ab-bar-wrap">
@@ -200,7 +203,7 @@ const isEditingInfo = ref(false)
 
           <!-- Holdings Summary -->
           <div class="panel acc-holdings-card">
-            <div class="acc-label">보유 종목 현황</div>
+            <div class="acc-label">{{ t('mp.invest.holdings', '보유 종목 현황') }}</div>
             <div class="holdings-list">
               <div v-for="h in holdings" :key="h.name" class="holding-row">
                 <div class="hr-dot" :style="{ background: h.color }"></div>
@@ -216,7 +219,7 @@ const isEditingInfo = ref(false)
 
         <!-- 내 거래 내역 -->
         <div class="section-header">
-          <h2>내 거래 내역</h2>
+          <h2>{{ t('mp.invest.trades', '내 거래 내역') }}</h2>
           <div class="trade-filter-tabs">
             <button
               v-for="f in [{k:'all',l:'전체'},{k:'buy',l:'매수'},{k:'sell',l:'매도'}]"
@@ -300,7 +303,7 @@ const isEditingInfo = ref(false)
         <div class="info-grid">
           <!-- Invest Type Card -->
           <div class="panel info-card">
-            <div class="info-card-title">투자 성향</div>
+            <div class="info-card-title">{{ t('mp.profile.investType', '투자 성향') }}</div>
             <div class="invest-type-badge">{{ user.investType }}</div>
             <p class="invest-desc">안정성을 추구하면서 꾸준한 성장을 원하는 투자 유형이에요. 배당주와 우량 성장주를 균형 있게 담는 것을 권장해요.</p>
             <div class="invest-bars">
@@ -308,7 +311,7 @@ const isEditingInfo = ref(false)
               <div class="ib-row"><span>성장성</span><div class="ib-track"><div class="ib-fill" style="width:78%; background:var(--purple)"></div></div><span>78</span></div>
               <div class="ib-row"><span>리스크허용</span><div class="ib-track"><div class="ib-fill" style="width:45%; background:#22c55e"></div></div><span>45</span></div>
             </div>
-            <button class="retest-btn">투자 성향 재검사</button>
+            <button class="retest-btn">{{ t('mp.profile.retest', '투자 성향 재검사') }}</button>
           </div>
 
           <!-- Personal Info Card -->
@@ -363,7 +366,7 @@ const isEditingInfo = ref(false)
 
           <!-- Community Profile Card -->
           <div class="panel info-card span2">
-            <div class="info-card-title">커뮤니티 프로필</div>
+            <div class="info-card-title">{{ t('mp.profile.community', '커뮤니티 프로필') }}</div>
             <div class="community-profile">
               <div class="cp-avatar">김</div>
               <div class="cp-details">
@@ -389,7 +392,7 @@ const isEditingInfo = ref(false)
           <div class="activity-main">
             <!-- Posts -->
             <div class="panel act-block">
-              <div class="act-block-title">작성한 글 ({{ myPosts.length }})</div>
+              <div class="act-block-title">{{ t('mp.act.posts', '작성한 글') }} ({{ myPosts.length }})</div>
               <div class="post-list">
                 <div v-for="post in myPosts" :key="post.id" class="post-item">
                   <div class="post-item-left">

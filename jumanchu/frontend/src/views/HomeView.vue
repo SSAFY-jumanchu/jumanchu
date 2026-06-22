@@ -3,12 +3,14 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import SparklineChart from '../components/SparklineChart.vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useCopy } from '../composables/useCopy'
 import logoWall from '../../0621ref/q.png'
 import notebookBg from '../../0621ref/2.png'
 import aiHandImg from '../../0621ref/3.jpg'
 
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useCopy()
 
 // 비로그인 랜딩 배너 캐러셀 (5초 자동 슬라이드)
 const slides = [
@@ -409,8 +411,8 @@ const watchlistNews = [
       <section class="panel goal-panel" aria-label="자산 현황 및 목표">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">나의 자산</p>
-            <h2>자산 현황</h2>
+            <p class="eyebrow">{{ t('home.asset.eyebrow', '나의 자산') }}</p>
+            <h2>{{ t('home.asset.title', '자산 현황') }}</h2>
           </div>
           <button class="hide-amount-btn" type="button" @click="hideAmount = !hideAmount">
             👁 {{ hideAmount ? '금액 보기' : '금액 숨기기' }}
@@ -420,11 +422,11 @@ const watchlistNews = [
         <!-- 총 평가액 -->
         <div class="asset-summary">
           <div class="asset-total">
-            <span class="asset-total-label">총 평가액</span>
+            <span class="asset-total-label">{{ t('home.asset.total', '총 평가액') }}</span>
             <strong class="asset-total-value">{{ hideAmount ? '••••••••' : fmt(totalAsset) + '원' }}</strong>
           </div>
           <div class="asset-return">
-            <span class="asset-return-label">총 수익률</span>
+            <span class="asset-return-label">{{ t('home.asset.return', '총 수익률') }}</span>
             <strong class="asset-return-value" :class="totalReturn >= 0 ? 'is-up' : 'is-down'">
               {{ totalReturn >= 0 ? '+' : '' }}{{ totalReturn }}%
             </strong>
@@ -468,16 +470,16 @@ const watchlistNews = [
           <button class="asset-action-card" type="button" @click="router.push('/trading-diary')">
             <span class="aac-icon">📓</span>
             <span class="aac-body">
-              <strong>투자 일기 쓰러 가기</strong>
-              <small>작성 대기 1건 (매매 후 미작성)</small>
+              <strong>{{ t('home.action.diary', '투자 일기 쓰러 가기') }}</strong>
+              <small>{{ t('home.action.diary.sub', '작성 대기 1건 (매매 후 미작성)') }}</small>
             </span>
             <span class="aac-arrow">→</span>
           </button>
           <button class="asset-action-card" type="button" @click="router.push('/portfolio')">
             <span class="aac-icon">🩺</span>
             <span class="aac-body">
-              <strong>장투 점검하기</strong>
-              <small>내 종목 지금 점검해보세요</small>
+              <strong>{{ t('home.action.care.title', '장투 점검하기') }}</strong>
+              <small>{{ t('home.action.care.desc', '내 종목 지금 점검해보세요') }}</small>
             </span>
             <span class="aac-arrow">→</span>
           </button>
@@ -486,7 +488,7 @@ const watchlistNews = [
         <!-- 보유 종목 뉴스 -->
         <div class="asset-news">
           <div class="asset-news-head">
-            <span class="asset-news-label">📰 보유 종목 뉴스</span>
+            <span class="asset-news-label">{{ t('home.asset.news', '📰 보유 종목 뉴스') }}</span>
             <span class="asset-news-nav">← → 넘기기</span>
           </div>
           <article v-for="n in holdingNewsList" :key="n.title" class="asset-news-item">
@@ -499,9 +501,9 @@ const watchlistNews = [
       <!-- 오른쪽: 궁합 추천 스와이프 -->
       <section class="panel swipe-recommend-panel" aria-label="궁합 추천">
         <div class="match-header">
-          <h2 class="match-title">오늘의 궁합 추천 💝</h2>
-          <p class="match-sub">당신의 투자 성향과 잘 맞는 종목이에요. 넘기면서 관심 종목을 골라보세요.</p>
-          <span class="match-count">추천 {{ matchIndex + 1 }} / {{ matchStocks.length }}</span>
+          <h2 class="match-title">{{ t('home.match.title', '오늘의 추천 종목') }}</h2>
+          <p class="match-sub">{{ t('home.match.sub', '투자 성향에 맞는 종목이에요. 넘기면서 관심 종목을 골라보세요.') }}</p>
+          <span class="match-count">{{ t('home.match.count', '추천') }} {{ matchIndex + 1 }} / {{ matchStocks.length }}</span>
         </div>
 
         <div class="deck-wrap">
@@ -561,7 +563,7 @@ const watchlistNews = [
             </div>
 
             <div class="mc-reason">🐤 성장 선호와 {{ current.sector }} 모멘텀(성장 {{ current.dna[1].value }})이 맞아요.</div>
-            <div class="mc-interest">❤️ {{ current.interest.toLocaleString('ko-KR') }}명이 이 종목에 관심 있어요</div>
+            <div class="mc-interest">❤️ {{ current.interest.toLocaleString('ko-KR') }}{{ t('home.match.interest', '명이 이 종목에 관심 있어요') }}</div>
           </article>
         </div>
 
@@ -756,8 +758,8 @@ const watchlistNews = [
       <section class="panel news-panel" aria-label="관심 종목 뉴스">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">내 관심 종목 소식</p>
-            <h2>관심 종목 뉴스</h2>
+            <p class="eyebrow">{{ t('home.watch.eyebrow', '내 관심 종목 소식') }}</p>
+            <h2>{{ t('home.watch.title', '관심 종목 뉴스') }}</h2>
           </div>
           <button class="more-btn">더보기 →</button>
         </div>
@@ -782,8 +784,8 @@ const watchlistNews = [
       <section class="panel bottom-panel" aria-label="보유 종목">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">내 포트폴리오</p>
-            <h2>보유 종목</h2>
+            <p class="eyebrow">{{ t('home.holdings.eyebrow', '내 포트폴리오') }}</p>
+            <h2>{{ t('home.holdings.title', '보유 종목') }}</h2>
           </div>
           <button class="more-btn" @click="router.push('/holdings')">더보기 →</button>
         </div>
@@ -807,8 +809,8 @@ const watchlistNews = [
       <section class="panel bottom-panel" aria-label="매매 일기">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">나의 투자 기록</p>
-            <h2>매매 일기</h2>
+            <p class="eyebrow">{{ t('home.diary.eyebrow', '나의 투자 기록') }}</p>
+            <h2>{{ t('home.diary.title', '매매 일기') }}</h2>
           </div>
           <button class="more-btn" @click="router.push('/trading-diary')">더보기 →</button>
         </div>
@@ -824,7 +826,7 @@ const watchlistNews = [
             <div class="diary-title">{{ d.title }}</div>
           </div>
         </div>
-        <button class="diary-write-btn" @click="router.push('/trading-diary')">+ 오늘 일지 작성</button>
+        <button class="diary-write-btn" @click="router.push('/trading-diary')">{{ t('home.diary.write', '+ 오늘 일지 작성') }}</button>
       </section>
 
     </div>

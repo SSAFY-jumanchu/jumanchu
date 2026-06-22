@@ -2,9 +2,11 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useCopy } from '../composables/useCopy'
 
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useCopy()
 
 // ===== Step 0: 섹터 & 보유기간 =====
 const sectors = [
@@ -53,7 +55,7 @@ const questions = [
   {
     id: 'q3',
     label: '손실 허용 범위',
-    desc: '허용 가능한 손실 범위를 선택해주세요.',
+    desc: '이 관계에서, 어디까지 흔들려도 괜찮으신가요?',
     options: [
       { score: 1, title: '10% 미만도 불안함', desc: '원금 손실은 절대 용납하기 어렵습니다.' },
       { score: 3, title: '10~20% 수준', desc: '단기 손실은 수용하나 장기 회복이 필요합니다.' },
@@ -167,25 +169,25 @@ function displayScore(q, score) {
     <div v-if="step === 7" class="ob-result-wrap">
       <div class="panel ob-result-card">
         <div class="result-emoji">{{ riskResult.emoji }}</div>
-        <p class="eyebrow" style="text-align:center;">투자 성향 분석 완료</p>
-        <h2 class="result-title" :style="{ color: riskResult.colorVar }">{{ riskResult.label }}</h2>
-        <p class="result-score">종합 점수 <strong>{{ accumulatedScore }}점</strong></p>
-        <p class="result-desc">{{ riskResult.desc }}</p>
+        <p class="eyebrow" style="text-align:center;">{{ t('ob.result.eyebrow', '투자 성향 분석 완료') }}</p>
+        <h2 class="result-title" :style="{ color: riskResult.colorVar }">{{ t(`ob.risk.${riskResult.label}.name`, riskResult.label) }}</h2>
+        <p class="result-score">{{ t('ob.result.scoreLabel', '종합 점수') }} <strong>{{ accumulatedScore }}점</strong></p>
+        <p class="result-desc">{{ t(`ob.risk.${riskResult.label}.desc`, riskResult.desc) }}</p>
 
         <div class="result-profile">
           <div class="result-profile-row">
-            <span class="result-profile-key">관심 섹터</span>
+            <span class="result-profile-key">{{ t('ob.result.sectorKey', '관심 섹터') }}</span>
             <div class="result-chips">
               <span v-for="s in selectedSectors" :key="s" class="result-chip">{{ s }}</span>
             </div>
           </div>
           <div class="result-profile-row">
-            <span class="result-profile-key">선호 보유 기간</span>
+            <span class="result-profile-key">{{ t('ob.result.periodKey', '선호 보유 기간') }}</span>
             <strong class="result-profile-val">{{ periods.find(p => p.value === selectedPeriod)?.label ?? '-' }}</strong>
           </div>
         </div>
 
-        <button class="primary-btn" :disabled="finishing" @click="finish">{{ finishing ? '저장 중…' : '주만추 시작하기 🎉' }}</button>
+        <button class="primary-btn" :disabled="finishing" @click="finish">{{ finishing ? t('ob.finish.loading', '저장 중…') : t('ob.finish.go', '주만추 시작하기 🎉') }}</button>
       </div>
     </div>
 
@@ -194,7 +196,7 @@ function displayScore(q, score) {
 
       <!-- 헤더 -->
       <div class="ob-page-header">
-        <h1 class="ob-page-title">나의 투자 DNA 분석하기</h1>
+        <h1 class="ob-page-title">{{ t('ob.pageTitle', '나의 투자 DNA 분석하기') }}</h1>
       </div>
 
       <!-- 진행 바 -->
@@ -202,8 +204,8 @@ function displayScore(q, score) {
         <div class="ob-progress-fill" :style="{ width: `${(step / 6) * 100}%` }"></div>
       </div>
       <div class="ob-step-indicator">
-        <span>{{ step === 0 ? '사전 설정' : `문항 ${step} / 6` }}</span>
-        <span v-if="step >= 1" class="ob-score-inline">누적 점수 {{ accumulatedScore }}점</span>
+        <span>{{ step === 0 ? t('ob.step.intro', '사전 설정') : `문항 ${step} / 6` }}</span>
+        <span v-if="step >= 1" class="ob-score-inline">{{ t('ob.scoreInline', '누적 점수') }} {{ accumulatedScore }}점</span>
       </div>
 
       <!-- 카드 -->
@@ -212,15 +214,15 @@ function displayScore(q, score) {
         <!-- Step 0: 섹터 & 기간 -->
         <div v-if="step === 0">
           <div class="ob-card-head">
-            <span class="ob-tag">사전 설정</span>
-            <h2 class="ob-card-title">관심 섹터 &amp; 선호 보유 기간</h2>
-            <p class="ob-card-desc">주만님과 잘 맞는 주식을 추천해드리기 위한 과정이에요. 관심 섹터와 선호 보유기간을 선택해주세요.</p>
+            <span class="ob-tag">{{ t('ob.step.intro', '사전 설정') }}</span>
+            <h2 class="ob-card-title">{{ t('ob.s0.title', '관심 섹터 & 선호 보유 기간') }}</h2>
+            <p class="ob-card-desc">{{ t('ob.s0.desc', '주만님과 잘 맞는 주식을 추천해드리기 위한 과정이에요. 관심 섹터와 선호 보유기간을 선택해주세요.') }}</p>
           </div>
 
           <div class="ob-section">
             <p class="ob-section-label">
-              관심 섹터
-              <span class="ob-hint">복수 선택 가능</span>
+              {{ t('ob.s0.sectorLabel', '관심 섹터') }}
+              <span class="ob-hint">{{ t('ob.s0.sectorHint', '복수 선택 가능') }}</span>
             </p>
             <div class="sector-chips">
               <button
@@ -238,8 +240,8 @@ function displayScore(q, score) {
 
           <div class="ob-section">
             <p class="ob-section-label">
-              선호 보유 기간
-              <span class="ob-hint">단일 선택</span>
+              {{ t('ob.s0.periodLabel', '선호 보유 기간') }}
+              <span class="ob-hint">{{ t('ob.s0.periodHint', '단일 선택') }}</span>
             </p>
             <div class="period-chips">
               <button
@@ -265,8 +267,8 @@ function displayScore(q, score) {
                 {{ accumulatedScore }}<small>점</small>
               </div>
             </div>
-            <h2 class="ob-card-title">{{ currentQuestion.label }}</h2>
-            <p class="ob-card-desc">{{ currentQuestion.desc }}</p>
+            <h2 class="ob-card-title">{{ t(`ob.${currentQuestion.id}.label`, currentQuestion.label) }}</h2>
+            <p class="ob-card-desc">{{ t(`ob.${currentQuestion.id}.desc`, currentQuestion.desc) }}</p>
           </div>
 
           <div class="ob-options">
@@ -282,14 +284,14 @@ function displayScore(q, score) {
                 {{ displayScore(currentQuestion, opt.score) }}<small>점</small>
               </div>
               <div class="ob-option-body">
-                <strong class="ob-option-title">{{ opt.title }}</strong>
-                <p class="ob-option-desc">{{ opt.desc }}</p>
+                <strong class="ob-option-title">{{ t(`ob.${currentQuestion.id}.opt${opt.score}.title`, opt.title) }}</strong>
+                <p class="ob-option-desc">{{ t(`ob.${currentQuestion.id}.opt${opt.score}.desc`, opt.desc) }}</p>
               </div>
             </button>
           </div>
 
           <p v-if="currentQuestion.weighted" class="ob-weighted-note">
-            ⚖️ 이 문항은 가중치 2배가 적용됩니다.
+            {{ t('ob.weightedNote', '⚖️ 이 문항은 가중치 2배가 적용됩니다.') }}
           </p>
         </div>
       </div>
@@ -303,7 +305,7 @@ function displayScore(q, score) {
           :disabled="!canProceed"
           @click="next"
         >
-          {{ step === 6 ? '결과 확인' : '다음' }}
+          {{ step === 6 ? t('ob.nav.result', '결과 확인') : t('ob.nav.next', '다음') }}
         </button>
       </div>
     </div>
