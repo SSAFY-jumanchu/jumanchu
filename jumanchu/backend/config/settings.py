@@ -32,6 +32,9 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+# 장투 케어 AI 리포트용 GMS(SSAFY) GPT-4o 키 (.env의 GMS_API_KEY)
+GMS_API_KEY = os.environ.get('GMS_API_KEY', '')
+
 
 # Application definition
 

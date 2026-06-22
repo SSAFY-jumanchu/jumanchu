@@ -74,3 +74,56 @@ class RecommendSwipeView(APIView):
                             status=status.HTTP_409_CONFLICT)
         body = {'items': cards, 'total': len(cards), 'generated_at': timezone.now()}
         return Response(s.SwipeRecommendResponseSerializer(body).data)
+
+
+@extend_schema(tags=['Recommend'])
+class LongTermReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary='장투 케어 AI 리포트 (보유 종목 1개, LLM·캐시 TTL 1일)',
+        parameters=[OpenApiParameter('refresh', int, required=False,
+                                     description='1이면 캐시 무시·재생성')],
+    )
+    def get(self, request, code):
+        refresh = request.query_params.get('refresh') == '1'
+        try:
+            data = services.longterm_report(request.user, code, force=refresh)
+        except services.StockNotFound:
+            return Response({'detail': '해당 종목을 찾을 수 없습니다.'},
+                            status=status.HTTP_404_NOT_FOUND)
+        except ValueError as exc:  # GMS_API_KEY 없음 등
+            return Response({'detail': str(exc)},
+                            status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response(data)
+
+
+@extend_schema(tags=['Recommend'])
+class LongTermRankingView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary='개인별 장투 랭킹 (소계70% + 궁합30%, on-demand)',
+        parameters=[
+            OpenApiParameter('limit', int, required=False, description='기본 30, 최대 100'),
+            OpenApiParameter('offset', int, required=False, description='기본 0'),
+        ],
+    )
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get('limit', 30))
+        except (TypeError, ValueError):
+            limit = 30
+        limit = max(1, min(limit, 100))
+        try:
+            offset = max(0, int(request.query_params.get('offset', 0)))
+        except (TypeError, ValueError):
+            offset = 0
+        try:
+            items = services.longterm_ranking(request.user, limit=limit, offset=offset)
+        except services.OnboardingRequired:
+            return Response({'detail': '온보딩을 먼저 완료해주세요.'},
+                            status=status.HTTP_409_CONFLICT)
+        body = {'items': items, 'total': len(items), 'limit': limit, 'offset': offset,
+                'generated_at': timezone.now()}
+        return Response(body)
