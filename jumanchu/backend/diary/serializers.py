@@ -14,7 +14,7 @@ class StockDiarySerializer(serializers.ModelSerializer):
         model = StockDiary
         fields = ['id', 'stock_code', 'stock_name', 'order_id', 'action_type',
                   'reason_category', 'confidence', 'target_price',
-                  'stop_loss_price', 'diary_date']
+                  'stop_loss_price', 'memo', 'created_at', 'updated_at']
 
 
 class StockDiaryWriteSerializer(serializers.Serializer):
@@ -33,7 +33,7 @@ class StockDiaryWriteSerializer(serializers.Serializer):
     stop_loss_price = serializers.DecimalField(
         max_digits=18, decimal_places=4, required=False, allow_null=True
     )
-    diary_date = serializers.DateField()
+    memo = serializers.CharField(required=False, allow_blank=True)
 
 
 class DiaryListResponseSerializer(serializers.Serializer):

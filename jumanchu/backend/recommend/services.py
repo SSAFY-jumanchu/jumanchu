@@ -2,8 +2,8 @@
 
 현재가는 stocks의 KIS 경로(fetch_price)로 보강하되, 한 종목 조회가 실패해도
 목록 전체를 막지 않고 그 항목의 가격만 None으로 둔다(브라우징 UX 우선).
-장투 재검증용 스냅샷 필드(base_pbr/base_match_score/last_review_status)는
-이번 범위 밖이라 비워둔다.
+장투 재검증(🟢🟡🔴)은 보유(Holding) 기준으로 이동 — portfolio.services.review_holding.
+여기 UserLikedStock은 단순 북마크다.
 """
 from __future__ import annotations
 

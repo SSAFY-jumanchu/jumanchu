@@ -21,6 +21,11 @@ class Account(models.Model):
 
 
 class Holding(models.Model):
+    class ReviewStatus(models.TextChoices):
+        GREEN = "GREEN", "양호"
+        YELLOW = "YELLOW", "주의"
+        RED = "RED", "위험"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="holdings"
     )
@@ -28,6 +33,17 @@ class Holding(models.Model):
     quantity = models.PositiveIntegerField(default=0)
     average_price = models.DecimalField(max_digits=18, decimal_places=4, default=0)
     first_acquired_at = models.DateTimeField(auto_now_add=True)
+    # 장투 재검증 스냅샷 — 최초 매수 시점 기준점 (±30% PBR / 궁합 변화 계산용)
+    base_pbr = models.DecimalField(
+        max_digits=10, decimal_places=4, null=True, blank=True,
+        help_text="최초 매수 시점 PBR (재검증 ±30% 기준)",
+    )
+    base_match_score = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="최초 매수 시점 궁합 점수",
+    )
+    last_review_status = models.CharField(max_length=8, choices=ReviewStatus.choices, blank=True)
+    last_reviewed_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

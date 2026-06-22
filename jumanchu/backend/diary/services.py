@@ -24,7 +24,7 @@ _WRITABLE = [
     "confidence",
     "target_price",
     "stop_loss_price",
-    "diary_date",
+    "memo",
 ]
 
 
@@ -57,7 +57,7 @@ def create_diary(user, data: dict) -> StockDiary:
         confidence=data["confidence"],
         target_price=data.get("target_price"),
         stop_loss_price=data.get("stop_loss_price"),
-        diary_date=data["diary_date"],
+        memo=data.get("memo", ""),
     )
 
 
