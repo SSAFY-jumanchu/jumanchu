@@ -196,13 +196,18 @@ Table account {                 // [기존] portfolio_account (1:1 user, 가상�
   updated_at datetime
 }
 
-Table holding {                 // [기존] portfolio_holding
+Table holding {                 // [기존+수정] portfolio_holding — 장투 재검증 기준점을 여기로
   id integer [pk]
   user_id integer
   stock_id integer
   quantity integer
   average_price decimal
   first_acquired_at datetime
+  base_pbr decimal              [note: '신규: 최초 매수 시점 PBR (재검증 ±30% 기준)']
+  base_match_score decimal      [note: '신규: 최초 매수 시점 궁합']
+  last_review_status varchar    [note: '신규: GREEN/YELLOW/RED (보유 기준 월 재검증)']
+  last_reviewed_at datetime     [note: '신규']
+  updated_at datetime
   indexes {
     (user_id, stock_id) [unique]
   }
@@ -236,7 +241,9 @@ Table stock_diary {             // [기존] diary_stockdiary
   confidence smallint           [note: '1~5 (별점 선택형)']
   target_price decimal          [note: 'nullable, 목표가(목표% → 매수가 환산)']
   stop_loss_price decimal       [note: 'nullable, 손절가']
-  diary_date date
+  memo text                     [note: '신규: 선택 입력 자유 서술']
+  created_at datetime           [note: '신규: diary_date 대체']
+  updated_at datetime           [note: '신규']
 }
 
 Table diary_review {            // [기존] diary_diaryreview (1:1 diary)
@@ -265,16 +272,12 @@ Table recommendation_cache {    // [신규] 추천 결과 저장소 (궁합 + �
   }
 }
 
-Table user_liked_stock {        // [신규] 찜한 종목 (Like 시점 스냅샷)
+Table user_liked_stock {        // [신규] 찜한 종목 (단순 워치리스트 — 재검증은 holding으로 이동)
   id integer [pk]
   user_id integer
   stock_id integer
   liked_at datetime
-  base_pbr decimal              [note: 'Like 시점 PBR (재검증 ±30% 기준)']
-  base_match_score decimal      [note: 'Like 시점 궁합 (변화 ▲▼ 계산용)']
-  last_review_status varchar    [note: 'GREEN/YELLOW/RED']
-  last_reviewed_at datetime
-  is_active boolean
+  is_active boolean             [note: '소프트 삭제(찜 해제)']
   indexes {
     (user_id, stock_id) [unique]
   }
@@ -292,12 +295,9 @@ Table long_term_score {         // [신규] 종목 장투 점수 (종목 단위,
   }
 }
 
-Table long_term_score_history { // [선택] 장투 점수 이력 (30일 추세 카드용)
-  id integer [pk]
-  stock_id integer
-  total_score decimal
-  recorded_date date
-}
+// long_term_score_history(장투 점수 이력) — 제거됨.
+//   long_term_score가 (stock_id, calculated_date) 유니크로 이미 날짜별 시계열이라
+//   30일 추세는 long_term_score를 날짜 범위로 조회하면 됨 (중복 테이블 불필요).
 
 Table holding_milestone {       // [신규] 보유 기념일 (30/90/180/365일 스냅샷)
   id integer [pk]
@@ -402,7 +402,6 @@ Ref: recommendation_cache.stock_id > stock.id
 Ref: user_liked_stock.user_id > user.id
 Ref: user_liked_stock.stock_id > stock.id
 Ref: long_term_score.stock_id > stock.id
-Ref: long_term_score_history.stock_id > stock.id
 Ref: holding_milestone.user_id > user.id
 Ref: holding_milestone.stock_id > stock.id
 

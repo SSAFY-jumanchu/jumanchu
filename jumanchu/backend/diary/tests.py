@@ -41,20 +41,32 @@ class DiaryTests(TestCase):
         resp = self.client.post(
             reverse("diary-list-create"),
             {"stock_code": "A0001", "action_type": "WATCH", "confidence": 4,
-             "reason_category": "UNDERVALUED", "diary_date": "2026-06-14"},
+             "reason_category": "UNDERVALUED"},
             format="json",
         )
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.data["action_type"], "WATCH")
         self.assertIsNone(resp.data["order_id"])
         self.assertEqual(resp.data["stock_code"], "A0001")
+        # diary_date 대신 시스템 타임스탬프가 채워진다
+        self.assertIsNotNone(resp.data["created_at"])
+
+    def test_create_with_optional_memo(self):
+        resp = self.client.post(
+            reverse("diary-list-create"),
+            {"stock_code": "A0001", "action_type": "WATCH", "confidence": 4,
+             "memo": "실적 발표 후 재진입 고민"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.data["memo"], "실적 발표 후 재진입 고민")
 
     def test_create_buy_with_own_order(self):
         order = _make_order(self.user, self.stock)
         resp = self.client.post(
             reverse("diary-list-create"),
             {"stock_code": "A0001", "order_id": order.id, "action_type": "BUY",
-             "confidence": 5, "diary_date": "2026-06-14"},
+             "confidence": 5},
             format="json",
         )
         self.assertEqual(resp.status_code, 201)
@@ -63,8 +75,7 @@ class DiaryTests(TestCase):
     def test_create_invalid_stock_404(self):
         resp = self.client.post(
             reverse("diary-list-create"),
-            {"stock_code": "ZZZZ", "action_type": "WATCH", "confidence": 3,
-             "diary_date": "2026-06-14"},
+            {"stock_code": "ZZZZ", "action_type": "WATCH", "confidence": 3},
             format="json",
         )
         self.assertEqual(resp.status_code, 404)
@@ -75,7 +86,7 @@ class DiaryTests(TestCase):
         resp = self.client.post(
             reverse("diary-list-create"),
             {"stock_code": "A0001", "order_id": others_order.id, "action_type": "BUY",
-             "confidence": 3, "diary_date": "2026-06-14"},
+             "confidence": 3},
             format="json",
         )
         self.assertEqual(resp.status_code, 400)
@@ -84,8 +95,7 @@ class DiaryTests(TestCase):
     def test_create_confidence_out_of_range_400(self):
         resp = self.client.post(
             reverse("diary-list-create"),
-            {"stock_code": "A0001", "action_type": "WATCH", "confidence": 6,
-             "diary_date": "2026-06-14"},
+            {"stock_code": "A0001", "action_type": "WATCH", "confidence": 6},
             format="json",
         )
         self.assertEqual(resp.status_code, 400)
@@ -93,11 +103,9 @@ class DiaryTests(TestCase):
     def test_list_filters_by_action_type(self):
         StockDiary.objects.create(
             user=self.user, stock=self.stock, action_type="BUY", confidence=4,
-            diary_date="2026-06-14",
         )
         StockDiary.objects.create(
             user=self.user, stock=self.stock, action_type="WATCH", confidence=2,
-            diary_date="2026-06-13",
         )
         resp = self.client.get(reverse("diary-list-create"), {"action_type": "BUY"})
         self.assertEqual(resp.status_code, 200)
@@ -108,7 +116,6 @@ class DiaryTests(TestCase):
         other = _make_user("other")
         StockDiary.objects.create(
             user=other, stock=self.stock, action_type="BUY", confidence=3,
-            diary_date="2026-06-14",
         )
         resp = self.client.get(reverse("diary-list-create"))
         self.assertEqual(resp.data["total"], 0)
@@ -116,7 +123,6 @@ class DiaryTests(TestCase):
     def test_detail_owned(self):
         diary = StockDiary.objects.create(
             user=self.user, stock=self.stock, action_type="BUY", confidence=4,
-            diary_date="2026-06-14",
         )
         resp = self.client.get(reverse("diary-detail", kwargs={"id": diary.id}))
         self.assertEqual(resp.status_code, 200)
@@ -126,7 +132,6 @@ class DiaryTests(TestCase):
         other = _make_user("other")
         diary = StockDiary.objects.create(
             user=other, stock=self.stock, action_type="BUY", confidence=4,
-            diary_date="2026-06-14",
         )
         resp = self.client.get(reverse("diary-detail", kwargs={"id": diary.id}))
         self.assertEqual(resp.status_code, 404)
@@ -134,7 +139,6 @@ class DiaryTests(TestCase):
     def test_update_patch(self):
         diary = StockDiary.objects.create(
             user=self.user, stock=self.stock, action_type="BUY", confidence=4,
-            diary_date="2026-06-14",
         )
         resp = self.client.patch(
             reverse("diary-detail", kwargs={"id": diary.id}),
@@ -150,7 +154,6 @@ class DiaryTests(TestCase):
         other = _make_user("other")
         diary = StockDiary.objects.create(
             user=other, stock=self.stock, action_type="BUY", confidence=4,
-            diary_date="2026-06-14",
         )
         resp = self.client.patch(
             reverse("diary-detail", kwargs={"id": diary.id}),
@@ -162,7 +165,6 @@ class DiaryTests(TestCase):
     def test_delete(self):
         diary = StockDiary.objects.create(
             user=self.user, stock=self.stock, action_type="BUY", confidence=4,
-            diary_date="2026-06-14",
         )
         resp = self.client.delete(reverse("diary-detail", kwargs={"id": diary.id}))
         self.assertEqual(resp.status_code, 204)

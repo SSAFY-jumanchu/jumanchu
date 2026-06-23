@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(BASE_DIR.parent / '.env')
+load_dotenv(BASE_DIR / '.env')  # backend/.env (newses 네이버 검색 API 키: CLIENT_ID/SECRET 등)
 
 
 # Quick-start development settings - unsuitable for production
@@ -60,6 +61,7 @@ INSTALLED_APPS = [
     'diary',
     'community',
     'recommend',
+    'newses',
 ]
 
 AUTH_USER_MODEL = 'accounts.User'

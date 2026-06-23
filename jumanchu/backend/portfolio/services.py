@@ -231,11 +231,15 @@ def execute_buy(user, stock_code: str, quantity: int, idempotency_key: str) -> d
                 holding.quantity = new_qty
                 holding.save(update_fields=["quantity", "average_price", "updated_at"])
             else:
+                # 최초 매수 — 장투 재검증 기준점(PBR·궁합)을 이 순간으로 박제(고정).
+                base_pbr, base_match = _buy_snapshot(user, stock)
                 holding = Holding.objects.create(
                     user=user,
                     stock=stock,
                     quantity=quantity,
                     average_price=_round_won(total / quantity),
+                    base_pbr=base_pbr,
+                    base_match_score=base_match,
                 )
 
             order = Order.objects.create(
@@ -357,6 +361,84 @@ def order_result(order: Order) -> dict:
     return _build_result(order, account.balance, holding)
 
 
+# ───────────────────────── 장투 재검증 (보유 기준) ─────────────────────────
+
+
+def _buy_snapshot(user, stock) -> tuple[Decimal | None, Decimal | None]:
+    """최초 매수 시점 스냅샷 — (base_pbr, base_match_score). 입력이 없으면 None.
+
+    base_pbr        : 최신 StockIndicator.pbr (재검증 ±30% 기준점)
+    base_match_score: 온보딩 프로필 + 종목 DNA가 있을 때만 궁합 점수, 없으면 None.
+    recommend/accounts는 lazy import (앱 간 순환 방지 — recommend가 portfolio를 참조).
+    """
+    from accounts.models import UserPreferredSector
+    from recommend.matching import compute_match_score
+    from recommend.models import StockDna
+
+    ind = stock.indicators.order_by("-calculated_date").first()
+    base_pbr = None if (ind is None or ind.pbr is None) else Decimal(str(ind.pbr))
+
+    base_match = None
+    profile = getattr(user, "investment_profile", None)
+    if profile is not None and profile.profiled_at is not None:
+        dna = StockDna.objects.filter(stock=stock).order_by("-calculated_date").first()
+        if dna is not None:
+            weights = {
+                p.sector: float(p.weight)
+                for p in UserPreferredSector.objects.filter(user=user)
+            }
+            base_match = Decimal(str(round(compute_match_score(profile, dna, weights), 2)))
+    return base_pbr, base_match
+
+
+def review_holding(holding) -> dict:
+    """보유 종목 장투 재검증 — 4지표 위반수 → 🟢🟡🔴 (docs/추천_장투_DB결정.md §3-4).
+
+    위반: ROE<10% · 부채비율>200% · 순이익증가율<=0% · |현재PBR-매수PBR|/매수PBR>30%
+    지표는 fraction 저장(0.10=10%)이라 %로 비교할 땐 ×100. 결과를 holding에 저장하고 dict 반환.
+    """
+    stock = holding.stock
+    ind = stock.indicators.order_by("-calculated_date").first()
+    fs = stock.financials.order_by("-fiscal_period").first()
+
+    # 지표·재무가 둘 다 없으면 판정 불가 — 거짓 🟢 방지
+    if ind is None and fs is None:
+        holding.last_review_status = ""
+        holding.last_reviewed_at = timezone.now()
+        holding.save(update_fields=["last_review_status", "last_reviewed_at"])
+        return {"status": "", "violations": ["판정에 필요한 지표/재무 데이터가 없습니다."],
+                "checked_at": holding.last_reviewed_at}
+
+    violations: list[str] = []
+    roe = ind.roe if ind else None
+    if roe is not None and roe * 100 < 10:
+        violations.append("ROE 10% 미만")
+    debt = fs.debt_ratio if fs else None
+    if debt is not None and debt * 100 > 200:
+        violations.append("부채비율 200% 초과")
+    npy = fs.net_profit_yoy if fs else None
+    if npy is not None and npy <= 0:
+        violations.append("순이익 증가율 0 이하")
+    cur_pbr = ind.pbr if ind else None
+    if holding.base_pbr is not None and cur_pbr is not None and float(holding.base_pbr) > 0:
+        drift = abs(cur_pbr - float(holding.base_pbr)) / float(holding.base_pbr)
+        if drift > 0.30:
+            violations.append("PBR이 매수 시점 대비 ±30% 이탈")
+
+    n = len(violations)
+    if n == 0:
+        st = Holding.ReviewStatus.GREEN
+    elif n <= 2:
+        st = Holding.ReviewStatus.YELLOW
+    else:
+        st = Holding.ReviewStatus.RED
+
+    holding.last_review_status = st
+    holding.last_reviewed_at = timezone.now()
+    holding.save(update_fields=["last_review_status", "last_reviewed_at"])
+    return {"status": st, "violations": violations, "checked_at": holding.last_reviewed_at}
+
+
 # ───────────────────────── 포트폴리오 조회 (읽기 전용) ─────────────────────────
 
 
@@ -461,6 +543,7 @@ def holding_detail(user, stock_code: str):
         "transaction_count": orders.count(),
         "recent_orders": list(orders[:10]),
         "related_diaries_count": StockDiary.objects.filter(user=user, stock=stock).count(),
+        "review": review_holding(holding),  # 보유 기준 장투 재검증 🟢🟡🔴
     }
 
 
