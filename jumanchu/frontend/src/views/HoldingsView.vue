@@ -38,6 +38,7 @@ async function loadHoldings() {
           qty: Number(it.quantity),
           avgPrice: Number(it.average_price),
           currentPrice: Number(it.current_price),
+          currentValue: Number(it.current_value), // BE 평가액(자산구성 계산에 사용 — 클라 환율 추정 제거)
           sparkline,
         }
       }),
@@ -96,9 +97,10 @@ const filteredHoldings = computed(() => {
 })
 
 // ===== 자산 구성 (국내·해외) =====
+// BE current_value를 그대로 합산 → 좌측 요약(BE 합계)과 일치. (단, BE가 환율 미적용이라 절대 환산은 track-A 과제)
 const marketGroups = computed(() => {
-  const domTotal = holdings.value.filter(isKrw).reduce((s, h) => s + evalAmount(h), 0)
-  const ovsTotal = holdings.value.filter(h => !isKrw(h)).reduce((s, h) => s + evalAmount(h) * 1380, 0)
+  const domTotal = holdings.value.filter(isKrw).reduce((s, h) => s + h.currentValue, 0)
+  const ovsTotal = holdings.value.filter(h => !isKrw(h)).reduce((s, h) => s + h.currentValue, 0)
   const grand = domTotal + ovsTotal || 1
   return {
     dom: { amount: domTotal, pct: (domTotal / grand) * 100 },
@@ -125,18 +127,17 @@ async function loadHoldingNews() {
   try {
     const { items = [] } = await fetchHoldingsNews()
     holdingNews.value = items.map((n) => ({
+      code: n.stock?.code ?? '',
       ticker: n.stock?.name ?? '',
       title: n.title,
       source: n.source,
+      url: n.url || '',
       time: timeAgo(n.published_at),
     }))
   } catch {
     // 뉴스 실패 → 빈 목록
   }
 }
-
-// ===== 커뮤니티 (목업 — 종목별 커뮤니티 연동은 후속) =====
-const communityPost = { user: 'TECL미친놈', time: '6분 전', content: 'SK하이닉스 지금 들어가도 되는 자리인가요?' }
 
 onMounted(() => {
   loadHoldings()
@@ -152,6 +153,9 @@ onMounted(() => {
       <h1>보유 종목</h1>
       <span class="hv-badge"><span class="hv-badge-dot"></span>가상 계좌 기준</span>
     </header>
+
+    <!-- 로드 오류 -->
+    <p v-if="loadError" class="hv-error">{{ loadError }}</p>
 
     <div class="holdings-grid">
 
@@ -181,6 +185,9 @@ onMounted(() => {
           <section class="panel hv-shortcut" aria-label="바로가기">
             <p class="hv-card-title">바로가기</p>
             <div class="hv-shortcut-list">
+              <button class="hv-shortcut-btn" type="button" @click="router.push('/mypage')">
+                <span class="hv-shortcut-ico">🏦</span> 내 계좌
+              </button>
               <button class="hv-shortcut-btn" type="button" @click="router.push('/mypage')">
                 <span class="hv-shortcut-ico">📄</span> 주문내역
               </button>
@@ -279,30 +286,27 @@ onMounted(() => {
               <dd :class="returnRate(selectedHolding) >= 0 ? 'is-up' : 'is-down'">{{ fmtRate(returnRate(selectedHolding)) }}</dd>
             </div>
           </dl>
-          <div class="hv-detail-actions">
-            <button class="hv-buy" type="button">매수</button>
-            <button class="hv-sell" type="button">매도</button>
-          </div>
           <button class="hv-detail-go" type="button" @click="router.push(`/stocks/${selectedHolding.code}`)">종목 상세 보기 →</button>
         </section>
 
-        <!-- 뉴스 / 커뮤니티 -->
-        <section class="panel hv-news" aria-label="뉴스 커뮤니티">
-          <p class="hv-card-title">뉴스 · 커뮤니티</p>
-          <article v-for="n in holdingNews" :key="n.title" class="hv-news-item">
+        <!-- 보유 종목 뉴스 (보유가 있을 때만) -->
+        <section v-if="holdings.length" class="panel hv-news" aria-label="보유 종목 뉴스">
+          <p class="hv-card-title">보유 종목 뉴스</p>
+          <a
+            v-for="n in holdingNews"
+            :key="n.title"
+            class="hv-news-item"
+            :href="n.url || undefined"
+            target="_blank"
+            rel="noopener"
+          >
             <span class="hv-news-chip">{{ n.ticker }}</span>
             <div>
               <p class="hv-news-title">{{ n.title }}</p>
               <span class="hv-news-src">{{ n.source }} · {{ n.time }}</span>
             </div>
-          </article>
-          <div class="hv-comm">
-            <span class="hv-comm-avatar">{{ communityPost.user.slice(0, 1) }}</span>
-            <div>
-              <p class="hv-comm-content">{{ communityPost.content }}</p>
-              <span class="hv-news-src">{{ communityPost.user }} · {{ communityPost.time }}</span>
-            </div>
-          </div>
+          </a>
+          <p v-if="!holdingNews.length" class="hv-news-empty">보유 종목 관련 뉴스가 아직 없어요.</p>
         </section>
       </div>
     </div>
@@ -317,6 +321,7 @@ onMounted(() => {
 .hv-header h1 { font-size: 24px; font-weight: 900; color: var(--ink); margin: 0; letter-spacing: -0.5px; }
 .hv-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: var(--glass-subtle); border: 1px solid var(--glass-border); font-size: 12px; font-weight: 800; color: var(--muted); }
 .hv-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--positive); }
+.hv-error { margin: 0; padding: 10px 14px; border-radius: var(--radius); border: 1px solid rgba(207,61,61,0.3); background: rgba(207,61,61,0.08); color: #cf3d3d; font-size: 13px; font-weight: 800; }
 
 /* 레이아웃 */
 .holdings-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
@@ -402,23 +407,18 @@ onMounted(() => {
 .hv-detail-rows > div:last-child { border-bottom: 0; }
 .hv-detail-rows dt { font-size: 13px; font-weight: 700; color: var(--muted); }
 .hv-detail-rows dd { margin: 0; font-size: 14px; font-weight: 900; color: var(--ink); }
-.hv-detail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-.hv-buy, .hv-sell { height: 46px; border: 0; border-radius: var(--radius); font-size: 15px; font-weight: 900; color: #fff; cursor: pointer; transition: opacity 0.16s; }
-.hv-buy { background: #e3344f; }
-.hv-sell { background: #2b59d6; }
-.hv-buy:hover, .hv-sell:hover { opacity: 0.9; }
 .hv-detail-go { width: 100%; height: 42px; border-radius: var(--radius); border: 1px solid rgba(var(--accent-rgb),0.2); background: rgba(var(--accent-rgb),0.08); color: var(--accent); font-size: 13px; font-weight: 900; cursor: pointer; transition: background 0.16s; }
 .hv-detail-go:hover { background: rgba(var(--accent-rgb),0.16); }
 
-/* 뉴스 / 커뮤니티 */
+/* 보유 종목 뉴스 */
 .hv-news { padding: 18px 20px; }
-.hv-news-item { display: flex; gap: 10px; align-items: flex-start; padding: 11px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.hv-news-item { display: flex; gap: 10px; align-items: flex-start; padding: 11px 0; border-bottom: 1px solid var(--line); cursor: pointer; text-decoration: none; color: inherit; }
+.hv-news-item:last-of-type { border-bottom: 0; }
+.hv-news-item:hover .hv-news-title { color: var(--accent); }
 .hv-news-chip { flex-shrink: 0; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 900; background: rgba(var(--purple-rgb),0.1); color: var(--purple); }
-.hv-news-title { font-size: 13px; font-weight: 700; color: var(--ink); margin: 0 0 3px; line-height: 1.4; word-break: keep-all; }
+.hv-news-title { font-size: 13px; font-weight: 700; color: var(--ink); margin: 0 0 3px; line-height: 1.4; word-break: keep-all; transition: color 0.14s; }
 .hv-news-src { font-size: 11px; font-weight: 700; color: var(--faint); }
-.hv-comm { display: flex; gap: 10px; align-items: flex-start; padding-top: 12px; }
-.hv-comm-avatar { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--accent), var(--purple)); color: #fff; font-size: 12px; font-weight: 900; }
-.hv-comm-content { font-size: 13px; font-weight: 700; color: var(--ink); margin: 0 0 3px; line-height: 1.4; word-break: keep-all; }
+.hv-news-empty { padding: 18px 0 4px; text-align: center; font-size: 13px; font-weight: 700; color: var(--faint); }
 
 /* 등락 색상 (한국식: 상승=빨강, 하락=파랑) */
 .is-up { color: #e3344f; }

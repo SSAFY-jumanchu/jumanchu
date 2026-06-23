@@ -11,165 +11,21 @@ const router = useRouter()
 const loading = ref(true)
 const loadError = ref('')
 
-// 초기값은 와이어프레임 목업 — onMounted에서 실데이터로 교체 (재무 30% · 성장 40% · 궁합 30%)
-const holdings = ref([
-  {
-    code: '000660', name: 'SK하이닉스', market: 'KOSPI', sector: '전기·전자', logo: 'SK', color: '#e3344f',
-    recommend: '장기 보유 강력 추천',
-    summary: '성장성(92)이 가중 40%로 종합을 끌어올렸습니다. 재무·궁합도 견조해 장기 보유 매력이 높으나, 포트 비중 38%는 분산 관점에서 관리가 필요합니다.',
-    financial: {
-      score: 78, note: '부채비율 업종 최저, 수익성 우수. HBM 믹스 개선으로 재무 체력 회복 중.',
-      items: [
-        { label: '부채비율', value: '22.4%' }, { label: 'ROE', value: '26.78%' },
-        { label: '영업이익률', value: '32.1%' }, { label: '유동비율', value: '198.3%' },
-      ],
-    },
-    growth: {
-      score: 92, note: 'AI발 HBM 수요로 매출·이익 동반 급증. 중장기 성장 모멘텀 최상위.',
-      items: [
-        { label: '매출성장률(YoY)', value: '+48.2%' }, { label: '순이익성장률(YoY)', value: '+61.0%' },
-        { label: 'EPS 증가율', value: '+58.4%' },
-      ],
-    },
-    compat: {
-      score: 87, note: '공격형 성향·반도체 선호와 잘 맞음. 비중 38%로 분산 유의.',
-      items: [
-        { label: '리스크 매칭', value: '공격형' }, { label: '섹터 매칭', value: '전기·전자' },
-        { label: '기간 매칭', value: '12개월' }, { label: '경험 매칭', value: '중급' },
-      ],
-    },
-    journal: [
-      { side: 'buy', date: '06.02', note: 'HBM 기대감에 3주 추가 매수했어요.' },
-      { side: 'buy', date: '04.12', note: '첫 진입. 장기 보유 목표로 잡음.' },
-    ],
-    history: [{ month: '3월', score: 81 }, { month: '4월', score: 83 }, { month: '5월', score: 84 }, { month: '6월', score: 86 }],
-    news: [
-      { headline: '브로드컴 쇼크에 반도체株 동반 약세', source: '한국경제' },
-      { headline: 'SK하이닉스 외국인 매도 지속', source: '연합뉴스' },
-      { headline: '"HBM은 견조" 증권가 저가매수 의견', source: '머니투데이' },
-    ],
-  },
-  {
-    code: '005930', name: '삼성전자', market: 'KOSPI', sector: '전기·전자', logo: '삼', color: '#3b5bdb',
-    recommend: '보유 유지 · 모니터링 적합',
-    summary: '삼성전자는 재무적으로 안정적이며, 특히 성장성 면에서 매우 긍정적인 모습을 보이고 있습니다. 전기·전자 섹터 선호와 맞물려 보유 유지·모니터링에 적합한 종목으로 판단됩니다. 다만 일부 데이터가 부족해 모든 측면을 평가하기엔 제한이 있으나, 전반적으로 장기투자 관점에서 긍정적인 요소가 많습니다.',
-    financial: {
-      score: 80, note: '삼성전자의 재무 건전성은 부채비율이 27.9%로 낮고, 유동비율이 243.3%로 높아 안정적입니다.',
-      items: [
-        { label: '부채비율', value: '27.9%' }, { label: 'ROE', value: '8.57%' },
-        { label: '영업이익률', value: '14.2%' }, { label: '유동비율', value: '243.3%' },
-      ],
-    },
-    growth: {
-      score: 74, note: '매출 성장률이 16.2%로 높고, 영업이익 성장률이 398.3%로 매우 강력하게 나타나고 있습니다.',
-      items: [
-        { label: '매출성장률(YoY)', value: '+16.2%' }, { label: '영업이익 성장률(YoY)', value: '+398.3%' },
-        { label: 'EPS 증가율', value: '+35.1%' },
-      ],
-    },
-    compat: {
-      score: 88, note: '전기·전자 섹터에 대한 선호와 일치하며, 균형형 투자 성향에 적합한 종목입니다.',
-      items: [
-        { label: '리스크 매칭', value: '균형형' }, { label: '섹터 매칭', value: '전기·전자' },
-        { label: '기간 매칭', value: '12개월' }, { label: '경험 매칭', value: '중급' },
-      ],
-    },
-    journal: [
-      { side: 'buy', date: '05.20', note: '분할 매수 2차. 평단 낮추는 중.' },
-      { side: 'buy', date: '03.18', note: '배당 + 장기 보유 목적으로 진입.' },
-    ],
-    history: [{ month: '3월', score: 77 }, { month: '4월', score: 78 }, { month: '5월', score: 79 }, { month: '6월', score: 80 }],
-    news: [
-      { headline: '삼성전자 2nm 파운드리 수율 개선…퀄컴 수주 임박', source: '매일경제' },
-      { headline: '삼성전자 1분기 영업이익 6.7조…전년비 3배', source: '이데일리' },
-      { headline: '외국인 순매도 속 기관은 저가 매수', source: '서울경제' },
-    ],
-  },
-  {
-    code: 'NVDA', name: 'NVIDIA', market: 'NASDAQ', sector: '전기·전자', logo: 'N', color: '#76b900',
-    recommend: '장기 핵심 보유 추천',
-    summary: '재무(92)·성장(96)이 모두 최상위로 종합 91점입니다. 변동성은 높지만 AI 인프라 핵심주로 장기 핵심 보유에 적합합니다.',
-    financial: {
-      score: 92, note: '압도적 수익성과 잉여현금흐름. 업계 최고 영업이익률.',
-      items: [
-        { label: '부채비율', value: '41.2%' }, { label: 'ROE', value: '114.3%' },
-        { label: '영업이익률', value: '54.7%' }, { label: '유동비율', value: '320.0%' },
-      ],
-    },
-    growth: {
-      score: 96, note: '데이터센터 매출 폭증. Blackwell 수요와 CUDA 생태계로 성장 독주.',
-      items: [
-        { label: '매출성장률(YoY)', value: '+122.4%' }, { label: '순이익성장률(YoY)', value: '+168.0%' },
-        { label: 'EPS 증가율', value: '+152.0%' },
-      ],
-    },
-    compat: {
-      score: 84, note: '고밸류·고변동성 유의. 해외 비중 확대엔 핵심 종목.',
-      items: [
-        { label: '리스크 매칭', value: '공격형' }, { label: '섹터 매칭', value: '전기·전자' },
-        { label: '기간 매칭', value: '12개월' }, { label: '경험 매칭', value: '중급' },
-      ],
-    },
-    journal: [
-      { side: 'buy', date: '05.28', note: '실적 서프라이즈 보고 추가 매수.' },
-      { side: 'buy', date: '02.10', note: 'AI 수혜 핵심주로 장기 진입.' },
-    ],
-    history: [{ month: '3월', score: 88 }, { month: '4월', score: 89 }, { month: '5월', score: 90 }, { month: '6월', score: 91 }],
-    news: [
-      { headline: 'Blackwell Ultra 출하 급증…Q2 가이던스 상향', source: 'Bloomberg' },
-      { headline: '중국 수출 규제 완화 기대에 프리마켓 강세', source: 'CNBC' },
-      { headline: '데이터센터 매출 전년비 4배 성장', source: 'Reuters' },
-    ],
-  },
-  {
-    code: 'AAPL', name: 'Apple', market: 'NASDAQ', sector: '전기·전자', logo: 'A', color: '#333a45',
-    recommend: '장기 보유 적합',
-    summary: '재무(88)와 궁합(84)은 견조하나 성장성(68)이 낮아 종합 79점입니다. 안정적 분산용 장기 보유에 적합합니다.',
-    financial: {
-      score: 88, note: '강력한 브랜드와 현금 창출. 자사주 매입으로 주당가치 상승.',
-      items: [
-        { label: '부채비율', value: '67.3%' }, { label: 'ROE', value: '141.5%' },
-        { label: '영업이익률', value: '31.5%' }, { label: '유동비율', value: '98.0%' },
-      ],
-    },
-    growth: {
-      score: 68, note: '하드웨어 성숙으로 성장 둔화. 서비스 매출이 이를 보완.',
-      items: [
-        { label: '매출성장률(YoY)', value: '+6.2%' }, { label: '순이익성장률(YoY)', value: '+9.4%' },
-        { label: 'EPS 증가율', value: '+12.1%' },
-      ],
-    },
-    compat: {
-      score: 84, note: '방어적 성장주로 분산 효과 우수. 환율 노출 고려.',
-      items: [
-        { label: '리스크 매칭', value: '균형형' }, { label: '섹터 매칭', value: '전기·전자' },
-        { label: '기간 매칭', value: '12개월+' }, { label: '경험 매칭', value: '중급' },
-      ],
-    },
-    journal: [
-      { side: 'buy', date: '05.15', note: '분산 목적 분할 매수.' },
-      { side: 'buy', date: '01.22', note: '장기 배당 + 성장 보유로 진입.' },
-    ],
-    history: [{ month: '3월', score: 76 }, { month: '4월', score: 77 }, { month: '5월', score: 78 }, { month: '6월', score: 79 }],
-    news: [
-      { headline: 'Apple Intelligence 2.0 공개…Siri 전면 재설계', source: 'Reuters' },
-      { headline: '서비스 매출 고성장…하드웨어 둔화 보완', source: 'WSJ' },
-      { headline: '인도 시장 판매 호조…신규 성장축 부상', source: 'CNBC' },
-    ],
-  },
-])
+// 보유 종목 (실데이터: GET /portfolio/holdings/ + 종목별 장투 리포트). 목업 fallback 제거 — 실패 시 가짜 노출 방지.
+const holdings = ref([])
 
 // ===== 선택 =====
 const selectedIdx = ref(0)
 const s = computed(() => holdings.value[selectedIdx.value] || holdings.value[0] || null)
 
 // ===== 점수 계산 =====
-// 실데이터는 report.total.score(h.total)를 우선 사용, 없으면 가중 재계산
+// report.total.score(h.total)가 있으면 사용. 리포트 없는 종목은 null → 0점/C 오표시 대신 "—" 표시.
 function total(h) {
-  if (!h) return 0
-  return Math.round(h.total ?? (h.financial.score * 0.3 + h.growth.score * 0.4 + h.compat.score * 0.3))
+  if (!h || h.total == null) return null
+  return Math.round(h.total)
 }
 function grade(score) {
+  if (score == null) return '—'
   if (score >= 90) return 'A'
   if (score >= 80) return 'B+'
   if (score >= 70) return 'B'
@@ -177,11 +33,13 @@ function grade(score) {
   return 'C'
 }
 function gradeColor(score) {
+  if (score == null) return 'var(--muted)' // 리포트 없음 — 중립
   if (score >= 80) return '#e3344f'    // 빨강 — 장기 보유 핵심·강력 추천 (80~100)
   if (score >= 40) return 'var(--positive)' // 초록 — 보유 적합 (40~80)
   return '#2b59d6'                      // 파랑 — 40 미만
 }
 function gradeClass(score) {
+  if (score == null) return 'g-none'
   if (score >= 90) return 'g-a'
   if (score >= 80) return 'g-bplus'
   if (score >= 70) return 'g-b'
@@ -249,13 +107,14 @@ async function loadPortfolio() {
         const uf = r.userfit
         return {
           code,
+          hasReport: !!r.total, // 장투 리포트 존재 여부 — 없으면 0점 카드 대신 안내
           name: it.stock.name,
           market: it.stock.market,
           sector: it.stock.sector,
           logo: it.stock.name.slice(0, 1),
           color: colorFor(code),
-          total: r.total?.score ?? 0,
-          recommend: r.total?.label ?? '—',
+          total: r.total?.score ?? null, // 리포트 없으면 null → "—" 표시(0점/C 오표시 방지)
+          recommend: r.total?.label ?? '리포트 준비 중',
           summary: r.total?.opinion ?? '리포트를 준비 중이에요.',
           financial: { score: Math.round(r.financial?.score ?? 0), note: r.financial?.summary ?? '', items: finItems },
           growth: { score: Math.round(r.growth?.score ?? 0), note: r.growth?.summary ?? '', items: growthItems },
@@ -288,6 +147,9 @@ onMounted(loadPortfolio)
       <p class="lt-sub">내가 산 종목, 계속 들고 갈 만한가요? — 재무 30% · 성장 40% · 궁합 30% 가중으로 점검해드려요.</p>
     </header>
 
+    <!-- 로드 오류 -->
+    <p v-if="loadError" class="lt-error">{{ loadError }}</p>
+
     <div class="lt-grid">
 
       <!-- ===== 좌: 보유 종목 ===== -->
@@ -307,7 +169,7 @@ onMounted(loadPortfolio)
             <span>{{ h.sector }} · {{ h.market }}</span>
           </div>
           <div class="lt-list-score">
-            <strong :style="{ color: gradeColor(total(h)) }">{{ total(h) }}</strong>
+            <strong :style="{ color: gradeColor(total(h)) }">{{ total(h) ?? '—' }}</strong>
             <span class="lt-grade" :class="gradeClass(total(h))">{{ grade(total(h)) }}</span>
           </div>
         </button>
@@ -315,15 +177,17 @@ onMounted(loadPortfolio)
 
       <!-- ===== 우: 상세 ===== -->
       <div v-if="!s" class="panel" style="padding: 28px; text-align: center; color: var(--muted); font-weight: 700;">
-        {{ loading ? '장투 리포트를 분석하는 중이에요…' : '보유 종목이 없어요. 종목을 매수하면 장투 분석이 표시됩니다.' }}
+        {{ loading ? '장투 리포트를 분석하는 중이에요…'
+          : loadError ? '보유 종목을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'
+          : '보유 종목이 없어요. 종목을 매수하면 장투 분석이 표시됩니다.' }}
       </div>
       <div v-else class="lt-detail">
 
         <!-- 종합 정보 -->
         <section class="panel lt-overview">
           <div class="lt-ov-circle" :style="{ background: gradeColor(total(s)) }">
-            {{ total(s) }}
-            <span>{{ grade(total(s)) }}</span>
+            {{ total(s) ?? '—' }}
+            <span>{{ total(s) == null ? '분석중' : grade(total(s)) }}</span>
           </div>
           <div class="lt-ov-body">
             <div class="lt-ov-head">
@@ -338,8 +202,13 @@ onMounted(loadPortfolio)
           </button>
         </section>
 
+        <!-- 리포트 없는 종목: 0점 카드 대신 안내 -->
+        <section v-if="!s.hasReport" class="panel lt-no-report">
+          🐤 아직 이 종목의 장투 리포트가 준비되지 않았어요. 분석이 완료되면 재무·성장·궁합 점수가 표시됩니다.
+        </section>
+
         <!-- 재무 / 성장 / 궁합 -->
-        <div class="lt-score-row">
+        <div v-else class="lt-score-row">
           <div v-for="card in scoreCards" :key="card.name" class="panel lt-score-card">
             <div class="lt-score-top">
               <span class="lt-score-name">{{ card.name }} <span class="lt-weight">{{ card.weight }}</span></span>
@@ -368,6 +237,7 @@ onMounted(loadPortfolio)
                 </div>
                 <p class="lt-j-note">{{ j.note }}</p>
               </div>
+              <p v-if="!s.journal.length" class="lt-empty">이 종목으로 작성한 매매일지가 없어요.</p>
             </div>
           </section>
 
@@ -381,6 +251,7 @@ onMounted(loadPortfolio)
                   <span v-if="i > 0 && hi.score > s.history[i - 1].score" class="lt-h-up">▲</span>
                 </span>
               </div>
+              <p v-if="!s.history.length" class="lt-empty">장투 점수 히스토리가 아직 없어요.</p>
             </div>
           </section>
         </div>
@@ -393,6 +264,7 @@ onMounted(loadPortfolio)
               <strong class="lt-news-headline">{{ n.headline }}</strong>
               <span class="lt-news-source">{{ n.source }}</span>
             </article>
+            <p v-if="!s.news.length" class="lt-empty">관련 뉴스가 아직 없어요.</p>
           </div>
         </section>
 
@@ -436,6 +308,12 @@ onMounted(loadPortfolio)
 .g-bplus { background: rgba(var(--accent-rgb),0.12); color: var(--accent); }
 .g-b { background: rgba(229,139,16,0.14); color: #e58b10; }
 .g-c { background: rgba(207,61,61,0.12); color: #cf3d3d; }
+.g-none { background: var(--glass-subtle); color: var(--muted); }
+
+/* 오류 배너 / 빈 상태 / 리포트 없음 */
+.lt-error { margin: 0; padding: 10px 14px; border-radius: var(--radius); border: 1px solid rgba(207,61,61,0.3); background: rgba(207,61,61,0.08); color: #cf3d3d; font-size: 13px; font-weight: 800; }
+.lt-empty { margin: 4px 0 0; padding: 14px 0; text-align: center; font-size: 12px; font-weight: 700; color: var(--faint); }
+.lt-no-report { padding: 20px 22px; font-size: 13px; font-weight: 700; color: var(--muted); line-height: 1.6; word-break: keep-all; }
 
 /* 우 */
 .lt-detail { display: flex; flex-direction: column; gap: 16px; min-width: 0; }

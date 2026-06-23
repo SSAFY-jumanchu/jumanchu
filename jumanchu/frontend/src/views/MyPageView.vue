@@ -6,15 +6,13 @@ import { errMsg, retry } from '../api/client'
 
 const activeSection = ref('invest')
 
+// BE UserSerializer는 nickname/email/birth_year/date_joined/profile만 제공(name·phone·address 필드 없음).
 const user = reactive({
-  name: '김주만',
-  nickname: '열정적인얼룩말37',
-  email: 'kimjuman@example.com',
-  phone: '010-1234-5678',
-  birthdate: '1998.07.22',
-  address: '서울특별시 강남구 테헤란로 123',
-  investType: '안정성장형',
-  joinDate: '2024.03.15',
+  nickname: '',
+  email: '',
+  birthYear: '',
+  investType: '',
+  joinDate: '',
   posts: 12,
   followers: 47,
   following: 31,
@@ -43,18 +41,9 @@ const myPosts = [
   { id: 4, time: '1달 전', category: '공유', title: '주린이가 처음 1년 동안 배운 것들', likes: 132, comments: 44, views: 5321 },
 ]
 
-const trades = ref([
-  { id: 1, date: '2026.06.05', code: '005930', name: '삼성전자', side: 'buy',  qty: 20, price: 317000, total: 6340000, pnl: null },
-  { id: 2, date: '2026.06.04', code: '000660', name: 'SK하이닉스', side: 'sell', qty: 5,  price: 243000, total: 1215000, pnl: +87500 },
-  { id: 3, date: '2026.06.03', code: 'NVDA',   name: 'NVIDIA',    side: 'buy',  qty: 3,  price: 1285000,total: 3855000, pnl: null },
-  { id: 4, date: '2026.06.02', code: '005930', name: '삼성전자', side: 'sell', qty: 10, price: 312000, total: 3120000, pnl: -35000 },
-  { id: 5, date: '2026.05.30', code: '035420', name: 'NAVER',    side: 'buy',  qty: 8,  price: 189500, total: 1516000, pnl: null },
-  { id: 6, date: '2026.05.28', code: 'AAPL',   name: 'APPLE',    side: 'buy',  qty: 2,  price: 248000, total: 496000,  pnl: null },
-  { id: 7, date: '2026.05.25', code: '000660', name: 'SK하이닉스', side: 'buy',  qty: 10, price: 238000, total: 2380000, pnl: null },
-  { id: 8, date: '2026.05.22', code: '005930', name: '삼성전자', side: 'sell', qty: 15, price: 308000, total: 4620000, pnl: +120000 },
-  { id: 9, date: '2026.05.20', code: '035720', name: '카카오',   side: 'sell', qty: 20, price: 47500,  total: 950000,  pnl: -62000 },
-  { id: 10,date: '2026.05.15', code: 'GOOGL',  name: 'ALPHABET', side: 'buy',  qty: 1,  price: 2180000,total: 2180000, pnl: null },
-])
+// 매매 내역(실데이터: GET /orders/) — 목업 fallback 제거(실패/빈응답 시 가짜 노출 방지)
+const trades = ref([])
+const tradesError = ref('')
 const tradeFilter = ref('all')
 const filteredTrades = computed(() => {
   if (tradeFilter.value === 'all') return trades.value
@@ -71,6 +60,8 @@ const account = reactive({
 })
 
 const profitPct = computed(() => ((account.monthProfit / account.totalInvested) * 100).toFixed(2))
+// 실현 손익 합계(음수 가능) — 리터럴 '+' 이중부호 방지용
+const realizedPnl = computed(() => trades.value.filter(t => t.pnl !== null).reduce((a, t) => a + t.pnl, 0))
 
 const holdings = ref([
   { name:'삼성전자', qty:20, avg:310500, cur:317000, color:'#315dff' },
@@ -112,36 +103,36 @@ function holdColor(code) {
 async function loadMe() {
   try {
     const { user: u } = await fetchMe()
-    user.name = u.nickname
     user.nickname = u.nickname
     user.email = u.email
-    user.birthdate = String(u.birth_year ?? '')
+    user.birthYear = String(u.birth_year ?? '')
     user.joinDate = (u.date_joined || '').slice(0, 10).replace(/-/g, '.')
     if (u.profile?.investment_style) user.investType = u.profile.investment_style
   } catch {
-    // 실패 → 목업 유지
+    // 실패 → 빈 값 유지
   }
 }
 
 // 매매 내역 (GET /orders/)
 async function loadOrders() {
+  tradesError.value = ''
   try {
     const { items = [] } = await fetchOrders({ size: 30 })
-    if (items.length) {
-      trades.value = items.map((o) => ({
-        id: o.id,
-        date: (o.created_at || '').slice(0, 10).replace(/-/g, '.'),
-        code: o.stock_code,
-        name: o.stock_name,
-        side: String(o.side).toLowerCase(), // BUY → buy
-        qty: o.quantity,
-        price: Number(o.price),
-        total: Number(o.total_amount),
-        pnl: o.realized_pnl != null ? Number(o.realized_pnl) : null,
-      }))
-    }
-  } catch {
-    // 실패 → 목업 유지
+    // 항상 실데이터로 교체(빈 응답이면 빈 목록). catch는 에러 노출 — 가짜 폴백/에러 삼킴 제거.
+    trades.value = items.map((o) => ({
+      id: o.id,
+      date: (o.created_at || '').slice(0, 10).replace(/-/g, '.'),
+      code: o.stock_code,
+      name: o.stock_name,
+      side: String(o.side).toLowerCase(), // BUY → buy
+      qty: o.quantity,
+      price: Number(o.price),
+      total: Number(o.total_amount),
+      pnl: o.realized_pnl != null ? Number(o.realized_pnl) : null,
+    }))
+  } catch (e) {
+    trades.value = []
+    tradesError.value = errMsg(e)
   }
 }
 
@@ -176,8 +167,8 @@ async function onEditToggle() {
   profileError.value = ''
   try {
     const payload = { nickname: user.nickname }
-    const birthYear = parseInt(user.birthdate, 10)
-    if (!Number.isNaN(birthYear)) payload.birth_year = birthYear
+    const by = parseInt(user.birthYear, 10)
+    if (!Number.isNaN(by)) payload.birth_year = by
     await updateMe(payload)
     isEditingInfo.value = false
   } catch (e) {
@@ -199,7 +190,7 @@ onMounted(() => {
     <div class="profile-header panel">
       <div class="ph-avatar">김</div>
       <div class="ph-info">
-        <div class="ph-name">{{ user.name }}</div>
+        <div class="ph-name">{{ user.nickname }}</div>
         <div class="ph-nick">@{{ user.nickname }}</div>
         <div class="ph-stats">
           <span><strong>{{ user.posts }}</strong> 글</span>
@@ -274,8 +265,8 @@ onMounted(() => {
           <!-- Profit Card -->
           <div class="panel acc-profit-card">
             <div class="acc-label">이달 수익</div>
-            <div class="acc-profit-num pos">+{{ fmt(account.monthProfit) }}원</div>
-            <div class="acc-profit-pct pos">+{{ profitPct }}%</div>
+            <div class="acc-profit-num" :class="account.monthProfit >= 0 ? 'pos' : 'neg'">{{ signedFmt(account.monthProfit) }}원</div>
+            <div class="acc-profit-pct" :class="account.monthProfit >= 0 ? 'pos' : 'neg'">{{ account.monthProfit >= 0 ? '+' : '' }}{{ profitPct }}%</div>
             <dl class="acc-dl mt16">
               <div class="acc-row">
                 <dt>판매수익</dt>
@@ -336,6 +327,11 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody>
+              <tr v-if="!filteredTrades.length">
+                <td colspan="7" class="trade-empty">
+                  {{ tradesError ? '거래 내역을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.' : '아직 거래 내역이 없어요.' }}
+                </td>
+              </tr>
               <tr v-for="t in filteredTrades" :key="t.id">
                 <td class="trade-date">{{ t.date }}</td>
                 <td>
@@ -371,8 +367,8 @@ onMounted(() => {
           </div>
           <div class="panel ts-card">
             <div class="ts-label">실현 손익</div>
-            <div class="ts-value pos">
-              +{{ fmt(trades.filter(t=>t.pnl!==null).reduce((a,t)=>a+t.pnl,0)) }}원
+            <div class="ts-value" :class="realizedPnl >= 0 ? 'pos' : 'neg'">
+              {{ signedFmt(realizedPnl) }}원
             </div>
           </div>
           <div class="panel ts-card">
@@ -391,17 +387,17 @@ onMounted(() => {
           </button>
         </div>
 
+        <p v-if="profileError" class="mp-error">{{ profileError }}</p>
+
         <div class="info-grid">
           <!-- Invest Type Card -->
           <div class="panel info-card">
             <div class="info-card-title">투자 성향</div>
-            <div class="invest-type-badge">{{ user.investType }}</div>
-            <p class="invest-desc">안정성을 추구하면서 꾸준한 성장을 원하는 투자 유형이에요. 배당주와 우량 성장주를 균형 있게 담는 것을 권장해요.</p>
-            <div class="invest-bars">
-              <div class="ib-row"><span>안정성</span><div class="ib-track"><div class="ib-fill" style="width:62%; background:var(--accent)"></div></div><span>62</span></div>
-              <div class="ib-row"><span>성장성</span><div class="ib-track"><div class="ib-fill" style="width:78%; background:var(--purple)"></div></div><span>78</span></div>
-              <div class="ib-row"><span>리스크허용</span><div class="ib-track"><div class="ib-fill" style="width:45%; background:#22c55e"></div></div><span>45</span></div>
-            </div>
+            <template v-if="user.investType">
+              <div class="invest-type-badge">{{ user.investType }}</div>
+              <p class="invest-desc">온보딩 설문 응답을 바탕으로 분석된 나의 투자 성향이에요.</p>
+            </template>
+            <p v-else class="invest-desc">아직 투자 성향 검사를 하지 않았어요. 검사하면 맞춤 추천이 정확해져요.</p>
             <button class="retest-btn">투자 성향 재검사</button>
           </div>
 
@@ -409,13 +405,6 @@ onMounted(() => {
           <div class="panel info-card">
             <div class="info-card-title">기본 정보</div>
             <dl class="info-dl">
-              <div class="info-row">
-                <dt>이름</dt>
-                <dd>
-                  <template v-if="!isEditingInfo">{{ user.name }}</template>
-                  <input v-else v-model="user.name" class="info-input" />
-                </dd>
-              </div>
               <div class="info-row">
                 <dt>닉네임</dt>
                 <dd>
@@ -425,27 +414,13 @@ onMounted(() => {
               </div>
               <div class="info-row">
                 <dt>이메일</dt>
-                <dd>
-                  <template v-if="!isEditingInfo">{{ user.email }}</template>
-                  <input v-else v-model="user.email" class="info-input" />
-                </dd>
+                <dd>{{ user.email }}</dd>
               </div>
               <div class="info-row">
-                <dt>휴대폰</dt>
+                <dt>출생연도</dt>
                 <dd>
-                  <template v-if="!isEditingInfo">{{ user.phone }}</template>
-                  <input v-else v-model="user.phone" class="info-input" />
-                </dd>
-              </div>
-              <div class="info-row">
-                <dt>생년월일</dt>
-                <dd>{{ user.birthdate }}</dd>
-              </div>
-              <div class="info-row">
-                <dt>주소</dt>
-                <dd>
-                  <template v-if="!isEditingInfo">{{ user.address }}</template>
-                  <input v-else v-model="user.address" class="info-input" />
+                  <template v-if="!isEditingInfo">{{ user.birthYear }}</template>
+                  <input v-else v-model="user.birthYear" class="info-input" type="number" inputmode="numeric" />
                 </dd>
               </div>
               <div class="info-row">
@@ -453,6 +428,7 @@ onMounted(() => {
                 <dd>{{ user.joinDate }}</dd>
               </div>
             </dl>
+            <p class="info-note">이메일·가입일은 변경할 수 없어요.</p>
           </div>
 
           <!-- Community Profile Card -->
@@ -725,6 +701,9 @@ onMounted(() => {
   outline: none;
 }
 .info-input:focus { border-color: var(--accent); }
+.info-note { margin: 12px 0 0; font-size: 11px; font-weight: 700; color: var(--faint); }
+.mp-error { margin: 0; padding: 10px 14px; border-radius: var(--radius); border: 1px solid rgba(207,61,61,0.3); background: rgba(207,61,61,0.08); color: #cf3d3d; font-size: 13px; font-weight: 800; }
+.trade-empty { padding: 28px 16px !important; text-align: center; color: var(--muted); font-weight: 700; font-size: 13px; }
 
 .invest-type-badge {
   display: inline-block;
@@ -737,13 +716,6 @@ onMounted(() => {
   margin-bottom: 10px;
 }
 .invest-desc { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 14px; }
-
-.invest-bars { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-.ib-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-.ib-row span:first-child { width: 64px; }
-.ib-row span:last-child { width: 24px; text-align: right; font-weight: 700; color: var(--ink); }
-.ib-track { flex: 1; height: 6px; background: var(--faint); border-radius: 999px; overflow: hidden; }
-.ib-fill { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
 
 .retest-btn {
   width: 100%;
