@@ -116,11 +116,18 @@ class HoldingsListResponseSerializer(serializers.Serializer):
     generated_at = serializers.DateTimeField()
 
 
+class HoldingReviewSerializer(serializers.Serializer):
+    status = serializers.CharField(allow_blank=True)  # GREEN/YELLOW/RED, 판정불가는 ''
+    violations = serializers.ListField(child=serializers.CharField())
+    checked_at = serializers.DateTimeField(allow_null=True)
+
+
 class HoldingDetailResponseSerializer(serializers.Serializer):
     holding = HoldingSerializer()
     transaction_count = serializers.IntegerField()
     recent_orders = OrderSerializer(many=True)
     related_diaries_count = serializers.IntegerField()
+    review = HoldingReviewSerializer()
 
 
 class BalanceResponseSerializer(serializers.Serializer):

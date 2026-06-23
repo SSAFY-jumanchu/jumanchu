@@ -37,7 +37,7 @@ class DiaryListCreateView(APIView):
             qs = qs.filter(stock__code=p['stock_code'])
         if p.get('action_type'):
             qs = qs.filter(action_type=p['action_type'])
-        qs = qs.order_by('-diary_date', '-id')
+        qs = qs.order_by('-created_at', '-id')
 
         total = qs.count()
         page = max(1, _as_int(p.get('page'), 1))

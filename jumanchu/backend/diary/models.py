@@ -38,7 +38,9 @@ class StockDiary(models.Model):
     stop_loss_price = models.DecimalField(
         max_digits=18, decimal_places=4, null=True, blank=True
     )
-    diary_date = models.DateField()
+    memo = models.TextField(blank=True, help_text="선택 입력: 자유 서술 메모")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         constraints = [
@@ -52,12 +54,12 @@ class StockDiary(models.Model):
             ),
         ]
         indexes = [
-            models.Index(fields=["user", "-diary_date"]),
+            models.Index(fields=["user", "-created_at"]),
             models.Index(fields=["order"]),
         ]
 
     def __str__(self):
-        return f"{self.user_id} {self.stock_id} {self.action_type} {self.diary_date}"
+        return f"{self.user_id} {self.stock_id} {self.action_type} {self.created_at:%Y-%m-%d}"
 
 
 class DiaryReview(models.Model):

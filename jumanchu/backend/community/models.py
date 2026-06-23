@@ -2,42 +2,6 @@ from django.conf import settings
 from django.db import models
 
 
-class SharedPortfolio(models.Model):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="shared_portfolios"
-    )
-    title = models.CharField(max_length=200)
-    description = models.TextField(blank=True)
-    is_public = models.BooleanField(default=True)
-    view_count = models.PositiveIntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        indexes = [
-            models.Index(fields=["user"]),
-            models.Index(fields=["is_public", "-view_count"]),
-        ]
-
-    def __str__(self):
-        return self.title
-
-
-class SharedPortfolioItem(models.Model):
-    portfolio = models.ForeignKey(
-        SharedPortfolio, on_delete=models.CASCADE, related_name="items"
-    )
-    stock = models.ForeignKey("stocks.Stock", on_delete=models.RESTRICT, related_name="shared_items")
-    weight = models.DecimalField(max_digits=6, decimal_places=4)
-
-    class Meta:
-        indexes = [
-            models.Index(fields=["portfolio"]),
-        ]
-
-    def __str__(self):
-        return f"{self.portfolio_id}: {self.stock_id} {self.weight}"
-
-
 class CommunityPost(models.Model):
     class Category(models.TextChoices):
         QUESTION = "QUESTION", "질문"
@@ -62,6 +26,7 @@ class CommunityPost(models.Model):
     view_count = models.PositiveIntegerField(default=0)
     like_count = models.PositiveIntegerField(default=0)  # 비정규화: 인기순 정렬, 좋아요 ±1
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         indexes = [
@@ -81,6 +46,7 @@ class Comment(models.Model):
     )
     body = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         indexes = [

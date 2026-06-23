@@ -74,45 +74,14 @@ class LongTermScore(models.Model):
         return f"LT {self.stock_id} {self.total_score} {self.calculated_date}"
 
 
-class LongTermScoreHistory(models.Model):
-    """장투 점수 이력 (30일 추세 카드용)."""
-
-    stock = models.ForeignKey(
-        "stocks.Stock", on_delete=models.CASCADE, related_name="long_term_score_history"
-    )
-    total_score = models.DecimalField(max_digits=5, decimal_places=2)
-    recorded_date = models.DateField()
-
-    class Meta:
-        indexes = [
-            models.Index(fields=["stock", "-recorded_date"]),
-        ]
-
-    def __str__(self):
-        return f"LT-hist {self.stock_id} {self.recorded_date}"
-
-
 class UserLikedStock(models.Model):
-    """찜한 종목 (Like 시점 스냅샷, 장투 재검증 기준)."""
-
-    class ReviewStatus(models.TextChoices):
-        GREEN = "GREEN", "양호"
-        YELLOW = "YELLOW", "주의"
-        RED = "RED", "위험"
+    """찜한 종목 (워치리스트). 장투 재검증은 보유(Holding) 기준으로 이동 — 여기선 단순 북마크."""
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="liked_stocks"
     )
     stock = models.ForeignKey("stocks.Stock", on_delete=models.CASCADE, related_name="liked_by")
     liked_at = models.DateTimeField(auto_now_add=True)
-    base_pbr = models.DecimalField(
-        max_digits=10, decimal_places=4, null=True, blank=True, help_text="Like 시점 PBR (재검증 ±30% 기준)"
-    )
-    base_match_score = models.DecimalField(
-        max_digits=5, decimal_places=2, null=True, blank=True, help_text="Like 시점 궁합"
-    )
-    last_review_status = models.CharField(max_length=8, choices=ReviewStatus.choices, blank=True)
-    last_reviewed_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:

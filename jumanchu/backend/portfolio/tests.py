@@ -6,6 +6,7 @@
 
 현재가(KIS)는 _current_price를 patch하여 고정값으로 대체한다.
 """
+from datetime import date
 from decimal import Decimal
 from threading import Thread
 from unittest.mock import patch
@@ -18,7 +19,7 @@ from rest_framework.test import APIClient
 
 from portfolio import services
 from portfolio.models import Account, Holding, Order
-from stocks.models import Stock
+from stocks.models import FinancialSummary, Stock, StockIndicator
 
 User = get_user_model()
 PRICE = Decimal("80000")
@@ -289,3 +290,53 @@ class PortfolioReadTests(TestCase):
         _make_stock("Z9999")  # 종목은 있지만 미보유
         resp = self.client.get(reverse("portfolio-holding-detail", kwargs={"code": "Z9999"}))
         self.assertEqual(resp.status_code, 404)
+
+
+class HoldingReviewTests(TestCase):
+    """장투 재검증 — 매수 시점 스냅샷 + 보유 상세의 🟢🟡🔴 판정."""
+
+    def setUp(self):
+        self.user = _make_user("careuser")
+        self.account = Account.objects.create(user=self.user)
+        self.stock = _make_stock("A0001")
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _indicator(self, roe, pbr):
+        # 비율은 fraction 저장(0.20=20%). pbr은 배수(1.5).
+        return StockIndicator.objects.create(
+            stock=self.stock, roe=roe, pbr=pbr, calculated_date=date(2026, 6, 20),
+        )
+
+    def _financials(self, debt_ratio, net_profit_yoy):
+        return FinancialSummary.objects.create(
+            stock=self.stock, fiscal_period="2025", debt_ratio=debt_ratio,
+            net_profit_yoy=net_profit_yoy, data_source="DART",
+        )
+
+    @patch("portfolio.services._current_price", return_value=PRICE)
+    def test_buy_snapshots_base_pbr(self, _):
+        self._indicator(roe=0.20, pbr=1.5)
+        services.execute_buy(self.user, "A0001", 1, "k1")
+        holding = Holding.objects.get(user=self.user, stock=self.stock)
+        self.assertEqual(holding.base_pbr, Decimal("1.5000"))
+
+    @patch("portfolio.services._current_price", return_value=PRICE)
+    def test_review_green_when_healthy(self, _):
+        self._indicator(roe=0.20, pbr=1.5)                      # ROE 20%, PBR 1.5
+        self._financials(debt_ratio=1.0, net_profit_yoy=0.15)  # 부채 100%, 순익 +15%
+        services.execute_buy(self.user, "A0001", 1, "k1")      # base_pbr=1.5 → 이탈 0
+        resp = self.client.get(reverse("portfolio-holding-detail", kwargs={"code": "A0001"}))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["review"]["status"], "GREEN")
+        self.assertEqual(resp.data["review"]["violations"], [])
+
+    @patch("portfolio.services._current_price", return_value=PRICE)
+    def test_review_red_when_weak(self, _):
+        # ROE 5%(<10) · 부채 300%(>200) · 순익 -10%(<=0) → 위반 3개
+        self._indicator(roe=0.05, pbr=1.5)
+        self._financials(debt_ratio=3.0, net_profit_yoy=-0.10)
+        services.execute_buy(self.user, "A0001", 1, "k1")
+        resp = self.client.get(reverse("portfolio-holding-detail", kwargs={"code": "A0001"}))
+        self.assertEqual(resp.data["review"]["status"], "RED")
+        self.assertEqual(len(resp.data["review"]["violations"]), 3)
