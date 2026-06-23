@@ -5,14 +5,9 @@ from stocks.serializers import StockSerializer
 
 
 class AccountSerializer(serializers.ModelSerializer):
-    initial_balance = serializers.SerializerMethodField()
-
     class Meta:
         model = Account
         fields = ['user_id', 'balance', 'initial_balance', 'created_at', 'updated_at']
-
-    def get_initial_balance(self, obj) -> int:
-        return 100_000_000
 
 
 class HoldingSerializer(serializers.ModelSerializer):

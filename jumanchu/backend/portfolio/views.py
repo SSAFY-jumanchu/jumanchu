@@ -252,7 +252,7 @@ class BalanceView(APIView):
         responses={200: s.BalanceResponseSerializer},
     )
     def get(self, request):
-        account = Account.objects.get(user=request.user)
+        account, _ = Account.objects.get_or_create(user=request.user)
         return Response(s.BalanceResponseSerializer({'account': account}).data)
 
 

@@ -206,8 +206,15 @@ class StockDetailView(APIView):
         if not stock:
             return Response({'detail': '해당 종목을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Watchlist 모델 미존재 (v2) — 인스턴스에 속성 주입해 직렬화 통과.
-        stock.is_in_watchlist = False
+        # 관심종목 여부 — 로그인 유저면 UserLikedStock(활성) 조회, 비로그인은 False.
+        # (지연 import: 앱 간 순환 방지 관례 — StockPostsView의 community import와 동일)
+        from recommend.models import UserLikedStock
+        stock.is_in_watchlist = bool(
+            request.user.is_authenticated
+            and UserLikedStock.objects.filter(
+                user=request.user, stock=stock, is_active=True
+            ).exists()
+        )
         return Response({'stock': s.StockDetailSerializer(stock).data})
 
 
