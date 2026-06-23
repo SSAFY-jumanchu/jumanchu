@@ -78,9 +78,8 @@ Table economic_event {          // [신규] 경제 캘린더 (홈 다가오는 �
   id integer [pk]
   event_date date
   title varchar
-  importance varchar            [note: '상/중/하']
-  country varchar
-  created_at datetime
+  importance varchar            [note: 'HIGH/MEDIUM/LOW (상/중/하)']
+  country varchar               [note: 'US/KR']
 }
 
 // ───────────────────────── 종목 도메인 ─────────────────────────
@@ -94,10 +93,16 @@ Table stock {                   // [기존] stocks_stock
   industry varchar
   market_cap bigint
   currency varchar              [note: 'KRW/USD']
+  kis_short_code varchar        [note: '기존: KIS 단축코드 (가격 조회용)']
   is_active boolean
   is_sp500 boolean
   is_nasdaq100 boolean
   listed_at date
+  ceo_name varchar              [note: '기존: 메타 보강 (yfinance/DART)']
+  description text               [note: '기존: 기업 개요']
+  employee_count integer        [note: '기존: nullable']
+  homepage_url varchar          [note: '기존: nullable']
+  updated_at datetime
   indexes {
     (code, market) [unique]
   }
@@ -143,12 +148,17 @@ Table financial_summary {       // [기존] stocks_financialsummary (재무요�
   revenue bigint
   operating_profit bigint
   net_profit bigint
+  operating_margin float        [note: '기존: nullable']
+  net_margin float              [note: '기존: nullable']
   revenue_yoy float
+  operating_profit_yoy float    [note: '기존: nullable']
   net_profit_yoy float
   debt_ratio float
   equity_ratio float
   current_ratio float
   payout_ratio float
+  data_source varchar           [note: '기존: DART/yfinance']
+  fetched_at datetime           [note: '기존: 적재 시각']
   indexes {
     (stock_id, fiscal_period) [unique]
   }
@@ -192,6 +202,7 @@ Table account {                 // [기존] portfolio_account (1:1 user, 가상�
   id integer [pk]
   user_id integer [unique]
   balance decimal
+  initial_balance decimal       [note: '기존: 최초 지급 가상잔액 (수익률 기준점)']
   created_at datetime
   updated_at datetime
 }
@@ -222,6 +233,8 @@ Table "order" {                 // [기존] portfolio_order (시스템 매매기
   quantity integer
   price decimal
   total_amount decimal
+  fee decimal                   [note: '기존: 거래 수수료']
+  tax decimal                   [note: '기존: 거래세']
   realized_pnl decimal          [note: '매도 실현손익 = (체결가-평균매입가)×수량, 매수는 NULL']
   status varchar                [note: 'PENDING/FILLED/FAILED']
   idempotency_key varchar [unique]
@@ -323,6 +336,7 @@ Table community_post {          // [기존+수정] community_communitypost (종�
   view_count integer
   like_count integer            [note: '비정규화: 인기순 정렬용, 좋아요 시 ±1']
   created_at datetime
+  updated_at datetime           [note: '기존: 수정 시각']
 }
 
 Table comment {                 // [기존] community_comment
@@ -331,6 +345,7 @@ Table comment {                 // [기존] community_comment
   user_id integer
   body text
   created_at datetime
+  updated_at datetime           [note: '기존: 수정 시각']
 }
 
 Table post_like {               // [기존] community_postlike

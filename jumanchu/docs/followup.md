@@ -223,6 +223,6 @@ python manage.py runserver    # /api/docs/ 접속
 - [docs/ERD.md](ERD.md) — 진실의 원천
 - [docs/DART_COLUMN.md](DART_COLUMN.md) — 재무 지표 컬럼 사전
 - [docs/API_명세_초안.md](API_명세_초안.md) — 11개 모듈 엔드포인트
-- [docs/API_스키마_v1.md](API_스키마_v1.md) — v1.1 스키마 (Auth/Stock/Order/Portfolio)
+- [docs/API_스키마_v1.5.md](API_스키마_v1.5.md) — v1.5 스키마 (전 8모듈)
 - [docs/인증_권한_정책.md](인증_권한_정책.md) — JWT/IsOwner 정책
 - [docs/LOCAL_SETUP.md](LOCAL_SETUP.md) — 새 PC 셋업

@@ -1,7 +1,7 @@
 """
 페이지네이션 envelope helper.
 
-명세 (`docs/API_스키마_v1.md` §0.2):
+명세 (`docs/API_스키마_v1.5.md` §0.2):
     { "items": T[], "page": int, "size": int, "total": int }
 
 DRF PageNumberPagination 대신 단순 함수로 — 키 명명이 명세와 다르고

@@ -137,8 +137,8 @@ class TrendingRecommendView(APIView):
 
 | 작업 | 먼저 봐야 할 문서 |
 |---|---|
-| 새 API 만들기 | `docs/USER_STORIES.md` (해당 US-NN) + `docs/API_명세_초안.md` + `docs/API_스키마_v1.md` |
-| 새 Vue 화면 만들기 | `docs/USER_STORIES.md` + `docs/API_스키마_v1.md` + `planning/화면예시/` |
+| 새 API 만들기 | `docs/USER_STORIES.md` (해당 US-NN) + `docs/API_명세_초안.md` + `docs/API_스키마_v1.5.md` |
+| 새 Vue 화면 만들기 | `docs/USER_STORIES.md` + `docs/API_스키마_v1.5.md` + `planning/화면예시/` |
 | 추천 알고리즘 작업 | `docs/USER_STORIES.md` US-04/05/10 + `docs/DART_COLUMN.md` (입력 지표) |
 | DB 모델 변경 | **`docs/ERD.md` (진실의 원천)** + `planning/모델_서비스flow/erd.html` (시각본) |
 | 인증·권한 구현 | `docs/인증_권한_정책.md` (JWT/IsOwner 정책) |

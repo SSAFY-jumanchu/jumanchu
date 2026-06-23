@@ -1,5 +1,9 @@
 # 주만추 REST API 명세 초안
 
+> ⚠️ **DEPRECATED (초기 드래프트).** 미구현 기능(MBTI 분석, 일지 AI 분석 등)이 섞여 있어 현행과 불일치.
+> **현행 API는 → [URL_MAP.md](URL_MAP.md)(전체 라우트) · [API_스키마_v1.5.md](API_스키마_v1.5.md)(요청/응답) · Swagger `/api/docs/`** 참고.
+> 이 문서는 초기 설계 기록용으로만 보존.
+
 > SCRUM-45 (1.3.1 RESTful 엔드포인트 정의) 산출물
 > 작성일: 2026-05-13 · 갱신: ERD 정합성 패치 (v1 → v1.1)
 > 다음 단계: SCRUM-46 (request/response 스키마 정의)
@@ -313,7 +317,7 @@ ERD: `COMMUNITY_POST`, `COMMENT`, `POST_LIKE`, `SHARED_PORTFOLIO`, `SHARED_PORTF
 
 ## 7. 다음 단계
 
-- **SCRUM-46 (스키마 정의)** — 각 엔드포인트의 request/response 필드 타입 명세 → `API_스키마_v1.md` 참조
+- **SCRUM-46 (스키마 정의)** — 각 엔드포인트의 request/response 필드 타입 명세 → `API_스키마_v1.5.md` 참조
 - **SCRUM-47 (인증/권한 정책)** — JWT TTL, refresh 정책, RBAC 상세 → `인증_권한_정책.md` 참조
 - **SCRUM-48 (Swagger 문서화)** — OpenAPI 3.0 yaml, `drf-spectacular` 권장
 

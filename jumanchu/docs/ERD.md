@@ -8,7 +8,7 @@
 | 구분 | 변경 |
 |---|---|
 | 🆕 신규 | `ACCOUNT` (가상 잔액), `ORDER` (시스템 매매 기록) |
-| 🔄 변경 | `STOCK` (5개 필드 보강 + 메타 4개: description/homepage_url/ceo_name/employee_count — API_스키마_v1.md §3.2 정합), `ORDER` (fee/tax 보강), `FINANCIAL_STATEMENT` (원본 X, 가공 지표만), `STOCK_DIARY` (매매 정보 → ORDER 이관, 일기 책임만) |
+| 🔄 변경 | `STOCK` (5개 필드 보강 + 메타 4개: description/homepage_url/ceo_name/employee_count — API_스키마_v1.5.md §3.2 정합), `ORDER` (fee/tax 보강), `FINANCIAL_STATEMENT` (원본 X, 가공 지표만), `STOCK_DIARY` (매매 정보 → ORDER 이관, 일기 책임만) |
 | ⏸️ 보류 | `STOCK_RECOMMENDATION` — 추천 트랙 1 완료 후 재검토 |
 | 📌 정책 | `STOCK_PRICE` 일봉만 DB, 실시간 시세는 Redis 캐싱 (DB 저장 X) |
 

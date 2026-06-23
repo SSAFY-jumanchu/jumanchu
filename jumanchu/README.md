@@ -126,7 +126,7 @@ npm run dev                   # http://localhost:5173
 | 문서 | 내용 |
 |---|---|
 | [docs/ERD.md](docs/ERD.md) | DB 스키마 (진실의 원천) |
-| [docs/API_명세_초안.md](docs/API_명세_초안.md) · [docs/API_스키마_v1.md](docs/API_스키마_v1.md) | API 모듈·스키마 |
+| [docs/API_명세_초안.md](docs/API_명세_초안.md) · [docs/API_스키마_v1.5.md](docs/API_스키마_v1.5.md) | API 모듈·스키마 |
 | [docs/인증_권한_정책.md](docs/인증_권한_정책.md) | JWT / 권한 정책 |
 | [docs/DART_COLUMN.md](docs/DART_COLUMN.md) | 재무 지표 컬럼 사전 |
 | [docs/USER_STORIES.md](docs/USER_STORIES.md) | 유저 스토리 / 인수 조건 |

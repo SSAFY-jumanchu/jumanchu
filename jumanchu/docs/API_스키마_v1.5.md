@@ -1,9 +1,9 @@
-# 주만추 API 스키마 v1.1 (핵심 4모듈 — ERD 정합)
+# 주만추 API 스키마 v1.5 (전 8모듈 — 구현 정합)
 
-> SCRUM-46 (1.3.2 Request/Response 스키마 정의) 산출물 — 1차분
-> 작성일: 2026-05-13 · 갱신: ERD 정합성 패치 (v1 → v1.1)
-> 범위: Auth · Stock · Trading(Order) · Portfolio (25개 엔드포인트)
-> 다음 차분: Recommend·Watchlist (1주 후), News·Community·Diary (2주 후)
+> SCRUM-46 (1.3.2 Request/Response 스키마 정의) 산출물
+> 작성일: 2026-05-13 · 최신 갱신: 2026-06-23 (구현 대조 + 누락 모듈 추가)
+> 범위: Auth · Stock · Order · Portfolio · **Recommend · Community · Diary · News** (전 46 엔드포인트)
+> 전체 라우트 한눈에: **[URL_MAP.md](URL_MAP.md)** · 라이브 스키마: Swagger `/api/docs/`
 >
 > **v1.1 변경 요약**: `planning/모델_서비스flow/erd.html` 기준으로 명명·구조 통일.
 > - `Transaction` → **`Order`** (DB 테이블명과 통일, `status`/`idempotency_key` 필드 보강)
@@ -476,7 +476,7 @@ interface Account {
 
 ---
 
-## 3. Stock 모듈 (8개)
+## 3. Stock 모듈 (9개)
 
 ### 3.1 GET /api/v1/stocks
 
@@ -650,6 +650,24 @@ interface StockSummary {          // Stock + 가격 간략 (홈에서 카드로 
 ```
 
 **Caching**: Redis 10초 TTL.
+
+---
+
+### 3.9 GET /api/v1/economic-events/
+
+경제 이벤트 캘린더. 공개(AllowAny).
+
+**Response 200** — `{ items: EconomicEvent[], total: number }`
+
+```typescript
+interface EconomicEvent {
+  id: number
+  event_date: ISODate
+  title: string
+  importance: "HIGH" | "MEDIUM" | "LOW"
+  country: "US" | "KR"
+}
+```
 
 ---
 
@@ -872,29 +890,173 @@ order?: "asc" | "desc" = "desc"
 
 ---
 
-## 6. 엔드포인트별 권한·캐싱 요약
+## 6. Recommend 모듈 (5 라우트) — 추천·관심·장투
 
-| 엔드포인트 | 권한 | 캐시 | Rate Limit |
-|---|---|---|---|
-| POST /auth/signup | ⚪ | — | 3/m IP |
-| POST /auth/login | ⚪ | — | 5/m IP |
-| POST /auth/logout | 🔒 | — | — |
-| POST /auth/token/refresh | refresh Cookie | — | 30/m IP |
-| GET/PATCH /auth/me | 🔒 | — | — |
-| POST /auth/onboarding | 🔒 | — | — |
-| POST /auth/password/reset | ⚪ | — | 3/m IP |
-| GET /stocks* (조회) | ⚪ | 종류별 | 100/m anon · 1000/m user |
-| GET /markets/summary | ⚪ | 10초 | — |
-| POST /orders/preview | 🔒 | — | 60/m user |
-| POST /orders | 🔒 👤 | — | 30/m user |
-| GET /orders* | 🔒 👤 | — | — |
-| GET /portfolio* | 🔒 👤 | — | — |
+전부 JWT 필요. 상세 동작은 `docs/투자자유형_기획안.md`, `616jy/장투케어_AI리포트_명세.md` 참고.
+
+| Method · Path | 요청 | 응답(주요 필드) |
+|---|---|---|
+| GET `/api/v1/recommendations/` | `?limit` (기본 30, 최대 50) | `{ items: SwipeCard[], total, generated_at }` · 온보딩 미완 시 **409** |
+| GET `/api/v1/watchlist/` | — | `{ items: WatchlistItem[], total }` |
+| POST `/api/v1/watchlist/` | `{ stock_code }` | `WatchlistItem` · 없는 종목 **404** |
+| DELETE `/api/v1/watchlist/{code}/` | — | **204** · 미보유 **404** |
+| GET `/api/v1/longterm/ranking/` | `?limit` (기본 30, 최대 100) `?offset` | `{ items: RankItem[], total, limit, offset, generated_at }` · 온보딩 미완 **409** |
+| GET `/api/v1/longterm/{code}/report/` | `?refresh=1` (캐시 무시·재생성) | `LongTermReport` · GMS 키 없으면 **503** · 없는 종목 **404** |
+
+```typescript
+interface SwipeCard {
+  stock_code: string; stock_name: string; market: string; sector: string
+  match_score: number; rank: number
+  dna: { volatility: number|null; value_score: number|null; growth_score: number|null; stability: number|null }
+  reason: string
+  current_price: number|null; change_rate: number|null; like_count: number
+}
+interface WatchlistItem {
+  stock_code: string; stock_name: string; market: string; sector: string
+  current_price: number|null; change_rate: number|null; liked_at: ISODateTime; is_active: boolean
+}
+interface RankItem {  // 장투 총점 = 소계×0.7 + 궁합×0.3
+  rank: number; stock_code: string; stock_name: string; market: string; sector: string
+  longterm_total: number; subtotal: number; userfit: number
+  financial: number|null; growth: number|null
+}
+interface LongTermReport {  // 장투 케어 AI 리포트 (GMS GPT-4o, rec_type='long_term' 캐시 TTL 1일)
+  stock_code: string
+  financial: Section; growth: Section; userfit: Section | null
+  total: { score: number; grade: string; label: string; opinion: string }
+}
+interface Section { section: string; score: number; grade: string; summary: string }
+```
 
 ---
 
-## 7. Django 구현 노트
+## 7. Community 모듈 (9 라우트) — 게시글·댓글·팔로우
 
-### 7.1 모델 매핑 가이드 (ERD 1:1 매칭)
+읽기는 공개, 쓰기는 JWT (`IsAuthenticatedOrReadOnly`). 좋아요·댓글 수정/삭제·팔로우는 JWT. 수정/삭제는 **작성자 본인만**.
+
+| Method · Path | 요청 | 응답(주요 필드) |
+|---|---|---|
+| GET `/api/v1/posts/` | `?stock_code ?category ?page ?size` (size 기본20·최대100) | `{ items: Post[], page, size, total }` |
+| POST `/api/v1/posts/` | `{ stock_code, category?, title, body }` | `Post` |
+| GET `/api/v1/posts/{id}/` | — | `Post` (조회수 증가) |
+| PATCH `/api/v1/posts/{id}/` | `{ title?, body?, category? }` | `Post` |
+| DELETE `/api/v1/posts/{id}/` | — | **204** |
+| POST `/api/v1/posts/{id}/like/` | — | `{ liked, like_count }` (토글) |
+| GET `/api/v1/posts/{post_id}/comments/` | — | `{ items: Comment[], total }` |
+| POST `/api/v1/posts/{post_id}/comments/` | `{ body }` | `Comment` |
+| PATCH `/api/v1/comments/{id}/` | `{ body }` | `Comment` |
+| DELETE `/api/v1/comments/{id}/` | — | **204** |
+| POST `/api/v1/comments/{id}/like/` | — | `{ liked, like_count }` (토글) |
+| POST `/api/v1/users/{user_id}/follow/` | — | 팔로우 |
+| DELETE `/api/v1/users/{user_id}/follow/` | — | 언팔로우 |
+| GET `/api/v1/users/{user_id}/followers/` | — | `{ items: {user_id,nickname}[], total }` (공개) |
+| GET `/api/v1/users/{user_id}/following/` | — | `{ items: {user_id,nickname}[], total }` (공개) |
+
+```typescript
+interface Post {
+  id: number; user_id: number; nickname: string
+  stock_code: string|null; stock_name: string|null
+  category: string; title: string; body: string
+  view_count: number; like_count: number; comment_count: number
+  is_liked: boolean; created_at: ISODateTime
+}
+interface Comment { id: number; post_id: number; user_id: number; nickname: string; body: string; created_at: ISODateTime }
+```
+
+---
+
+## 8. Diary 모듈 (2 라우트) — 투자 일지
+
+전부 JWT, 본인 일지만 조회/수정/삭제.
+
+| Method · Path | 요청 | 응답(주요 필드) |
+|---|---|---|
+| GET `/api/v1/diaries/` | `?stock_code ?action_type(BUY/SELL/WATCH) ?page ?size` | `{ items: Diary[], page, size, total }` |
+| POST `/api/v1/diaries/` | `DiaryWrite` | `Diary` |
+| GET `/api/v1/diaries/{id}/` | — | `Diary` |
+| PATCH `/api/v1/diaries/{id}/` | `DiaryWrite` (부분) | `Diary` |
+| DELETE `/api/v1/diaries/{id}/` | — | **204** |
+
+```typescript
+interface DiaryWrite {
+  stock_code: string; order_id?: number|null
+  action_type: "BUY" | "SELL" | "WATCH"
+  reason_category?: string; confidence: number  // 1~5
+  target_price?: number|null; stop_loss_price?: number|null; memo?: string
+}
+interface Diary extends DiaryWrite {
+  id: number; stock_name: string; created_at: ISODateTime; updated_at: ISODateTime
+}
+```
+
+---
+
+## 9. News 모듈 (7 라우트) — 뉴스
+
+> 상세 명세(요청/응답 필드)는 **[NEWS_API_SPEC.jy.md](NEWS_API_SPEC.jy.md)**. 여기선 라우트 요약만.
+
+| Method · Path | 권한 | 설명 |
+|---|---|---|
+| GET `/api/v1/news/` | 공개 | 뉴스 검색 |
+| GET `/api/v1/news/economy/` | 공개 | 경제 뉴스 피드 |
+| GET `/api/v1/news/feed/{category}/` | 공개 | 카테고리별 피드 |
+| GET `/api/v1/news/by-sector/` | 공개 | 섹터별 뉴스 |
+| GET `/api/v1/news/stocks/{code}/` | 공개 | 특정 종목 뉴스 |
+| GET `/api/v1/news/holdings/` | JWT | 내 보유 종목 뉴스 |
+| GET `/api/v1/news/watchlist/` | JWT | 내 관심 종목 뉴스 |
+
+---
+
+## 10. 권한 · 캐싱 · 배치(cron) 요약
+
+### 10.1 권한 정책별 엔드포인트
+
+| 정책 | 엔드포인트 |
+|---|---|
+| **공개** (AllowAny) | `auth: signup·login·token/refresh·password/reset` · `GET /stocks/*` · `/markets/summary` · `/economic-events/` · `news: /·economy·feed/{cat}·by-sector·stocks/{code}` · `GET /users/{id}/followers·following` |
+| **읽기공개·쓰기JWT** (IsAuthenticatedOrReadOnly) | `/posts/` · `/posts/{id}/` · `/posts/{post_id}/comments/` (GET 공개, 작성·수정·삭제 JWT) |
+| **JWT** (IsAuthenticated) | `auth me·logout·onboarding` · `orders/*` · `portfolio/*` · `recommendations` · `watchlist/*` · `longterm/*` · `diaries/*` · 좋아요·팔로우 · `news/holdings·watchlist` |
+| **JWT + 본인만** | `orders/*`·`portfolio/*`(계정 소유자) · `diaries/*`(작성자) · `posts·comments` 수정/삭제(작성자) |
+
+> Rate Limit(django-ratelimit, Redis 백엔드, 설정상): `signup·password/reset` 3/m·IP · `login` 5/m·IP · `token/refresh` 30/m·IP · `stocks` 100/m(비로그인)·1000/m(로그인) · `orders/preview` 60/m · `orders` 30/m. 그 외 미적용.
+
+### 10.2 캐싱 (응답/결과)
+
+| 엔드포인트 | 저장소 | TTL |
+|---|---|---|
+| `GET /stocks/{code}/price/` | Redis | 장중 3s / 장외 60s |
+| `GET /stocks/{code}/chart/` | Redis | 분봉 5분 / 일봉 1시간 |
+| `GET /markets/summary/` | Redis | **5s** |
+| `GET /stocks/{code}/orderbook/` | (KIS 실시간) | 캐시 없음 |
+| `GET /longterm/{code}/report/` | DB `recommendation_cache` (rec_type=`long_term`) | **1일** — LLM 재호출 방지, `?refresh=1`로 무효화 |
+| `GET /recommendations/` | DB `recommendation_cache` (rec_type=`onboarding`) 부수 기록 | 1일 |
+
+> 그 외(community·diary·news·portfolio·orders 등)는 응답 캐시 없음.
+
+### 10.3 배치 (management command — cron 등록 대상)
+
+> ⚠️ 현재 스케줄러 **미등록**(수동 실행). 아래는 권장 주기.
+> 의존 순서: 마스터 → 메타·플래그 → 가격 → 지표 → 재무 → DNA·장투점수.
+
+| 커맨드 | 목적 | 권장 주기 |
+|---|---|---|
+| `sync_stock_master` · `sync_us_stock_master` | KIS 마스터로 KR/US 종목 적재 | 주 1회 |
+| `enrich_stock_meta_from_dart` · `_from_kis` · `enrich_us_stock_meta` | 섹터·시총·CEO·PER/PBR 등 메타 보강 | 주 1회 / 수시 |
+| `sync_us_index_flags` | S&P500·NASDAQ100 플래그 + 비인덱스 비활성화 | 주 1회 |
+| `normalize_sectors` | 섹터명 KR 기준 정규화 (Stock·StockDna) | 마스터/메타 갱신 후 |
+| `sync_stock_prices` | KIS(KR)/yfinance(US) 일봉 수집 | **매일** (장 마감 후) |
+| `calc_market_indicators` | beta·volatility·52주 고저 계산 | **매일** (가격 후) |
+| `enrich_financials` | DART/yfinance 재무 + roe/roa/배당 | 분기 (공시 후) |
+| `calc_stock_dna` | 4축 DNA 분위수 정규화 | **매일** (지표·재무 후) |
+| `calc_longterm_scores` | 장투 소계(재무·성장) 적재 | **매일** (지표·재무 후) |
+| `ingest_rss` | 연합뉴스 RSS 수집·태깅 | 시간별 |
+| `seed_economic_events` | 경제 캘린더 목업 시드 | 1회 / 수시 |
+
+---
+
+## 11. Django 구현 노트
+
+### 11.1 모델 매핑 가이드 (ERD 1:1 매칭)
 
 | 도메인 타입 | Django 모델 (앱.Model) | ERD 테이블 | 비고 |
 |---|---|---|---|
@@ -911,7 +1073,7 @@ order?: "asc" | "desc" = "desc"
 | Holding | `portfolio.Holding` | `HOLDING` | (user, stock) unique |
 | Order | `portfolio.Order` | `ORDER` | DB 트랜잭션 필수, idempotency_key unique |
 
-### 7.2 핵심 트랜잭션 패턴 (주문 실행)
+### 11.2 핵심 트랜잭션 패턴 (주문 실행)
 
 ```python
 @transaction.atomic
@@ -955,7 +1117,7 @@ def execute_order(user, stock_code, side, quantity, idempotency_key):
 
 `@transaction.atomic`이 모든 DB 변경을 묶어서 중간 실패 시 전체 롤백.
 
-### 7.3 권장 라이브러리
+### 11.3 권장 라이브러리
 
 - `djangorestframework-simplejwt` — JWT
 - `drf-spectacular` — Swagger 자동 생성 (SCRUM-48)
@@ -967,20 +1129,20 @@ def execute_order(user, stock_code, side, quantity, idempotency_key):
 
 ---
 
-## 8. 다음 차분 안내
+## 12. 다음 차분 안내
 
 | 차분 | 시점 | 모듈 |
 |---|---|---|
 | **v1.1 (이 문서)** | 2026-05-13 | Auth · Stock · Order · Portfolio (ERD 정합) |
-| v2 | 약 1주 후 (SCRUM-25 시작 전) | Recommend · Watchlist |
-| v3 | 약 2주 후 (SCRUM-26 시작 전) | News · Community · Diary |
+| ~~v2~~ ✅ | 2026-06-23 구현·문서화 완료 | Recommend · Watchlist (§6) |
+| ~~v3~~ ✅ | 2026-06-23 구현·문서화 완료 | News(§9) · Community(§7) · Diary(§8) |
 | v4 | Phase 3 시작 즈음 | Notification · Home BFF |
 
 각 차분은 v(N)으로 versioning. v(N+1)는 v(N)의 도메인 타입을 재사용·확장.
 
 ---
 
-## 9. 변경 이력
+## 13. 변경 이력
 
 | 일자 | 변경 | 담당 |
 |---|---|---|
@@ -988,3 +1150,5 @@ def execute_order(user, stock_code, side, quantity, idempotency_key):
 | 2026-05-13 | **v1.1 ERD 정합성 패치** — `Transaction`→`Order`, `VirtualAccount`→`Account`, `Financial`→`FinancialSummary`+`StockIndicator` 분리, Stock 필드 풍부화, Trading URL `/trades`→`/orders` | 강재민 |
 | 2026-06-01 | **v1.2** — URL trailing slash 전면 통일(Auth/Stock/Order/Portfolio), Stock 조회 API `GET /stocks/`·`/{code}/`·`/{code}/price/` 실구현(KIS 분기 + 장중3s·장외60s 캐시) | 강재민 |
 | 2026-06-01 | **v1.3** — 캔들 차트 API `GET /stocks/{code}/chart/` 실구현. 일봉/주봉/월봉=DB(StockPrice resample), 분봉=KIS(KR FHKST03010200 1m + 클라이언트 _resample / US HHDFS76950200 NMIN). 장중 today 한 칸 합성(B 패턴, 일봉 한정). 캐싱: 분봉 5분 / 일봉 1시간. period×interval 유효성 400 | 강재민 |
+| 2026-06-22 | **v1.4** — `risk_type` 제거 → `investment_style`(성향 4유형), onboarding 요청 스키마를 q1~q6로 정정 | 강재민 |
+| 2026-06-23 | **v1.5** — 누락 모듈 문서화: Recommend(§6)·Community(§7)·Diary(§8)·News(§9 요약)·economic-events(§3.9). [URL_MAP.md](URL_MAP.md) 신설, 섹션 재번호(기존 6~9 → 10~13). §10 권한·캐싱·배치(cron) 3표 정리(markets TTL 10초→**5s** 정정). 파일명 `API_스키마_v1.md` → `API_스키마_v1.5.md` 동기화 | 강재민 |
