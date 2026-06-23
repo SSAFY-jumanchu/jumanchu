@@ -1,10 +1,23 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="ko">
   <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>주만추 — 와이어프레임</title>
+    <script>
+      // 첫 페인트 전에 저장된 테마를 적용해 라이트→다크 깜빡임(FOUC)을 막는다.
+      (function () {
+        var saved = localStorage.getItem('jmc_theme')
+        var theme = saved === 'light' || saved === 'dark'
+          ? saved
+          : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        var savedPalette = localStorage.getItem('jmc_palette')
+        var palette = savedPalette === 'love' ? 'love' : 'default'
+        document.documentElement.setAttribute('data-theme', theme)
+        document.documentElement.setAttribute('data-palette', palette)
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

@@ -1,296 +1,189 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --ink: #141820;
+  --text: #2a303a;
+  --muted: #60708a;
+  --faint: #98a1b2;
+  --accent: #315dff;
+  --accent-rgb: 49, 93, 255;
+  --positive: #0f9f6e;
+  --negative: #cf3d3d;
+  --warning: #b87800;
+  --purple: #7d4ee8;
+  --purple-rgb: 125, 78, 232;
+  /* 국장 관례색 (매도/상승 빨강 · 매수/하락 파랑) — 텍스트 용도 */
+  --krx-up: #ff3b5c;
+  --krx-down: #0066cc;
+  --radius: 10px;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* 단색 페이지 위에 얹는 불투명 표면 체계. 기존 변수명은 컴포넌트 호환을 위해 유지한다. */
+  --page-bg: #f6f7f9;
+  --glass: #ffffff;
+  --glass-strong: #ffffff;
+  --glass-subtle: #f5f6f8;
+  --glass-border: #e1e5ea;
+  --glass-border-subtle: #eceff2;
+  --glass-inset: none;
+  --glass-shadow: 0 1px 2px rgba(17, 24, 39, 0.04), 0 6px 18px rgba(17, 24, 39, 0.05);
+  --glass-blur: none;
+  --glass-blur-sm: none;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
+  /* 미세 오버레이 → 칩/버튼 휴지 상태 → 호버 상태 → 활성 탭 → 입력 필드 → 게이지 트랙 */
+  --surface-faint: #fafbfc;
+  --surface-soft: #f4f6f8;
+  --surface-hover: #edf0f3;
+  --chip-active: #ffffff;
+  --input-bg: #ffffff;
+  --track: #e8ebef;
+
+  --surface: var(--glass);
+  --line: #e4e7ec;
+
+  color-scheme: light;
+
+  font-family:
+    "Apple SD Gothic Neo", "Pretendard", -apple-system, BlinkMacSystemFont,
+    "Malgun Gothic", "Segoe UI", sans-serif;
   color: var(--text);
-  background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
+html[data-theme='dark'] {
+  --ink: #f0f3fa;
+  --text: #ccd4e3;
+  --muted: #8d9ab2;
+  --faint: #5e6a82;
+  --accent: #7d9bff;
+  --accent-rgb: 125, 155, 255;
+  --positive: #34c79a;
+  --negative: #f07070;
+  --warning: #e0a232;
+  --purple: #a385f2;
+  --purple-rgb: 163, 133, 242;
+  --krx-up: #ff5c77;
+  --krx-down: #5b9cff;
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
+  --page-bg: #0b0d10;
+  --glass: #15181d;
+  --glass-strong: #171a1f;
+  --glass-subtle: #1b1f25;
+  --glass-border: #2a3038;
+  --glass-border-subtle: #232930;
+  --glass-inset: none;
+  --glass-shadow: 0 1px 2px rgba(0, 0, 0, 0.32), 0 8px 20px rgba(0, 0, 0, 0.18);
+
+  --surface-faint: #111419;
+  --surface-soft: #1a1e24;
+  --surface-hover: #22272e;
+  --chip-active: #292f37;
+  --input-bg: #111419;
+  --track: #2a3038;
+
+  --line: #292f36;
+
+  color-scheme: dark;
+}
+
+/* ===== COLOR PALETTE: 연애(틴더) =====
+   밝기 모드와 독립적으로 적용되는 주만추의 스와이핑 아이덴티티 팔레트 */
+html[data-palette='love'] {
+  --accent: #ff385c;
+  --accent-rgb: 255, 56, 92;
+  --purple: #fd267a;
+  --purple-rgb: 253, 38, 122;
+  --track: rgba(255, 56, 92, 0.14);
+}
+
+html[data-theme='dark'][data-palette='love'] {
+  --accent: #ff7188;
+  --accent-rgb: 255, 113, 136;
+  --purple: #ff4d9a;
+  --purple-rgb: 255, 77, 154;
+  --track: rgba(255, 113, 136, 0.16);
+}
+
+* { box-sizing: border-box; }
+
+/* 리퀴드 글래스의 핵심이던 배경 블러를 전체 UI에서 제거한다. */
+*, *::before, *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html {
+  scroll-behavior: smooth;
+  min-height: 100%;
+  background: var(--page-bg);
 }
 
 body {
+  min-width: 320px;
+  min-height: 100vh;
   margin: 0;
+  background: var(--page-bg);
+  color: var(--text);
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+button, input { font: inherit; }
+button { cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+
+#app { min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ===== LAYOUT ===== */
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  /* 100vw 풀블리드(.lp-banner)가 세로 스크롤바 폭만큼 넘쳐 우측에 여백이
+     생기는 것 방지. clip은 스크롤 컨테이너를 만들지 않아 sticky 네비에 무해. */
+  overflow-x: clip;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
-}
-
-.counter {
-  font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid transparent;
-  transition: border-color 0.3s;
-  margin-bottom: 24px;
-
-  &:hover {
-    border-color: var(--accent-border);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-}
-
-.hero {
-  position: relative;
-
-  .base,
-  .framework,
-  .vite {
-    inset-inline: 0;
-    margin: 0 auto;
-  }
-
-  .base {
-    width: 170px;
-    position: relative;
-    z-index: 0;
-  }
-
-  .framework,
-  .vite {
-    position: absolute;
-  }
-
-  .framework {
-    z-index: 1;
-    top: 34px;
-    height: 28px;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
-      scale(1.4);
-  }
-
-  .vite {
-    z-index: 0;
-    top: 107px;
-    height: 26px;
-    width: auto;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
-      scale(0.8);
-  }
-}
-
-#app {
-  width: 1126px;
-  max-width: 100%;
+.main-area {
+  flex: 1;
+  width: min(1480px, 100%);
   margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
+  padding: 24px 28px 56px;
+}
+
+/* ===== TYPOGRAPHY ===== */
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1, h2, h3, h4 { margin: 0; color: var(--ink); letter-spacing: 0; }
+h1 { font-size: 28px; line-height: 1.25; }
+h2 { font-size: 18px; line-height: 1.3; }
+h3 { font-size: 15px; line-height: 1.3; }
+h4 { font-size: 14px; line-height: 1.4; font-weight: 700; }
+
+/* ===== PANEL ===== */
+.panel {
+  border-radius: var(--radius);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  padding: 20px;
+  min-width: 0;
+}
+
+.panel-head {
   display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
-#center {
-  display: flex;
-  flex-direction: column;
-  gap: 25px;
-  place-content: center;
-  place-items: center;
-  flex-grow: 1;
-
-  @media (max-width: 1024px) {
-    padding: 32px 20px 24px;
-    gap: 18px;
-  }
-}
-
-#next-steps {
-  display: flex;
-  border-top: 1px solid var(--border);
-  text-align: left;
-
-  & > div {
-    flex: 1 1 0;
-    padding: 32px;
-    @media (max-width: 1024px) {
-      padding: 24px 20px;
-    }
-  }
-
-  .icon {
-    margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
-  }
-
-  @media (max-width: 1024px) {
-    flex-direction: column;
-    text-align: center;
-  }
-}
-
-#docs {
-  border-right: 1px solid var(--border);
-
-  @media (max-width: 1024px) {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-}
-
-#next-steps ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  gap: 8px;
-  margin: 32px 0 0;
-
-  .logo {
-    height: 18px;
-  }
-
-  a {
-    color: var(--text-h);
-    font-size: 16px;
-    border-radius: 6px;
-    background: var(--social-bg);
-    display: flex;
-    padding: 6px 12px;
-    align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    transition: box-shadow 0.3s;
-
-    &:hover {
-      box-shadow: var(--shadow);
-    }
-    .button-icon {
-      height: 18px;
-      width: 18px;
-    }
-  }
-
-  @media (max-width: 1024px) {
-    margin-top: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-
-    li {
-      flex: 1 1 calc(50% - 8px);
-    }
-
-    a {
-      width: 100%;
-      justify-content: center;
-      box-sizing: border-box;
-    }
-  }
-}
-
-#spacer {
-  height: 88px;
-  border-top: 1px solid var(--border);
-  @media (max-width: 1024px) {
-    height: 48px;
-  }
-}
-
-.ticks {
-  position: relative;
-  width: 100%;
-
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: -4.5px;
-    border: 5px solid transparent;
-  }
-
-  &::before {
-    left: 0;
-    border-left-color: var(--border);
-  }
-  &::after {
-    right: 0;
-    border-right-color: var(--border);
-  }
-}
+/* ===== COLOR UTILS ===== */
+.is-up { color: var(--positive) !important; }
+.is-down { color: var(--negative) !important; }
+.is-up-text { color: var(--positive); }
+.is-down-text { color: var(--negative); }
