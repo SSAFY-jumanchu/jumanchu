@@ -17,6 +17,22 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const theme = useThemeStore()
+const paletteOptions = [
+  { value: 'default', label: '기본', caption: 'Blue Finance' },
+  { value: 'love', label: '연애', caption: 'Tinder Pink' },
+]
+const activePalette = computed(() => paletteOptions.find((item) => item.value === theme.palette) || paletteOptions[0])
+const paletteOpen = ref(false)
+const palettePicker = ref(null)
+
+function choosePalette(value) {
+  theme.setPalette(value)
+  paletteOpen.value = false
+}
+
+function onDocumentPointerDown(event) {
+  if (paletteOpen.value && !palettePicker.value?.contains(event.target)) paletteOpen.value = false
+}
 
 // 비로그인 홈에는 풀스크린 배너가 네비 뒤로 깔린다 → 최상단에선 글자를 흰색으로
 const overBanner = computed(() => route.name === 'home' && !auth.isAuthenticated)
@@ -34,12 +50,16 @@ function onScroll() {
 onMounted(() => {
   onScroll()
   window.addEventListener('scroll', onScroll, { passive: true })
+  document.addEventListener('pointerdown', onDocumentPointerDown)
 })
-onUnmounted(() => window.removeEventListener('scroll', onScroll))
+onUnmounted(() => {
+  window.removeEventListener('scroll', onScroll)
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
+})
 
 // 모바일 햄버거 메뉴
 const menuOpen = ref(false)
-function closeMenu() { menuOpen.value = false }
+function closeMenu() { menuOpen.value = false; paletteOpen.value = false }
 watch(() => route.fullPath, closeMenu)
 
 // 스크롤됐거나 모바일 메뉴가 열려 있으면 불투명 glass 배경(드로어 가독성 확보)
@@ -94,6 +114,43 @@ async function handleLogout() {
             <span class="user-welcome">환영합니다 <strong>{{ user.name }}</strong></span>
           </div>
           <div class="user-actions">
+            <div ref="palettePicker" class="palette-picker">
+              <button
+                class="palette-trigger"
+                type="button"
+                :class="`is-${theme.palette}`"
+                :aria-expanded="paletteOpen"
+                aria-haspopup="menu"
+                :aria-label="`색상 테마 선택, 현재 ${activePalette.label}`"
+                @click="paletteOpen = !paletteOpen"
+              >
+                <span class="palette-trigger-swatch" aria-hidden="true"></span>
+                <span class="palette-trigger-label">{{ activePalette.label }}</span>
+                <span class="palette-chevron" aria-hidden="true">▾</span>
+              </button>
+
+              <div v-if="paletteOpen" class="palette-menu" role="menu" aria-label="색상 테마">
+                <p class="palette-menu-title">메인 색상</p>
+                <button
+                  v-for="option in paletteOptions"
+                  :key="option.value"
+                  class="palette-option"
+                  :class="[`is-${option.value}`, { 'is-active': theme.palette === option.value }]"
+                  type="button"
+                  role="menuitemradio"
+                  :aria-checked="theme.palette === option.value"
+                  @click="choosePalette(option.value)"
+                >
+                  <span class="palette-option-swatch" aria-hidden="true"></span>
+                  <span class="palette-option-copy">
+                    <strong>{{ option.label }}</strong>
+                    <small>{{ option.caption }}</small>
+                  </span>
+                  <span v-if="theme.palette === option.value" class="palette-check" aria-hidden="true">✓</span>
+                </button>
+              </div>
+            </div>
+
             <button
               class="theme-toggle"
               type="button"
@@ -122,23 +179,28 @@ async function handleLogout() {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: transparent;
-  border-bottom: 1px solid transparent;
-  box-shadow: none;
+  background: var(--glass-strong);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: 0 1px 3px rgba(17, 24, 39, 0.04);
   transition: background 0.25s ease, border-color 0.25s ease,
-    box-shadow 0.25s ease, backdrop-filter 0.25s ease;
+    box-shadow 0.25s ease;
 }
 
-/* 스크롤을 내리면 glass 배경 노출 (최상단에서는 투명) */
+/* 스크롤 이후에도 불투명한 단색 헤더를 유지한다. */
 .topnav.is-scrolled {
   background: var(--glass-strong);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
   border-bottom-color: var(--glass-border);
-  box-shadow: 0 2px 20px rgba(60, 80, 200, 0.07), var(--glass-inset);
+  box-shadow: 0 5px 16px rgba(17, 24, 39, 0.07);
 }
+html[data-theme='dark'] .topnav { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.32); }
+html[data-theme='dark'] .topnav.is-scrolled { box-shadow: 0 5px 16px rgba(0, 0, 0, 0.3); }
 
 /* 비로그인 홈 배너 위(최상단)에서는 투명 배경 + 흰색 텍스트 */
+.topnav.over-hero {
+  background: transparent;
+  border-bottom-color: transparent;
+  box-shadow: none;
+}
 .topnav.over-hero .brand-wordmark {
   background: none;
   -webkit-text-fill-color: #fff;
@@ -235,10 +297,7 @@ async function handleLogout() {
   font-size: 22px;
   font-weight: 900;
   letter-spacing: -1px;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--ink);
 }
 
 .nav-links {
@@ -266,9 +325,9 @@ async function handleLogout() {
 }
 
 .nav-links a.is-active {
-  background: rgba(49, 93, 255, 0.12);
+  background: rgba(var(--accent-rgb), 0.12);
   color: var(--accent);
-  border: 1px solid rgba(49, 93, 255, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
 }
 
 .user-area {
@@ -297,7 +356,7 @@ async function handleLogout() {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(49, 93, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(var(--accent-rgb), 0.3);
 }
 
 .user-welcome {
@@ -308,6 +367,112 @@ async function handleLogout() {
 .user-welcome strong { color: var(--ink); }
 
 .user-actions { display: flex; align-items: center; gap: 5px; }
+
+.palette-picker { position: relative; }
+
+.palette-trigger {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px 0 7px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: var(--glass-inset);
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.palette-trigger:hover,
+.palette-trigger[aria-expanded='true'] { background: var(--surface-hover); color: var(--ink); }
+.palette-trigger-swatch,
+.palette-option-swatch {
+  flex-shrink: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.48), 0 2px 7px rgba(20, 24, 50, 0.16);
+}
+.palette-trigger-swatch { width: 19px; height: 19px; }
+.palette-trigger.is-default .palette-trigger-swatch,
+.palette-option.is-default .palette-option-swatch {
+  background: linear-gradient(135deg, #315dff, #7d4ee8);
+}
+.palette-trigger.is-love .palette-trigger-swatch,
+.palette-option.is-love .palette-option-swatch {
+  background: linear-gradient(135deg, #ff6036 0%, #ff385c 48%, #fd267a 100%);
+}
+.palette-chevron { color: var(--faint); font-size: 10px; transition: transform 0.18s ease; }
+.palette-trigger[aria-expanded='true'] .palette-chevron { transform: rotate(180deg); }
+
+.palette-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 130;
+  width: 224px;
+  padding: 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  background: var(--glass-strong);
+  box-shadow: 0 10px 28px rgba(17, 24, 39, 0.12);
+  transform-origin: top right;
+  animation: paletteMenuIn 0.18s ease-out;
+}
+@keyframes paletteMenuIn {
+  from { opacity: 0; transform: translateY(-5px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.palette-menu-title {
+  margin: 2px 4px 8px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+.palette-option {
+  width: 100%;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.palette-option:hover { background: var(--surface-soft); }
+.palette-option.is-active {
+  border-color: rgba(var(--accent-rgb), 0.24);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+.palette-option-swatch { width: 32px; height: 32px; }
+.palette-option-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.palette-option-copy strong { color: var(--ink); font-size: 13px; font-weight: 900; }
+.palette-option-copy small { color: var(--muted); font-size: 10px; font-weight: 700; }
+.palette-check {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.topnav.over-hero .palette-trigger {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+.topnav.over-hero .palette-trigger:hover,
+.topnav.over-hero .palette-trigger[aria-expanded='true'] { background: rgba(255, 255, 255, 0.24); }
 
 .theme-toggle {
   padding: 0;
@@ -375,13 +540,13 @@ async function handleLogout() {
 }
 
 .user-btn.accent {
-  background: rgba(49, 93, 255, 0.1);
-  border-color: rgba(49, 93, 255, 0.28);
+  background: rgba(var(--accent-rgb), 0.1);
+  border-color: rgba(var(--accent-rgb), 0.28);
   color: var(--accent);
 }
 
 .user-btn.accent:hover {
-  background: rgba(49, 93, 255, 0.18);
+  background: rgba(var(--accent-rgb), 0.18);
 }
 
 /* 좁은 데스크탑/태블릿: 인사 문구 숨겨 공간 확보 */
@@ -450,6 +615,8 @@ async function handleLogout() {
   .user-greeting { justify-content: flex-start; }
   .user-welcome { display: inline; font-size: 14px; } /* 1100px 숨김 해제 */
   .user-actions { flex-wrap: wrap; gap: 8px; }
+  .palette-trigger { min-height: 40px; padding: 0 12px 0 9px; }
+  .palette-menu { left: 0; right: auto; }
   .theme-toggle { margin-right: auto; }
   .user-btn {
     flex: 1;

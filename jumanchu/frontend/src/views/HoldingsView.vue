@@ -278,7 +278,7 @@ const communityPost = { user: 'TECL미친놈', time: '6분 전', content: 'SK하
 
 /* 내 자산 요약 */
 .hv-summary { padding: 20px; }
-.hv-sum-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--faint); }
+.hv-sum-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .hv-sum-row:last-child { border-bottom: 0; }
 .hv-sum-label { font-size: 13px; font-weight: 700; color: var(--muted); }
 .hv-sum-big { font-size: 24px; font-weight: 900; color: var(--ink); letter-spacing: -0.5px; }
@@ -300,21 +300,17 @@ const communityPost = { user: 'TECL미친놈', time: '6분 전', content: 'SK하
 .hv-list { display: flex; flex-direction: column; }
 .hv-holding-row {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 14px;
-  padding: 14px 10px; border-bottom: 1px solid var(--faint); border-left: 3px solid transparent;
+  padding: 14px 10px; border-bottom: 1px solid var(--line); border-left: 3px solid transparent;
   cursor: pointer; transition: background 0.16s, border-color 0.16s, box-shadow 0.2s ease;
 }
 .hv-holding-row:last-child { border-bottom: 0; }
 .hv-holding-row:hover { background: var(--surface-soft); }
 .hv-holding-row.active {
-  background: linear-gradient(135deg, rgba(49,93,255,0.15) 0%, rgba(125,78,232,0.09) 100%);
+  background: rgba(var(--accent-rgb),0.08);
+  border-left-color: var(--accent);
   border-bottom-color: transparent;
-  border-radius: 12px;
-  box-shadow:
-    0 6px 16px rgba(49,93,255,0.18),
-    inset 0 1px 1px rgba(255,255,255,0.55),
-    inset 0 -4px 10px rgba(49,93,255,0.10);
-  backdrop-filter: blur(6px) saturate(1.3);
-  -webkit-backdrop-filter: blur(6px) saturate(1.3);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 3px rgba(17,24,39,0.06);
 }
 .hv-logo { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; font-weight: 900; flex-shrink: 0; }
 .hv-h-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -354,7 +350,7 @@ const communityPost = { user: 'TECL미친놈', time: '6분 전', content: 'SK하
 .hv-detail-meta { font-size: 12px; font-weight: 700; color: var(--muted); }
 .hv-detail-logo { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 900; flex-shrink: 0; }
 .hv-detail-rows { display: flex; flex-direction: column; margin: 0 0 16px; }
-.hv-detail-rows > div { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--faint); }
+.hv-detail-rows > div { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .hv-detail-rows > div:last-child { border-bottom: 0; }
 .hv-detail-rows dt { font-size: 13px; font-weight: 700; color: var(--muted); }
 .hv-detail-rows dd { margin: 0; font-size: 14px; font-weight: 900; color: var(--ink); }
@@ -363,13 +359,13 @@ const communityPost = { user: 'TECL미친놈', time: '6분 전', content: 'SK하
 .hv-buy { background: #e3344f; }
 .hv-sell { background: #2b59d6; }
 .hv-buy:hover, .hv-sell:hover { opacity: 0.9; }
-.hv-detail-go { width: 100%; height: 42px; border-radius: var(--radius); border: 1px solid rgba(49,93,255,0.2); background: rgba(49,93,255,0.08); color: var(--accent); font-size: 13px; font-weight: 900; cursor: pointer; transition: background 0.16s; }
-.hv-detail-go:hover { background: rgba(49,93,255,0.16); }
+.hv-detail-go { width: 100%; height: 42px; border-radius: var(--radius); border: 1px solid rgba(var(--accent-rgb),0.2); background: rgba(var(--accent-rgb),0.08); color: var(--accent); font-size: 13px; font-weight: 900; cursor: pointer; transition: background 0.16s; }
+.hv-detail-go:hover { background: rgba(var(--accent-rgb),0.16); }
 
 /* 뉴스 / 커뮤니티 */
 .hv-news { padding: 18px 20px; }
-.hv-news-item { display: flex; gap: 10px; align-items: flex-start; padding: 11px 0; border-bottom: 1px solid var(--faint); cursor: pointer; }
-.hv-news-chip { flex-shrink: 0; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 900; background: rgba(125,78,232,0.1); color: var(--purple); }
+.hv-news-item { display: flex; gap: 10px; align-items: flex-start; padding: 11px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.hv-news-chip { flex-shrink: 0; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 900; background: rgba(var(--purple-rgb),0.1); color: var(--purple); }
 .hv-news-title { font-size: 13px; font-weight: 700; color: var(--ink); margin: 0 0 3px; line-height: 1.4; word-break: keep-all; }
 .hv-news-src { font-size: 11px; font-weight: 700; color: var(--faint); }
 .hv-comm { display: flex; gap: 10px; align-items: flex-start; padding-top: 12px; }

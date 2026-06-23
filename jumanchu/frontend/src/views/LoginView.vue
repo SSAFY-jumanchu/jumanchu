@@ -144,7 +144,7 @@ function submit() {
 }
 
 .field input:focus {
-  outline: 2px solid rgba(49, 93, 255, 0.35);
+  outline: 2px solid rgba(var(--accent-rgb), 0.35);
   border-color: var(--accent);
 }
 
@@ -173,7 +173,7 @@ function submit() {
   font-size: 15px;
   font-weight: 900;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(49, 93, 255, 0.3);
+  box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.3);
 }
 
 .submit-btn:disabled { opacity: 0.6; cursor: default; }

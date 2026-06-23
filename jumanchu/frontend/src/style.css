@@ -4,42 +4,39 @@
   --muted: #60708a;
   --faint: #98a1b2;
   --accent: #315dff;
+  --accent-rgb: 49, 93, 255;
   --positive: #0f9f6e;
   --negative: #cf3d3d;
   --warning: #b87800;
   --purple: #7d4ee8;
+  --purple-rgb: 125, 78, 232;
   /* 국장 관례색 (매도/상승 빨강 · 매수/하락 파랑) — 텍스트 용도 */
   --krx-up: #ff3b5c;
   --krx-down: #0066cc;
-  --radius: 12px;
+  --radius: 10px;
 
-  --glass: rgba(255, 255, 255, 0.62);
-  --glass-strong: rgba(255, 255, 255, 0.78);
-  --glass-subtle: rgba(255, 255, 255, 0.38);
-  --glass-border: rgba(255, 255, 255, 0.82);
-  --glass-border-subtle: rgba(255, 255, 255, 0.48);
-  --glass-inset: inset 0 1.5px 0 rgba(255, 255, 255, 0.97), inset 0 -1px 0 rgba(0, 0, 0, 0.025);
-  --glass-shadow: 0 8px 32px rgba(60, 80, 200, 0.1), 0 2px 8px rgba(0, 0, 0, 0.04);
-  --glass-blur: blur(22px) saturate(180%);
-  --glass-blur-sm: blur(14px) saturate(160%);
+  /* 단색 페이지 위에 얹는 불투명 표면 체계. 기존 변수명은 컴포넌트 호환을 위해 유지한다. */
+  --page-bg: #f6f7f9;
+  --glass: #ffffff;
+  --glass-strong: #ffffff;
+  --glass-subtle: #f5f6f8;
+  --glass-border: #e1e5ea;
+  --glass-border-subtle: #eceff2;
+  --glass-inset: none;
+  --glass-shadow: 0 1px 2px rgba(17, 24, 39, 0.04), 0 6px 18px rgba(17, 24, 39, 0.05);
+  --glass-blur: none;
+  --glass-blur-sm: none;
 
   /* 미세 오버레이 → 칩/버튼 휴지 상태 → 호버 상태 → 활성 탭 → 입력 필드 → 게이지 트랙 */
-  --surface-faint: rgba(255, 255, 255, 0.28);
-  --surface-soft: rgba(255, 255, 255, 0.52);
-  --surface-hover: rgba(255, 255, 255, 0.72);
-  --chip-active: rgba(255, 255, 255, 0.88);
-  --input-bg: rgba(255, 255, 255, 0.7);
-  --track: rgba(200, 215, 255, 0.35);
+  --surface-faint: #fafbfc;
+  --surface-soft: #f4f6f8;
+  --surface-hover: #edf0f3;
+  --chip-active: #ffffff;
+  --input-bg: #ffffff;
+  --track: #e8ebef;
 
   --surface: var(--glass);
-  --line: rgba(200, 215, 255, 0.5);
-
-  --bg-gradient:
-    radial-gradient(ellipse at 15% 0%, rgba(167, 139, 250, 0.55) 0%, transparent 55%),
-    radial-gradient(ellipse at 85% 5%, rgba(96, 165, 250, 0.45) 0%, transparent 52%),
-    radial-gradient(ellipse at 50% 95%, rgba(52, 211, 153, 0.35) 0%, transparent 55%),
-    radial-gradient(ellipse at 0% 60%, rgba(196, 181, 253, 0.3) 0%, transparent 48%),
-    linear-gradient(160deg, #dde8ff 0%, #e8daff 38%, #d4e8ff 68%, #d0f2e4 100%);
+  --line: #e4e7ec;
 
   color-scheme: light;
 
@@ -58,54 +55,73 @@ html[data-theme='dark'] {
   --muted: #8d9ab2;
   --faint: #5e6a82;
   --accent: #7d9bff;
+  --accent-rgb: 125, 155, 255;
   --positive: #34c79a;
   --negative: #f07070;
   --warning: #e0a232;
   --purple: #a385f2;
+  --purple-rgb: 163, 133, 242;
   --krx-up: #ff5c77;
   --krx-down: #5b9cff;
 
-  --glass: rgba(24, 30, 49, 0.62);
-  --glass-strong: rgba(28, 35, 57, 0.8);
-  --glass-subtle: rgba(255, 255, 255, 0.045);
-  --glass-border: rgba(255, 255, 255, 0.12);
-  --glass-border-subtle: rgba(255, 255, 255, 0.07);
-  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(0, 0, 0, 0.2);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.25);
+  --page-bg: #0b0d10;
+  --glass: #15181d;
+  --glass-strong: #171a1f;
+  --glass-subtle: #1b1f25;
+  --glass-border: #2a3038;
+  --glass-border-subtle: #232930;
+  --glass-inset: none;
+  --glass-shadow: 0 1px 2px rgba(0, 0, 0, 0.32), 0 8px 20px rgba(0, 0, 0, 0.18);
 
-  --surface-faint: rgba(255, 255, 255, 0.04);
-  --surface-soft: rgba(255, 255, 255, 0.07);
-  --surface-hover: rgba(255, 255, 255, 0.13);
-  --chip-active: rgba(255, 255, 255, 0.17);
-  --input-bg: rgba(10, 14, 24, 0.45);
-  --track: rgba(255, 255, 255, 0.12);
+  --surface-faint: #111419;
+  --surface-soft: #1a1e24;
+  --surface-hover: #22272e;
+  --chip-active: #292f37;
+  --input-bg: #111419;
+  --track: #2a3038;
 
-  --line: rgba(255, 255, 255, 0.1);
-
-  --bg-gradient:
-    radial-gradient(ellipse at 15% 0%, rgba(109, 78, 232, 0.28) 0%, transparent 55%),
-    radial-gradient(ellipse at 85% 5%, rgba(49, 93, 255, 0.22) 0%, transparent 52%),
-    radial-gradient(ellipse at 50% 95%, rgba(15, 159, 110, 0.14) 0%, transparent 55%),
-    radial-gradient(ellipse at 0% 60%, rgba(125, 78, 232, 0.12) 0%, transparent 48%),
-    linear-gradient(160deg, #0e1118 0%, #131022 38%, #0e1424 68%, #0d1717 100%);
+  --line: #292f36;
 
   color-scheme: dark;
 }
 
+/* ===== COLOR PALETTE: 연애(틴더) =====
+   밝기 모드와 독립적으로 적용되는 주만추의 스와이핑 아이덴티티 팔레트 */
+html[data-palette='love'] {
+  --accent: #ff385c;
+  --accent-rgb: 255, 56, 92;
+  --purple: #fd267a;
+  --purple-rgb: 253, 38, 122;
+  --track: rgba(255, 56, 92, 0.14);
+}
+
+html[data-theme='dark'][data-palette='love'] {
+  --accent: #ff7188;
+  --accent-rgb: 255, 113, 136;
+  --purple: #ff4d9a;
+  --purple-rgb: 255, 77, 154;
+  --track: rgba(255, 113, 136, 0.16);
+}
+
 * { box-sizing: border-box; }
+
+/* 리퀴드 글래스의 핵심이던 배경 블러를 전체 UI에서 제거한다. */
+*, *::before, *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 
 html {
   scroll-behavior: smooth;
   min-height: 100%;
-  background: var(--bg-gradient);
-  background-attachment: fixed;
+  background: var(--page-bg);
 }
 
 body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background: transparent;
+  background: var(--page-bg);
   color: var(--text);
 }
 
@@ -152,10 +168,8 @@ h4 { font-size: 14px; line-height: 1.4; font-weight: 700; }
 .panel {
   border-radius: var(--radius);
   background: var(--glass);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow), var(--glass-inset);
+  box-shadow: var(--glass-shadow);
   padding: 20px;
   min-width: 0;
 }

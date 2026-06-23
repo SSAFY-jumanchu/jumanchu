@@ -296,11 +296,11 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 .td-side.buy { background: rgba(227,52,79,0.12); color: #e3344f; }
 .td-date { font-size: 12px; font-weight: 700; color: var(--muted); }
 .td-status { flex-shrink: 0; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 900; }
-.td-status.pending { background: rgba(49,93,255,0.12); color: var(--accent); }
+.td-status.pending { background: rgba(var(--accent-rgb),0.12); color: var(--accent); }
 .td-status.done { background: rgba(15,159,110,0.12); color: #0f9f6e; }
 
 .td-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-.td-reason { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; background: rgba(49,93,255,0.08); color: var(--accent); }
+.td-reason { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; background: rgba(var(--accent-rgb),0.08); color: var(--accent); }
 .td-metric { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; background: var(--glass-subtle); color: var(--muted); }
 .td-stars { margin-left: auto; font-size: 13px; letter-spacing: 1px; color: var(--faint); }
 .td-stars .on { color: #f5b301; }
@@ -332,7 +332,7 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
   width: 100%; height: 46px; margin-top: 6px; border: 0; border-radius: var(--radius);
   background: linear-gradient(135deg, var(--accent), var(--purple)); color: #fff;
   font-size: 14px; font-weight: 900; cursor: pointer;
-  box-shadow: 0 6px 18px rgba(49,93,255,0.3); transition: opacity 0.16s, transform 0.16s;
+  box-shadow: 0 6px 18px rgba(var(--accent-rgb),0.3); transition: opacity 0.16s, transform 0.16s;
 }
 .td-save-btn:hover { opacity: 0.92; transform: translateY(-1px); }
 .td-form-hint { margin: 10px 0 0; text-align: center; font-size: 11px; font-weight: 700; color: var(--faint); }

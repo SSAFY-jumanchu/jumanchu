@@ -323,13 +323,9 @@ const scoreCards = computed(() => [
 }
 .lt-list-item:hover { background: var(--surface-soft); }
 .lt-list-item.active {
-  background: linear-gradient(135deg, rgba(49,93,255,0.15) 0%, rgba(125,78,232,0.09) 100%);
-  box-shadow:
-    0 6px 16px rgba(49,93,255,0.18),
-    inset 0 1px 1px rgba(255,255,255,0.55),
-    inset 0 -4px 10px rgba(49,93,255,0.10);
-  backdrop-filter: blur(6px) saturate(1.3);
-  -webkit-backdrop-filter: blur(6px) saturate(1.3);
+  background: rgba(var(--accent-rgb),0.08);
+  border-left-color: var(--accent);
+  box-shadow: 0 1px 3px rgba(17,24,39,0.06);
 }
 .lt-logo { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 13px; font-weight: 900; flex-shrink: 0; }
 .lt-list-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -339,7 +335,7 @@ const scoreCards = computed(() => [
 .lt-list-score > strong { font-size: 17px; font-weight: 900; }
 .lt-grade { padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 900; }
 .g-a { background: rgba(15,159,110,0.12); color: #0f9f6e; }
-.g-bplus { background: rgba(49,93,255,0.12); color: #315dff; }
+.g-bplus { background: rgba(var(--accent-rgb),0.12); color: var(--accent); }
 .g-b { background: rgba(229,139,16,0.14); color: #e58b10; }
 .g-c { background: rgba(207,61,61,0.12); color: #cf3d3d; }
 
@@ -347,12 +343,12 @@ const scoreCards = computed(() => [
 .lt-detail { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 
 /* 종합 정보 */
-.lt-overview { display: flex; align-items: center; gap: 20px; padding: 22px 24px; background: linear-gradient(135deg, rgba(49,93,255,0.06), rgba(125,78,232,0.04)); }
+.lt-overview { display: flex; align-items: center; gap: 20px; padding: 22px 24px; background: var(--glass); }
 .lt-ov-circle {
   width: 80px; height: 80px; border-radius: 50%; flex-shrink: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   color: #fff; font-size: 28px; font-weight: 900; line-height: 1;
-  box-shadow: 0 8px 24px rgba(49,93,255,0.25);
+  box-shadow: 0 8px 24px rgba(var(--accent-rgb),0.25);
 }
 .lt-ov-circle span { font-size: 12px; font-weight: 900; margin-top: 3px; opacity: 0.92; }
 .lt-ov-body { flex: 1; min-width: 0; }
@@ -369,8 +365,8 @@ const scoreCards = computed(() => [
   gap: 4px;
   padding: 9px 16px;
   border-radius: 999px;
-  border: 1px solid rgba(49,93,255,0.28);
-  background: rgba(49,93,255,0.1);
+  border: 1px solid rgba(var(--accent-rgb),0.28);
+  background: rgba(var(--accent-rgb),0.1);
   color: var(--accent);
   font-size: 13px;
   font-weight: 900;
@@ -378,7 +374,7 @@ const scoreCards = computed(() => [
   cursor: pointer;
   transition: background 0.16s, transform 0.16s;
 }
-.lt-ov-go:hover { background: rgba(49,93,255,0.2); transform: translateY(-1px); }
+.lt-ov-go:hover { background: rgba(var(--accent-rgb),0.2); transform: translateY(-1px); }
 
 /* 재무/성장/궁합 카드 */
 .lt-score-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
@@ -390,7 +386,7 @@ const scoreCards = computed(() => [
 .lt-score-bar { height: 7px; border-radius: 999px; background: var(--surface-soft); overflow: hidden; margin-bottom: 14px; }
 .lt-score-bar > div { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--purple)); transition: width 0.5s ease; }
 .lt-score-items { display: flex; flex-direction: column; gap: 0; margin-bottom: 14px; }
-.lt-score-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--faint); }
+.lt-score-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .lt-score-item:last-child { border-bottom: 0; }
 .lt-score-item span { font-size: 12px; font-weight: 700; color: var(--muted); }
 .lt-score-item strong { font-size: 13px; font-weight: 900; color: var(--accent); }
@@ -402,7 +398,7 @@ const scoreCards = computed(() => [
 .lt-card-title { font-size: 14px; font-weight: 900; color: var(--ink); margin: 0 0 14px; }
 
 .lt-journal-list { display: flex; flex-direction: column; gap: 12px; }
-.lt-journal-item { padding-bottom: 12px; border-bottom: 1px solid var(--faint); }
+.lt-journal-item { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .lt-journal-item:last-child { padding-bottom: 0; border-bottom: 0; }
 .lt-j-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
 .lt-j-side { padding: 2px 9px; border-radius: 6px; font-size: 11px; font-weight: 900; }
@@ -412,7 +408,7 @@ const scoreCards = computed(() => [
 .lt-j-note { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.5; word-break: keep-all; }
 
 .lt-history-list { display: flex; flex-direction: column; }
-.lt-history-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--faint); }
+.lt-history-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .lt-history-row:last-child { border-bottom: 0; }
 .lt-h-month { font-size: 13px; font-weight: 700; color: var(--muted); }
 .lt-h-score { font-size: 14px; font-weight: 900; }
@@ -420,7 +416,7 @@ const scoreCards = computed(() => [
 
 /* 뉴스 */
 .lt-news-list { display: flex; flex-direction: column; }
-.lt-news-item { display: flex; align-items: baseline; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--faint); cursor: pointer; }
+.lt-news-item { display: flex; align-items: baseline; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
 .lt-news-item:last-child { border-bottom: 0; }
 .lt-news-headline { font-size: 14px; font-weight: 800; color: var(--ink); line-height: 1.45; word-break: keep-all; }
 .lt-news-source { font-size: 11px; font-weight: 700; color: var(--faint); flex-shrink: 0; }

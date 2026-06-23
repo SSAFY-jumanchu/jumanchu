@@ -393,8 +393,8 @@ function displayScore(q, score) {
   align-items: center;
   padding: 4px 12px;
   border-radius: 999px;
-  background: rgba(49, 93, 255, 0.1);
-  border: 1px solid rgba(49, 93, 255, 0.2);
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   color: var(--accent);
   font-size: 11px;
   font-weight: 900;
@@ -408,8 +408,8 @@ function displayScore(q, score) {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: rgba(49, 93, 255, 0.1);
-  border: 2px solid rgba(49, 93, 255, 0.25);
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 2px solid rgba(var(--accent-rgb), 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -480,16 +480,16 @@ function displayScore(q, score) {
 }
 
 .sector-chip:hover {
-  border-color: rgba(49, 93, 255, 0.35);
+  border-color: rgba(var(--accent-rgb), 0.35);
   color: var(--ink);
   background: var(--surface-hover);
 }
 
 .sector-chip.is-selected {
-  border-color: rgba(49, 93, 255, 0.5);
-  background: rgba(49, 93, 255, 0.1);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(var(--accent-rgb), 0.1);
   color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(49, 93, 255, 0.15), var(--glass-shadow);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.15), var(--glass-shadow);
 }
 
 /* 기간 칩 */
@@ -518,16 +518,16 @@ function displayScore(q, score) {
 }
 
 .period-chip:hover {
-  border-color: rgba(125, 78, 232, 0.35);
+  border-color: rgba(var(--purple-rgb), 0.35);
   color: var(--ink);
   background: var(--surface-hover);
 }
 
 .period-chip.is-selected {
-  border-color: rgba(125, 78, 232, 0.5);
-  background: rgba(125, 78, 232, 0.1);
+  border-color: rgba(var(--purple-rgb), 0.5);
+  background: rgba(var(--purple-rgb), 0.1);
   color: var(--purple);
-  box-shadow: 0 0 0 1px rgba(125, 78, 232, 0.15), var(--glass-shadow);
+  box-shadow: 0 0 0 1px rgba(var(--purple-rgb), 0.15), var(--glass-shadow);
 }
 
 /* ===== 설문 옵션 (Step 1~6) ===== */
@@ -556,13 +556,13 @@ function displayScore(q, score) {
 
 .ob-option:hover {
   background: var(--surface-hover);
-  border-color: rgba(49, 93, 255, 0.3);
+  border-color: rgba(var(--accent-rgb), 0.3);
 }
 
 .ob-option.is-selected {
-  border-color: rgba(49, 93, 255, 0.5);
-  background: rgba(49, 93, 255, 0.07);
-  box-shadow: 0 0 0 1px rgba(49, 93, 255, 0.2), var(--glass-shadow), var(--glass-inset);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(var(--accent-rgb), 0.07);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.2), var(--glass-shadow), var(--glass-inset);
   transform: translateY(-1px);
 }
 
@@ -583,8 +583,8 @@ function displayScore(q, score) {
 }
 
 .ob-option.is-selected .ob-option-badge {
-  background: rgba(49, 93, 255, 0.12);
-  border-color: rgba(49, 93, 255, 0.35);
+  background: rgba(var(--accent-rgb), 0.12);
+  border-color: rgba(var(--accent-rgb), 0.35);
   color: var(--accent);
 }
 
@@ -656,13 +656,13 @@ function displayScore(q, score) {
   color: #fff;
   font-size: 15px;
   font-weight: 900;
-  box-shadow: 0 6px 22px rgba(49, 93, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 6px 22px rgba(var(--accent-rgb), 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   transition: transform 0.18s, box-shadow 0.18s, opacity 0.18s;
 }
 
 .ob-btn-next:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 10px 28px rgba(49, 93, 255, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 10px 28px rgba(var(--accent-rgb), 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .ob-btn-next:disabled {
@@ -740,8 +740,8 @@ function displayScore(q, score) {
 .result-chip {
   padding: 3px 10px;
   border-radius: 999px;
-  background: rgba(49, 93, 255, 0.1);
-  border: 1px solid rgba(49, 93, 255, 0.2);
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   color: var(--accent);
   font-size: 12px;
   font-weight: 900;
@@ -756,12 +756,12 @@ function displayScore(q, score) {
   color: #fff;
   font-size: 15px;
   font-weight: 900;
-  box-shadow: 0 6px 24px rgba(49, 93, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 6px 24px rgba(var(--accent-rgb), 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   transition: transform 0.18s, box-shadow 0.18s;
 }
 
 .primary-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 32px rgba(49, 93, 255, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 10px 32px rgba(var(--accent-rgb), 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 </style>

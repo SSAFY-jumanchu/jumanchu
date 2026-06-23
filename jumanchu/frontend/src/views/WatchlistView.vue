@@ -270,8 +270,8 @@ function signedClass(v) {
           <svg viewBox="0 0 520 200" preserveAspectRatio="none" aria-hidden="true">
             <defs>
               <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="rgba(49,93,255,0.20)" />
-                <stop offset="100%" stop-color="rgba(49,93,255,0)" />
+                <stop offset="0%" stop-color="rgba(var(--accent-rgb),0.20)" />
+                <stop offset="100%" stop-color="rgba(var(--accent-rgb),0)" />
               </linearGradient>
             </defs>
             <line x1="0" y1="50"  x2="520" y2="50"  class="chart-grid-line" />
@@ -455,8 +455,8 @@ function signedClass(v) {
   align-items: center;
   padding: 5px 14px;
   border-radius: 999px;
-  background: rgba(49,93,255,0.08);
-  border: 1px solid rgba(49,93,255,0.18);
+  background: rgba(var(--accent-rgb),0.08);
+  border: 1px solid rgba(var(--accent-rgb),0.18);
   color: var(--accent);
   font-size: 12px;
   font-weight: 900;
@@ -476,8 +476,8 @@ function signedClass(v) {
 .stock-row:hover { background: var(--surface-soft); }
 
 .stock-row.is-selected {
-  background: rgba(49,93,255,0.07);
-  outline: 1px solid rgba(49,93,255,0.2);
+  background: rgba(var(--accent-rgb),0.07);
+  outline: 1px solid rgba(var(--accent-rgb),0.2);
 }
 
 .stock-main {
@@ -552,7 +552,7 @@ function signedClass(v) {
 }
 
 .watch-item:hover { background: var(--surface-hover); }
-.watch-item.is-selected { background: rgba(49,93,255,0.07); border-color: rgba(49,93,255,0.22); }
+.watch-item.is-selected { background: rgba(var(--accent-rgb),0.07); border-color: rgba(var(--accent-rgb),0.22); }
 
 .watch-item-name { font-size: 14px; font-weight: 900; color: var(--ink); }
 .watch-item-price { font-size: 14px; font-weight: 900; color: var(--ink); flex-shrink: 0; }
@@ -633,8 +633,8 @@ function signedClass(v) {
   gap: 5px;
   padding: 7px 14px;
   border-radius: 999px;
-  border: 1px solid rgba(49,93,255,0.3);
-  background: rgba(49,93,255,0.07);
+  border: 1px solid rgba(var(--accent-rgb),0.3);
+  background: rgba(var(--accent-rgb),0.07);
   color: var(--accent);
   font-size: 12px;
   font-weight: 900;
@@ -643,7 +643,7 @@ function signedClass(v) {
   transition: background 0.18s;
 }
 
-.detail-link-btn:hover { background: rgba(49,93,255,0.14); }
+.detail-link-btn:hover { background: rgba(var(--accent-rgb),0.14); }
 
 /* 탭 */
 .tab-list {
@@ -767,7 +767,7 @@ function signedClass(v) {
   font-size: 14px;
   font-weight: 900;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(49,93,255,0.3);
+  box-shadow: 0 4px 16px rgba(var(--accent-rgb),0.3);
   transition: opacity 0.18s, transform 0.18s;
 }
 

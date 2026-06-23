@@ -479,7 +479,7 @@ const isEditingInfo = ref(false)
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 16px rgba(49, 93, 255, 0.3);
+  box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.3);
 }
 
 .ph-info { flex: 1; }
@@ -527,11 +527,11 @@ const isEditingInfo = ref(false)
 }
 .ph-btn:hover { background: var(--glass-strong); }
 .ph-btn.accent {
-  background: rgba(49,93,255,0.1);
-  border-color: rgba(49,93,255,0.28);
+  background: rgba(var(--accent-rgb),0.1);
+  border-color: rgba(var(--accent-rgb),0.28);
   color: var(--accent);
 }
-.ph-btn.accent:hover { background: rgba(49,93,255,0.18); }
+.ph-btn.accent:hover { background: rgba(var(--accent-rgb),0.18); }
 
 /* ---- Body Layout ---- */
 .mypage-body {
@@ -556,7 +556,7 @@ const isEditingInfo = ref(false)
 }
 .mp-menu-item:hover { background: var(--glass); color: var(--ink); }
 .mp-menu-item.active {
-  background: rgba(49,93,255,0.1);
+  background: rgba(var(--accent-rgb),0.1);
   color: var(--accent);
 }
 
@@ -574,14 +574,14 @@ const isEditingInfo = ref(false)
   height: 32px;
   padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid rgba(49,93,255,0.28);
-  background: rgba(49,93,255,0.08);
+  border: 1px solid rgba(var(--accent-rgb),0.28);
+  background: rgba(var(--accent-rgb),0.08);
   color: var(--accent);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
-.edit-btn:hover { background: rgba(49,93,255,0.15); }
+.edit-btn:hover { background: rgba(var(--accent-rgb),0.15); }
 
 /* ---- 내 투자: 상단 3카드 ---- */
 .invest-cards {
@@ -623,7 +623,7 @@ const isEditingInfo = ref(false)
 .info-input {
   width: 100%;
   padding: 4px 8px;
-  border: 1px solid rgba(49,93,255,0.3);
+  border: 1px solid rgba(var(--accent-rgb),0.3);
   border-radius: 6px;
   background: var(--glass);
   font-size: 14px;
@@ -698,7 +698,7 @@ const isEditingInfo = ref(false)
 .post-item-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
 .post-cat {
   font-size: 11px; font-weight: 700; padding: 2px 7px;
-  border-radius: 999px; background: rgba(49,93,255,0.1); color: var(--accent);
+  border-radius: 999px; background: rgba(var(--accent-rgb),0.1); color: var(--accent);
   white-space: nowrap; flex-shrink: 0;
 }
 .post-title { font-size: 13px; color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -742,8 +742,8 @@ const isEditingInfo = ref(false)
   cursor: pointer; transition: all 0.15s;
 }
 .filter-tab.active {
-  background: rgba(49,93,255,0.1);
-  border-color: rgba(49,93,255,0.28);
+  background: rgba(var(--accent-rgb),0.1);
+  border-color: rgba(var(--accent-rgb),0.28);
   color: var(--accent);
 }
 
@@ -778,7 +778,7 @@ const isEditingInfo = ref(false)
   display: inline-block; padding: 2px 8px; border-radius: 4px;
   font-size: 11px; font-weight: 800;
 }
-.side-badge.buy { background: rgba(49,93,255,0.12); color: var(--accent); }
+.side-badge.buy { background: rgba(var(--accent-rgb),0.12); color: var(--accent); }
 .side-badge.sell { background: rgba(239,68,68,0.1); color: var(--negative); }
 
 .pos { color: var(--positive); }
@@ -813,11 +813,11 @@ const isEditingInfo = ref(false)
 }
 .acc-btn:hover { background: var(--glass-strong); color: var(--ink); }
 .acc-btn.accent {
-  background: rgba(49,93,255,0.1);
-  border-color: rgba(49,93,255,0.28);
+  background: rgba(var(--accent-rgb),0.1);
+  border-color: rgba(var(--accent-rgb),0.28);
   color: var(--accent);
 }
-.acc-btn.accent:hover { background: rgba(49,93,255,0.18); }
+.acc-btn.accent:hover { background: rgba(var(--accent-rgb),0.18); }
 
 .acc-dl { display: flex; flex-direction: column; gap: 0; }
 .acc-row {

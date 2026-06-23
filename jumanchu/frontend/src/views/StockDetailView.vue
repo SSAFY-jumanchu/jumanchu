@@ -410,8 +410,8 @@ function fmtCompact(v) {
               <svg viewBox="0 0 560 200" preserveAspectRatio="none" class="price-chart-svg">
                 <defs>
                   <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="rgba(49,93,255,0.22)" />
-                    <stop offset="100%" stop-color="rgba(49,93,255,0)" />
+                    <stop offset="0%" stop-color="rgba(var(--accent-rgb),0.22)" />
+                    <stop offset="100%" stop-color="rgba(var(--accent-rgb),0)" />
                   </linearGradient>
                 </defs>
                 <!-- 그리드 -->
@@ -419,7 +419,7 @@ function fmtCompact(v) {
                   stroke="rgba(180,200,255,0.25)" stroke-width="1" stroke-dasharray="4 4" />
                 <!-- 현재가 수평선 -->
                 <line x1="0" y1="92" x2="560" y2="92"
-                  stroke="rgba(49,93,255,0.5)" stroke-width="1" stroke-dasharray="6 3" />
+                  stroke="rgba(var(--accent-rgb),0.5)" stroke-width="1" stroke-dasharray="6 3" />
                 <!-- 면적 -->
                 <path :d="chartPath.area" fill="url(#priceGrad)" />
                 <!-- 라인 -->
@@ -459,7 +459,7 @@ function fmtCompact(v) {
                 :width="(560 / volumeData.length) - 1"
                 :y="70 - (v / 100) * 68"
                 :height="(v / 100) * 68"
-                :fill="intradayPrices[i] >= (intradayPrices[i-1] ?? intradayPrices[i]) ? 'rgba(49,93,255,0.5)' : 'rgba(255,59,92,0.45)'"
+                :fill="intradayPrices[i] >= (intradayPrices[i-1] ?? intradayPrices[i]) ? 'rgba(var(--accent-rgb),0.5)' : 'rgba(255,59,92,0.45)'"
               />
             </svg>
           </div>
@@ -670,8 +670,8 @@ function fmtCompact(v) {
             <svg viewBox="0 0 600 200" class="prof-svg">
               <line v-for="g in [25, 75, 125, 175]" :key="g" x1="0" :y1="g" x2="600" :y2="g" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 4" />
               <template v-for="(b, i) in profChart.bars" :key="i">
-                <rect :x="b.revX" :y="b.revY" :width="b.barW" :height="b.revH" rx="2" fill="rgba(49,93,255,0.35)" />
-                <rect :x="b.profX" :y="b.profY" :width="b.barW" :height="b.profH" rx="2" fill="rgba(49,93,255,0.9)" />
+                <rect :x="b.revX" :y="b.revY" :width="b.barW" :height="b.revH" rx="2" fill="rgba(var(--accent-rgb),0.35)" />
+                <rect :x="b.profX" :y="b.profY" :width="b.barW" :height="b.profH" rx="2" fill="rgba(var(--accent-rgb),0.9)" />
               </template>
               <path :d="profChart.linePath" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
               <circle v-for="(b, i) in profChart.bars" :key="'c' + i" :cx="b.lineX" :cy="b.lineY" r="3.5" fill="#f59e0b" />
@@ -1235,10 +1235,10 @@ function fmtCompact(v) {
   font-size: 11px;
   font-weight: 900;
   color: var(--accent);
-  background: rgba(49,93,255,0.1);
+  background: rgba(var(--accent-rgb),0.1);
   padding: 1px 6px;
   border-radius: 4px;
-  border: 1px solid rgba(49,93,255,0.25);
+  border: 1px solid rgba(var(--accent-rgb),0.25);
 }
 
 /* 시간 축 */
@@ -1304,8 +1304,8 @@ function fmtCompact(v) {
 }
 
 .community-tabs button.is-active {
-  background: rgba(49,93,255,0.1);
-  border-color: rgba(49,93,255,0.22);
+  background: rgba(var(--accent-rgb),0.1);
+  border-color: rgba(var(--accent-rgb),0.22);
   color: var(--accent);
 }
 
@@ -1344,7 +1344,7 @@ function fmtCompact(v) {
   font-weight: 900;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(125,78,232,0.12);
+  background: rgba(var(--purple-rgb),0.12);
   color: var(--purple);
 }
 
@@ -1465,9 +1465,9 @@ function fmtCompact(v) {
   justify-content: center;
   gap: 8px;
   padding: 6px;
-  background: rgba(49,93,255,0.07);
+  background: rgba(var(--accent-rgb),0.07);
   border-radius: 6px;
-  border: 1px solid rgba(49,93,255,0.18);
+  border: 1px solid rgba(var(--accent-rgb),0.18);
   margin: 4px 0;
 }
 
@@ -1807,7 +1807,7 @@ function fmtCompact(v) {
 .biz-icon {
   width: 48px; height: 48px; border-radius: 14px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center; font-size: 24px;
-  background: linear-gradient(135deg, rgba(49,93,255,0.12), rgba(125,78,232,0.12));
+  background: linear-gradient(135deg, rgba(var(--accent-rgb),0.12), rgba(var(--purple-rgb),0.12));
   border: 1px solid var(--glass-border);
 }
 .biz-info { display: flex; flex-direction: column; gap: 2px; }
@@ -1838,8 +1838,8 @@ function fmtCompact(v) {
 .prof-legend { display: flex; gap: 16px; margin-top: 12px; }
 .prof-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: var(--muted); }
 .prof-legend .dot { width: 10px; height: 10px; border-radius: 3px; }
-.prof-legend .dot.rev { background: rgba(49,93,255,0.35); }
-.prof-legend .dot.prof { background: rgba(49,93,255,0.9); }
+.prof-legend .dot.rev { background: rgba(var(--accent-rgb),0.35); }
+.prof-legend .dot.prof { background: rgba(var(--accent-rgb),0.9); }
 .prof-legend .dot.line { background: #f59e0b; border-radius: 50%; }
 
 /* 동종 업계 순위 */
@@ -1850,7 +1850,7 @@ function fmtCompact(v) {
 .peer-table tr:last-child td { border-bottom: 0; }
 .peer-rank { color: var(--muted); font-weight: 900; width: 36px; }
 .peer-name { font-weight: 900; }
-.peer-table tr.is-me td { background: rgba(49,93,255,0.07); color: var(--accent); }
+.peer-table tr.is-me td { background: rgba(var(--accent-rgb),0.07); color: var(--accent); }
 .peer-table tr.is-me .peer-rank, .peer-table tr.is-me .peer-name { color: var(--accent); }
 .peer-table tr.is-median td { color: var(--faint); font-weight: 700; background: var(--glass-subtle); }
 
@@ -1866,8 +1866,8 @@ function fmtCompact(v) {
 .target-row.avg { background: rgba(16,185,129,0.06); }
 .target-row.avg .target-tag { background: rgba(16,185,129,0.14); color: #059669; }
 .target-row.avg .target-pct { color: #059669; }
-.target-row.low { background: rgba(49,93,255,0.06); }
-.target-row.low .target-tag { background: rgba(49,93,255,0.14); color: var(--accent); }
+.target-row.low { background: rgba(var(--accent-rgb),0.06); }
+.target-row.low .target-tag { background: rgba(var(--accent-rgb),0.14); color: var(--accent); }
 .target-row.low .target-pct { color: var(--accent); }
 .target-current { margin-top: 12px; text-align: right; font-size: 12px; font-weight: 700; color: var(--muted); }
 .target-current strong { color: var(--ink); font-size: 14px; }
@@ -1885,14 +1885,14 @@ function fmtCompact(v) {
   background: var(--glass-subtle); color: var(--muted); font-size: 12px; font-weight: 900; cursor: pointer;
   transition: background 0.16s, color 0.16s;
 }
-.news-filter button.is-active { background: rgba(49,93,255,0.1); border-color: rgba(49,93,255,0.28); color: var(--accent); }
+.news-filter button.is-active { background: rgba(var(--accent-rgb),0.1); border-color: rgba(var(--accent-rgb),0.28); color: var(--accent); }
 .news-list { display: flex; flex-direction: column; }
 .news-row { padding: 16px 6px; border-bottom: 1px solid var(--faint); cursor: pointer; transition: background 0.14s; }
 .news-row:last-child { border-bottom: 0; }
 .news-row:hover { background: var(--surface-soft); border-radius: var(--radius); }
 .news-row-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
-.news-chip { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 900; background: rgba(125,78,232,0.1); color: var(--purple); border: 1px solid rgba(125,78,232,0.2); }
-.news-cat { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 900; background: rgba(49,93,255,0.1); color: var(--accent); }
+.news-chip { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 900; background: rgba(var(--purple-rgb),0.1); color: var(--purple); border: 1px solid rgba(var(--purple-rgb),0.2); }
+.news-cat { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 900; background: rgba(var(--accent-rgb),0.1); color: var(--accent); }
 .news-cat.is-disclosure { background: rgba(16,185,129,0.12); color: #059669; }
 .news-time { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--faint); }
 .news-row-title { font-size: 15px; font-weight: 800; color: var(--ink); margin: 0 0 5px; line-height: 1.45; word-break: keep-all; }
@@ -1945,10 +1945,10 @@ function fmtCompact(v) {
 .feed-time { font-size: 11px; font-weight: 700; color: var(--faint); margin-top: 1px; }
 .feed-follow {
   flex-shrink: 0; padding: 5px 12px; border-radius: 8px; border: 0;
-  background: rgba(49,93,255,0.12); color: var(--accent); font-size: 12px; font-weight: 900;
+  background: rgba(var(--accent-rgb),0.12); color: var(--accent); font-size: 12px; font-weight: 900;
   cursor: pointer; transition: background 0.16s;
 }
-.feed-follow:hover { background: rgba(49,93,255,0.2); }
+.feed-follow:hover { background: rgba(var(--accent-rgb),0.2); }
 .feed-follow.is-following { background: var(--surface-soft); color: var(--muted); }
 .feed-title { font-size: 15px; font-weight: 800; color: var(--ink); margin: 8px 0 0; line-height: 1.45; word-break: keep-all; }
 .feed-sub { font-size: 14px; font-weight: 600; color: var(--muted); margin: 2px 0 0; line-height: 1.45; word-break: keep-all; }
@@ -1965,10 +1965,10 @@ function fmtCompact(v) {
 .comm-stock-change { font-size: 13px; font-weight: 900; margin-top: 2px; }
 .comm-stock-btn {
   width: 100%; margin-top: 14px; height: 40px; border-radius: var(--radius);
-  border: 1px solid rgba(49,93,255,0.25); background: rgba(49,93,255,0.08);
+  border: 1px solid rgba(var(--accent-rgb),0.25); background: rgba(var(--accent-rgb),0.08);
   color: var(--accent); font-size: 13px; font-weight: 900; cursor: pointer; transition: background 0.16s;
 }
-.comm-stock-btn:hover { background: rgba(49,93,255,0.16); }
+.comm-stock-btn:hover { background: rgba(var(--accent-rgb),0.16); }
 
 .comm-popular { padding: 18px; }
 .comm-popular-list { display: flex; flex-direction: column; margin-top: 10px; }

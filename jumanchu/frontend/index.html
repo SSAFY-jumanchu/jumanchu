@@ -12,7 +12,10 @@
         var theme = saved === 'light' || saved === 'dark'
           ? saved
           : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        var savedPalette = localStorage.getItem('jmc_palette')
+        var palette = savedPalette === 'love' ? 'love' : 'default'
         document.documentElement.setAttribute('data-theme', theme)
+        document.documentElement.setAttribute('data-palette', palette)
       })()
     </script>
   </head>

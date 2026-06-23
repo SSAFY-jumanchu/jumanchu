@@ -648,7 +648,7 @@ function koBarRect(vals, idx, w, h) {
   font-size: 13px;
   font-weight: 900;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(49,93,255,0.28);
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb),0.28);
   transition: opacity 0.18s, transform 0.18s;
 }
 
@@ -694,7 +694,7 @@ function koBarRect(vals, idx, w, h) {
   flex: 1;
   padding: 12px 14px;
   border-radius: var(--radius);
-  border: 1px solid rgba(49,93,255,0.3);
+  border: 1px solid rgba(var(--accent-rgb),0.3);
   background: var(--surface-soft);
   color: var(--ink);
   font-size: 14px;
@@ -762,7 +762,7 @@ function koBarRect(vals, idx, w, h) {
   padding: 7px 18px;
   border-radius: 999px;
   border: 0;
-  background: rgba(49,93,255,0.1);
+  background: rgba(var(--accent-rgb),0.1);
   color: var(--accent);
   font-size: 13px;
   font-weight: 900;
@@ -772,7 +772,7 @@ function koBarRect(vals, idx, w, h) {
   margin-top: 8px;
 }
 
-.write-cta-btn:hover { background: rgba(49,93,255,0.18); }
+.write-cta-btn:hover { background: rgba(var(--accent-rgb),0.18); }
 
 /* ===== 카테고리 탭 ===== */
 .cm-tabs {
@@ -862,7 +862,7 @@ function koBarRect(vals, idx, w, h) {
   font-weight: 900;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(49,93,255,0.1);
+  background: rgba(var(--accent-rgb),0.1);
   color: var(--accent);
 }
 
@@ -882,8 +882,8 @@ function koBarRect(vals, idx, w, h) {
 .follow-btn {
   padding: 5px 14px;
   border-radius: 999px;
-  border: 1px solid rgba(49,93,255,0.3);
-  background: rgba(49,93,255,0.07);
+  border: 1px solid rgba(var(--accent-rgb),0.3);
+  background: rgba(var(--accent-rgb),0.07);
   color: var(--accent);
   font-size: 12px;
   font-weight: 900;
@@ -892,7 +892,7 @@ function koBarRect(vals, idx, w, h) {
   white-space: nowrap;
 }
 
-.follow-btn:hover { background: rgba(49,93,255,0.14); }
+.follow-btn:hover { background: rgba(var(--accent-rgb),0.14); }
 
 .follow-btn.is-following {
   background: var(--glass);
@@ -1026,7 +1026,7 @@ function koBarRect(vals, idx, w, h) {
 .like-btn.is-liked { background: rgba(255,59,92,0.08); }
 .like-btn.is-liked:hover { background: rgba(255,59,92,0.14); }
 
-.reaction-btn.is-active { background: rgba(49,93,255,0.08); color: var(--accent); }
+.reaction-btn.is-active { background: rgba(var(--accent-rgb),0.08); color: var(--accent); }
 
 .like-icon { font-size: 16px; line-height: 1; }
 

@@ -62,6 +62,6 @@ const areaPath = computed(() => {
 }
 
 .sparkline-fill {
-  fill: rgba(49, 93, 255, 0.1);
+  fill: rgba(var(--accent-rgb), 0.1);
 }
 </style>

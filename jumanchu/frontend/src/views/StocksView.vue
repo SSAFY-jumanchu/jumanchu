@@ -1,9 +1,10 @@
 <script setup>
 import { ref, computed, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import SparklineChart from '../components/SparklineChart.vue'
 
 const router = useRouter()
+const route = useRoute()
 
 // ===== 필터 상태 =====
 const marketFilter = ref('all')   // all | domestic | overseas
@@ -382,7 +383,8 @@ const periods = [
 ]
 
 // ===== 뷰 토글: 인기 종목 / 선호 종목 =====
-const viewMode = ref('popular') // 'popular' | 'preference'
+// 메인 페이지 장투 점수 버튼에서 ?view=ranking 으로 진입 시 궁합 랭킹 탭 활성화
+const viewMode = ref(route.query.view === 'ranking' ? 'ranking' : 'popular') // 'popular' | 'preference' | 'ranking'
 
 // ===== 인기 종목 (실시간 랭킹) =====
 const popularSort = ref('value')
@@ -406,6 +408,24 @@ const popularStocks = computed(() => {
   else if (popularSort.value === 'down') list = [...list].sort((a, b) => a.rate - b.rate)
   return list
 })
+
+// ===== 궁합 랭킹: 전체 종목 장투 케어 점수 산출 → 내림차순 정렬 =====
+// 장투 케어 점수 = 재무(안정성·가치) 30 · 성장 40 · 궁합 30
+function computeLtc(s) {
+  const c = deriveCard(s)
+  const financial = Math.round((c.dna[3].value + c.dna[2].value) / 2) // 안정성·가치 → 재무 프록시
+  return Math.round(financial * 0.3 + c.dna[1].value * 0.4 + c.score * 0.3)
+}
+const compatRanking = computed(() =>
+  stocks.value
+    .map((s) => ({ ...s, ltc: computeLtc(s) }))
+    .sort((a, b) => b.ltc - a.ltc),
+)
+function ltcGradeColor(score) {
+  if (score >= 80) return '#e3344f'        // 빨강
+  if (score >= 40) return 'var(--positive)' // 초록
+  return '#2b59d6'                          // 파랑
+}
 </script>
 
 <template>
@@ -437,6 +457,7 @@ const popularStocks = computed(() => {
           <span class="view-toggle-thumb" aria-hidden="true"></span>
           <button type="button" :class="{ on: viewMode === 'popular' }" @click="viewMode = 'popular'">인기 종목</button>
           <button type="button" :class="{ on: viewMode === 'preference' }" @click="viewMode = 'preference'">선호 종목</button>
+          <button type="button" :class="{ on: viewMode === 'ranking' }" @click="viewMode = 'ranking'">궁합 랭킹</button>
         </div>
 
         <!-- ===== 인기 종목 (실시간 랭킹) ===== -->
@@ -525,7 +546,7 @@ const popularStocks = computed(() => {
         </template>
 
         <!-- ===== 선호 종목 (스와이프 → 관심·저장) ===== -->
-        <template v-else>
+        <template v-else-if="viewMode === 'preference'">
         <!-- ===== 스와이프 모드 (관심종목 고르기) ===== -->
         <template v-if="!swipeDone">
           <div class="sv-match-header">
@@ -757,6 +778,54 @@ const popularStocks = computed(() => {
           </div>
         </div>
         </template>
+        </template>
+
+        <!-- ===== 궁합 랭킹 (전체 종목 장투 케어 점수 순위) ===== -->
+        <template v-else>
+          <p class="pop-caption">전체 종목 · 장투 케어 점수 순위 (재무 30 · 성장 40 · 궁합 30)</p>
+          <div class="rank-table">
+            <div class="rank-row rank-head">
+              <span>랭킹</span>
+              <span>장투점수</span>
+              <span>종목</span>
+              <span class="rank-r">현재가</span>
+              <span class="rank-r">등락률</span>
+              <span class="rank-r">거래대금</span>
+              <span class="rank-ratio-h">거래 비율</span>
+            </div>
+            <div
+              v-for="(s, i) in compatRanking"
+              :key="s.code"
+              class="rank-row"
+              :class="{ active: selectedStock?.code === s.code }"
+              @click="selectStock(s)"
+            >
+              <span class="rank-pos" :class="{ medal: i < 3 }">{{ i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1 }}</span>
+              <span class="rank-score" :style="{ color: ltcGradeColor(s.ltc) }">{{ s.ltc }}</span>
+              <div class="rank-name">
+                <span class="rank-logo" :style="{ background: s.color }">{{ s.name.slice(0, 1) }}</span>
+                <div class="rank-name-info">
+                  <strong>{{ s.name }}</strong>
+                  <span>{{ s.market }} · {{ s.sector }}</span>
+                </div>
+              </div>
+              <span class="rank-r rank-price">{{ s.price.toLocaleString() }}원</span>
+              <span class="rank-r rank-rate" :class="s.rate >= 0 ? 'up' : 'down'">
+                {{ s.rate >= 0 ? '+' : '' }}{{ s.rate.toFixed(2) }}%
+              </span>
+              <span class="rank-r rank-vol">{{ s.volume }}</span>
+              <div class="rank-ratio">
+                <div class="rank-ratio-bar">
+                  <span class="buy" :style="{ width: s.buyRatio + '%' }"></span>
+                  <span class="sell" :style="{ width: s.sellRatio + '%' }"></span>
+                </div>
+                <div class="rank-ratio-nums">
+                  <span class="b">{{ s.buyRatio }}</span>
+                  <span class="s">{{ s.sellRatio }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </template>
       </section>
 
@@ -1061,8 +1130,8 @@ const popularStocks = computed(() => {
 
 .stock-row-data:hover { background: var(--surface-soft); }
 .stock-row-data.is-selected {
-  background: rgba(49,93,255,0.07);
-  outline: 1px solid rgba(49,93,255,0.2);
+  background: rgba(var(--accent-rgb),0.07);
+  outline: 1px solid rgba(var(--accent-rgb),0.2);
 }
 
 /* 컬럼 */
@@ -1220,8 +1289,8 @@ const popularStocks = computed(() => {
   margin-left: auto;
   padding: 5px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(49,93,255,0.3);
-  background: rgba(49,93,255,0.07);
+  border: 1px solid rgba(var(--accent-rgb),0.3);
+  background: rgba(var(--accent-rgb),0.07);
   color: var(--accent);
   font-size: 11px;
   font-weight: 900;
@@ -1230,7 +1299,7 @@ const popularStocks = computed(() => {
   transition: background 0.18s;
 }
 
-.detail-go-btn:hover { background: rgba(49,93,255,0.14); }
+.detail-go-btn:hover { background: rgba(var(--accent-rgb),0.14); }
 
 .detail-close {
   width: 28px; height: 28px;
@@ -1299,7 +1368,7 @@ const popularStocks = computed(() => {
 }
 
 .chart-tab.is-active {
-  background: rgba(49,93,255,0.1);
+  background: rgba(var(--accent-rgb),0.1);
   color: var(--accent);
 }
 
@@ -1461,8 +1530,8 @@ const popularStocks = computed(() => {
   gap: 8px;
   padding: 8px 12px;
   border-radius: var(--radius);
-  background: rgba(49,93,255,0.07);
-  border: 1px solid rgba(49,93,255,0.2);
+  background: rgba(var(--accent-rgb),0.07);
+  border: 1px solid rgba(var(--accent-rgb),0.2);
   font-size: 12px;
   font-weight: 700;
   color: var(--text);
@@ -1506,29 +1575,24 @@ const popularStocks = computed(() => {
 }
 .view-toggle button.on { color: var(--accent); }
 
-/* 물방울처럼 슝 미끄러지는 글래스 인디케이터 */
+/* 단색 세그먼트 인디케이터 */
 .view-toggle-thumb {
   position: absolute;
   top: 4px;
   bottom: 4px;
   left: 4px;
-  width: calc(50% - 4px);
+  width: calc((100% - 8px) / 3);
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(232,238,255,0.62) 100%);
-  border: 1px solid rgba(255,255,255,0.8);
-  box-shadow:
-    0 6px 18px rgba(49,93,255,0.22),
-    inset 0 1px 1px rgba(255,255,255,0.95),
-    inset 0 -3px 8px rgba(49,93,255,0.12);
-  backdrop-filter: blur(10px) saturate(1.4);
-  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  background: var(--chip-active);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 2px 7px rgba(17, 24, 39, 0.09);
   pointer-events: none;
   z-index: 0;
-  /* 스프링 오버슈트로 '슝~' 하는 액체 느낌 */
-  transition: transform 0.36s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: transform;
 }
 .view-toggle.preference .view-toggle-thumb { transform: translateX(100%); }
+.view-toggle.ranking .view-toggle-thumb { transform: translateX(200%); }
 
 @media (prefers-reduced-motion: reduce) {
   .view-toggle-thumb { transition: transform 0.2s ease; }
@@ -1546,14 +1610,14 @@ const popularStocks = computed(() => {
   display: grid;
   grid-template-columns: 60px minmax(120px, 1.5fr) 92px 78px 80px 108px minmax(110px, 1.2fr);
   align-items: center; gap: 10px;
-  padding: 11px 8px; border-bottom: 1px solid var(--faint);
+  padding: 11px 8px; border-bottom: 1px solid var(--line);
   cursor: pointer; transition: background 0.14s;
 }
 .pop-row:last-child { border-bottom: 0; }
 .pop-row.pop-head { border-bottom: 1px solid var(--line); cursor: default; }
 .pop-row.pop-head span { font-size: 11px; font-weight: 800; color: var(--faint); }
 .pop-row:not(.pop-head):hover { background: var(--surface-soft); }
-.pop-row.active { background: rgba(49,93,255,0.07); }
+.pop-row.active { background: rgba(var(--accent-rgb),0.07); }
 
 .pop-num { text-align: right; }
 .pop-rank-h { text-align: left; }
@@ -1586,6 +1650,49 @@ const popularStocks = computed(() => {
 .pop-ratio-nums .s { color: #e3344f; }
 
 .pop-ai { font-size: 12px; font-weight: 700; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===== 궁합 랭킹 테이블 ===== */
+.rank-table { display: flex; flex-direction: column; }
+.rank-row {
+  display: grid;
+  grid-template-columns: 52px 64px minmax(120px, 1.4fr) 92px 74px 76px 104px;
+  align-items: center; gap: 10px;
+  padding: 11px 8px; border-bottom: 1px solid var(--line);
+  cursor: pointer; transition: background 0.14s;
+}
+.rank-row:last-child { border-bottom: 0; }
+.rank-row.rank-head { border-bottom: 1px solid var(--line); cursor: default; }
+.rank-row.rank-head span { font-size: 11px; font-weight: 800; color: var(--faint); }
+.rank-row:not(.rank-head):hover { background: var(--surface-soft); }
+.rank-row.active { background: rgba(var(--accent-rgb), 0.07); }
+.rank-r { text-align: right; }
+.rank-ratio-h { text-align: left; }
+.rank-pos { font-size: 14px; font-weight: 900; color: var(--ink); text-align: center; }
+.rank-pos.medal { font-size: 19px; }
+.rank-score { font-size: 16px; font-weight: 900; text-align: center; font-variant-numeric: tabular-nums; }
+.rank-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rank-logo { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 900; flex-shrink: 0; }
+.rank-name-info { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rank-name-info strong { font-size: 14px; font-weight: 900; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-name-info span { font-size: 11px; font-weight: 700; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-price { font-size: 14px; font-weight: 900; color: var(--ink); font-variant-numeric: tabular-nums; }
+.rank-rate { font-size: 13px; font-weight: 900; padding: 3px 8px; border-radius: 8px; justify-self: end; }
+.rank-rate.up { color: #e3344f; background: rgba(227, 52, 79, 0.1); }
+.rank-rate.down { color: #2b59d6; background: rgba(43, 89, 214, 0.1); }
+.rank-vol { font-size: 13px; font-weight: 800; color: var(--muted); }
+.rank-ratio { display: flex; flex-direction: column; gap: 3px; }
+.rank-ratio-bar { display: flex; height: 5px; border-radius: 999px; overflow: hidden; background: var(--surface-soft); }
+.rank-ratio-bar .buy { background: #2b59d6; }
+.rank-ratio-bar .sell { background: #e3344f; }
+.rank-ratio-nums { display: flex; justify-content: space-between; font-size: 10px; font-weight: 900; }
+.rank-ratio-nums .b { color: #2b59d6; }
+.rank-ratio-nums .s { color: #e3344f; }
+
+@media (max-width: 820px) {
+  .rank-row { grid-template-columns: 44px 56px minmax(110px, 1.3fr) 84px 66px; }
+  .rank-vol, .rank-ratio { display: none; }
+  .rank-head span:nth-child(6), .rank-ratio-h { display: none; }
+}
 
 /* ===== 반응형 ===== */
 @media (max-width: 1200px) {
@@ -1639,20 +1746,18 @@ const popularStocks = computed(() => {
 .mc-price-box {
   padding: 13px 14px;
   border-radius: 14px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.52), rgba(244, 248, 255, 0.28));
-  border: 1px solid rgba(255, 255, 255, 0.58);
-  box-shadow: 0 10px 24px rgba(16, 22, 62, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.74);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  background: #f7f8fb;
+  border: 1px solid #dfe4ea;
+  box-shadow: 0 2px 7px rgba(17, 24, 39, 0.08);
 }
 .mc-price-box span { display: block; color: rgba(23, 33, 61, 0.62); font-size: 11px; font-weight: 900; margin-bottom: 4px; }
 .mc-price-box strong { display: block; color: #17213d; font-size: 15px; font-weight: 900; }
 .mc-price-box strong.up { color: #b6193c; }
 .mc-price-box strong.down { color: #075db8; }
 html[data-theme='dark'] .mc-price-box {
-  background: linear-gradient(145deg, rgba(9, 18, 40, 0.46), rgba(16, 24, 52, 0.24));
-  border-color: rgba(214, 224, 255, 0.2);
-  box-shadow: 0 12px 26px rgba(5, 8, 24, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.13);
+  background: #1b2230;
+  border-color: #354052;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 html[data-theme='dark'] .mc-price-box span { color: rgba(235, 240, 255, 0.7); }
 html[data-theme='dark'] .mc-price-box strong { color: #fff; }
@@ -1667,13 +1772,11 @@ html[data-theme='dark'] .mc-price-box strong.down { color: #86bcff; }
   --dna-track: rgba(79, 111, 255, 0.12);
   margin-top: 18px;
   padding: 18px 18px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.58);
-  border-radius: 20px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.62), rgba(244, 248, 255, 0.34));
-  box-shadow: 0 16px 36px rgba(20, 30, 75, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  border: 1px solid #dfe4ea;
+  border-radius: 16px;
+  background: #f7f8fb;
+  box-shadow: 0 3px 10px rgba(17, 24, 39, 0.08);
   color: var(--dna-ink);
-  backdrop-filter: blur(26px) saturate(170%);
-  -webkit-backdrop-filter: blur(26px) saturate(170%);
 }
 .dna-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .dna-head-icon {
@@ -1688,10 +1791,8 @@ html[data-theme='dark'] .mc-price-box strong.down { color: #86bcff; }
 .dna-body { display: grid; grid-template-columns: 126px minmax(0, 1fr); gap: 16px; align-items: center; }
 .dna-chart-shell {
   position: relative; display: grid; place-items: center; aspect-ratio: 1; border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 48%, rgba(99, 102, 241, 0.12), transparent 56%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.42), rgba(229, 236, 255, 0.18));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.46), 0 8px 24px rgba(49, 93, 255, 0.1);
+  background: #eef2ff;
+  box-shadow: inset 0 0 0 1px #dce4ff;
 }
 .dna-chart-shell::after { content: ''; position: absolute; inset: 9px; border: 1px solid rgba(79, 111, 255, 0.1); border-radius: 50%; pointer-events: none; }
 .dna-radar { width: 88%; height: 88%; overflow: visible; }
@@ -1705,10 +1806,9 @@ html[data-theme='dark'] .mc-price-box strong.down { color: #86bcff; }
 .dna-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .dna-metric {
   min-width: 0; padding: 10px 11px;
-  border: 1px solid rgba(255, 255, 255, 0.38); border-radius: 12px;
-  background: rgba(255, 255, 255, 0.34);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid #e1e5eb; border-radius: 12px;
+  background: #ffffff;
+  box-shadow: none;
 }
 .dna-metric-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .dna-k { color: var(--dna-muted); font-size: 11px; font-weight: 850; white-space: nowrap; }
@@ -1718,24 +1818,22 @@ html[data-theme='dark'] .mc-price-box strong.down { color: #86bcff; }
 
 html[data-theme='dark'] .mc-dna {
   --dna-ink: #f5f7ff; --dna-muted: #aeb9d7; --dna-accent: #aabaff; --dna-track: rgba(149, 169, 255, 0.14);
-  border-color: rgba(214, 224, 255, 0.2);
-  background: linear-gradient(145deg, rgba(9, 18, 40, 0.54), rgba(16, 24, 52, 0.3));
-  box-shadow: 0 18px 40px rgba(5, 8, 24, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.13);
+  border-color: #354052;
+  background: #151b27;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
 }
 html[data-theme='dark'] .dna-chart-shell {
-  background:
-    radial-gradient(circle at 50% 48%, rgba(113, 105, 255, 0.22), transparent 58%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025));
-  box-shadow: inset 0 0 0 1px rgba(214, 224, 255, 0.1), 0 10px 26px rgba(0, 0, 0, 0.18);
+  background: #1c2434;
+  box-shadow: inset 0 0 0 1px #303b50;
 }
 html[data-theme='dark'] .dna-chart-shell::after { border-color: rgba(171, 186, 255, 0.12); }
 html[data-theme='dark'] .dna-grid { fill: rgba(150, 168, 255, 0.025); stroke: rgba(171, 186, 255, 0.2); }
 html[data-theme='dark'] .dna-grid-outer { stroke: rgba(171, 186, 255, 0.34); }
 html[data-theme='dark'] .dna-axis { stroke: rgba(171, 186, 255, 0.18); }
 html[data-theme='dark'] .dna-metric {
-  border-color: rgba(214, 224, 255, 0.11);
-  background: rgba(255, 255, 255, 0.075);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border-color: #303a4b;
+  background: #202735;
+  box-shadow: none;
 }
 
 .mc-reason { margin-top: 16px; font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.3); }
@@ -1751,7 +1849,7 @@ html[data-theme='dark'] .dna-metric {
 .sv-controls { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 18px; }
 .sv-ctrl { width: 56px; height: 56px; border-radius: 50%; border: 1.5px solid var(--glass-border); background: var(--surface-soft); font-size: 22px; font-weight: 900; color: var(--ink); cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.1); transition: transform 0.18s ease; }
 .sv-ctrl.pass { color: var(--negative); border-color: rgba(207,61,61,0.4); background: rgba(207,61,61,0.07); }
-.sv-ctrl.like { color: var(--accent); border-color: rgba(49,93,255,0.4); background: rgba(49,93,255,0.07); }
+.sv-ctrl.like { color: var(--accent); border-color: rgba(var(--accent-rgb),0.4); background: rgba(var(--accent-rgb),0.07); }
 .sv-ctrl.save { width: 68px; height: 68px; border: 0; background: linear-gradient(135deg, #ff3d8b 0%, #e3344f 100%); color: #fff; font-size: 26px; box-shadow: 0 10px 30px rgba(255,61,139,0.4); }
 .sv-ctrl:hover { transform: translateY(-3px) scale(1.05); }
 .sv-hint { margin: 12px 0 0; text-align: center; font-size: 12px; font-weight: 700; color: var(--faint); }
@@ -1762,7 +1860,7 @@ html[data-theme='dark'] .dna-metric {
 .sv-reset:hover { background: var(--glass-strong); color: var(--ink); }
 
 .saved-tag { flex-shrink: 0; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 900; }
-.saved-tag.like { background: rgba(49,93,255,0.12); color: var(--accent); }
+.saved-tag.like { background: rgba(var(--accent-rgb),0.12); color: var(--accent); }
 .saved-tag.save { background: rgba(255,61,139,0.12); color: #e3344f; }
 
 .sv-empty { padding: 48px 20px; text-align: center; color: var(--muted); font-size: 14px; font-weight: 700; }
