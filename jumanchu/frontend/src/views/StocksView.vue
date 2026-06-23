@@ -3,6 +3,8 @@ import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import SparklineChart from '../components/SparklineChart.vue'
 import { fetchLongtermRanking } from '../api/recommend'
+import { fetchStocks, fetchStockPrice } from '../api/stocks'
+import { retry } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
@@ -401,14 +403,111 @@ const liked = reactive({})
 function toggleLike(code) { liked[code] = !liked[code] }
 const nowLabel = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
 
+// ----- 실데이터: fetchStocks(시총순) 목록 + 행별 KIS 실시간가 -----
+const popularReal = ref([])          // 가격 조회 성공한 행만 보관
+const popularLoading = ref(true)     // 첫 렌더부터 로딩 표시 (빈 표 깜빡임 방지)
+const popularError = ref('')
+let popularLoadId = 0                 // 동시/연속 호출 경합 방지 토큰
+let popularLoadedMarket = null        // 같은 시장 재요청 스킵용
+
+// 거래대금 → 사람이 읽는 단위 (KRW: 억/조, USD: M/B)
+function fmtTradingValue(v, market) {
+  if (v == null) return '—'
+  const n = Number(v)
+  if (market === 'KOSPI' || market === 'KOSDAQ') {
+    if (n >= 1e12) return (n / 1e12).toFixed(1) + '조'
+    if (n >= 1e8) return Math.round(n / 1e8).toLocaleString('ko-KR') + '억'
+    return n.toLocaleString('ko-KR')
+  }
+  if (n >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'B'
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M'
+  return '$' + n.toLocaleString('en-US')
+}
+
+// 현재가 — KIS가 주는 원본 통화 그대로 (해외가는 이미 USD)
+function fmtPopPrice(v, market) {
+  if (v == null) return '—'
+  const n = Number(v)
+  return market === 'KOSPI' || market === 'KOSDAQ'
+    ? n.toLocaleString('ko-KR') + '원'
+    : '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 })
+}
+
+// 동시성 제한 allSettled — KIS가 동시 호출을 throttling(503)하므로 소수만 병렬로.
+async function mapLimit(arr, limit, fn) {
+  const out = new Array(arr.length)
+  let i = 0
+  const worker = async () => {
+    while (i < arr.length) {
+      const idx = i++
+      try { out[idx] = { status: 'fulfilled', value: await fn(arr[idx]) } }
+      catch (reason) { out[idx] = { status: 'rejected', reason } }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, arr.length) }, worker))
+  return out
+}
+
+// 시총 통화 혼합(KRW↔USD) 방지: 해외 탭=NASDAQ, 전체·국내=KOSPI 시총 상위
+async function loadPopular() {
+  const market = marketFilter.value === 'overseas' ? 'NASDAQ' : 'KOSPI'
+  if (popularLoadedMarket === market && popularReal.value.length) return
+  const myId = ++popularLoadId
+  popularLoading.value = true
+  popularError.value = ''
+  popularReal.value = []
+  try {
+    const { items = [] } = await fetchStocks({ market, sort: 'market_cap', size: 15 })
+    // 종목별 실시간가 조회 — 동시 2건으로 제한(KIS throttling 회피). 간헐 5xx는 retry, 실패분은 제외.
+    // 성공분은 백엔드가 캐시(장외 60s)하므로 재진입 시 더 빨리/완전히 채워짐.
+    const settled = await mapLimit(items, 2, (it) =>
+      retry(() => fetchStockPrice(it.code), { attempts: 4, delayMs: 600 }))
+    if (myId !== popularLoadId) return  // 그 사이 시장이 바뀌면 폐기
+    const rows = []
+    items.forEach((it, i) => {
+      const r = settled[i]
+      if (r.status !== 'fulfilled') return
+      const p = r.value.price
+      rows.push({
+        code: it.code, name: it.name, market: it.market, sector: it.sector,
+        color: rankColor(it.code),
+        price: Number(p.current),
+        change: Number(p.change),
+        rate: Number(p.change_rate),
+        volume: fmtTradingValue(p.trading_value, it.market),
+        rawValue: Number(p.trading_value),
+        rawVolume: Number(p.volume),
+        buyRatio: null, sellRatio: null, aiNote: '',   // 백엔드 소스 없음 → 표에서 '—'
+        // 상세 패널이 참조하는 필드 안전 기본값 (클릭 시 크래시 방지)
+        chartPoints: [], sparkline: [], aiReason: '', summary: [], community: [],
+      })
+    })
+    popularReal.value = rows
+    popularLoadedMarket = rows.length ? market : null
+    if (!rows.length) popularError.value = '실시간 시세를 불러오지 못했어요.'
+  } catch (e) {
+    if (myId !== popularLoadId) return
+    popularError.value = e?.response?.data?.detail || '목록을 불러오지 못했어요.'
+  } finally {
+    if (myId === popularLoadId) popularLoading.value = false
+  }
+}
+
 const popularStocks = computed(() => {
-  let list = stocks.value.filter((s) => {
+  // 실데이터 우선, 에러면 목업 폴백, 로딩중이면 빈 배열
+  let list = popularReal.value.length
+    ? popularReal.value
+    : (popularError.value ? stocks.value : [])
+  list = list.filter((s) => {
     if (marketFilter.value === 'domestic') return s.market === 'KOSPI' || s.market === 'KOSDAQ'
     if (marketFilter.value === 'overseas') return s.market === 'NASDAQ' || s.market === 'NYSE'
     return true
   })
-  if (popularSort.value === 'up') list = [...list].sort((a, b) => b.rate - a.rate)
-  else if (popularSort.value === 'down') list = [...list].sort((a, b) => a.rate - b.rate)
+  const n = (v) => (v == null ? -Infinity : v)
+  if (popularSort.value === 'value') list = [...list].sort((a, b) => n(b.rawValue) - n(a.rawValue))
+  else if (popularSort.value === 'volume') list = [...list].sort((a, b) => n(b.rawVolume) - n(a.rawVolume))
+  else if (popularSort.value === 'up') list = [...list].sort((a, b) => n(b.rate) - n(a.rate))
+  else if (popularSort.value === 'down') list = [...list].sort((a, b) => n(a.rate) - n(b.rate))
   return list
 })
 
@@ -465,9 +564,17 @@ async function loadRanking() {
   }
 }
 
-// 랭킹 탭으로 들어오면 로드
-watch(viewMode, (v) => { if (v === 'ranking') loadRanking() })
-onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
+// 탭 진입 시 로드 (인기=실시간 시세, 랭킹=장투 랭킹)
+watch(viewMode, (v) => {
+  if (v === 'ranking') loadRanking()
+  if (v === 'popular') loadPopular()
+})
+// 인기 탭에서 시장 필터를 바꾸면 해당 시장 시총 상위로 다시 로드
+watch(marketFilter, () => { if (viewMode.value === 'popular') loadPopular() })
+onMounted(() => {
+  if (viewMode.value === 'ranking') loadRanking()
+  if (viewMode.value === 'popular') loadPopular()
+})
 </script>
 
 <template>
@@ -534,7 +641,10 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
             </div>
           </div>
 
-          <p class="pop-caption">순위 · 오늘 {{ nowLabel }} 기준</p>
+          <p class="pop-caption">
+            순위 · 오늘 {{ nowLabel }} 기준
+            <span v-if="popularError" class="pop-err">· {{ popularError }} (예시 데이터)</span>
+          </p>
 
           <div class="pop-table">
             <div class="pop-row pop-head">
@@ -546,6 +656,9 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
               <span class="pop-ratio-h">거래 비율</span>
               <span class="pop-ai-h">AI 요약</span>
             </div>
+
+            <div v-if="popularLoading && !popularStocks.length" class="pop-state">실시간 시세를 불러오는 중…</div>
+            <div v-else-if="!popularStocks.length" class="pop-state">표시할 종목이 없어요.</div>
 
             <div
               v-for="(s, i) in popularStocks"
@@ -567,22 +680,25 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
                   <span>{{ s.market }} · {{ s.sector }}</span>
                 </div>
               </div>
-              <span class="pop-num pop-price">{{ s.price.toLocaleString() }}원</span>
-              <span class="pop-num pop-rate" :class="s.rate >= 0 ? 'up' : 'down'">
-                {{ s.rate >= 0 ? '+' : '' }}{{ s.rate.toFixed(2) }}%
+              <span class="pop-num pop-price">{{ fmtPopPrice(s.price, s.market) }}</span>
+              <span class="pop-num pop-rate" :class="{ up: s.rate >= 0, down: s.rate < 0 }">
+                {{ s.rate != null ? (s.rate >= 0 ? '+' : '') + s.rate.toFixed(2) + '%' : '—' }}
               </span>
               <span class="pop-num pop-vol">{{ s.volume }}</span>
               <div class="pop-ratio">
-                <div class="pop-ratio-bar">
-                  <span class="buy" :style="{ width: s.buyRatio + '%' }"></span>
-                  <span class="sell" :style="{ width: s.sellRatio + '%' }"></span>
-                </div>
-                <div class="pop-ratio-nums">
-                  <span class="b">{{ s.buyRatio }}</span>
-                  <span class="s">{{ s.sellRatio }}</span>
-                </div>
+                <template v-if="s.buyRatio != null">
+                  <div class="pop-ratio-bar">
+                    <span class="buy" :style="{ width: s.buyRatio + '%' }"></span>
+                    <span class="sell" :style="{ width: s.sellRatio + '%' }"></span>
+                  </div>
+                  <div class="pop-ratio-nums">
+                    <span class="b">{{ s.buyRatio }}</span>
+                    <span class="s">{{ s.sellRatio }}</span>
+                  </div>
+                </template>
+                <span v-else class="pop-ratio-na">—</span>
               </div>
-              <span class="pop-ai">{{ s.aiNote }}</span>
+              <span class="pop-ai">{{ s.aiNote || '—' }}</span>
             </div>
           </div>
         </template>
@@ -1649,6 +1765,9 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
 .pop-sort button { padding: 5px 12px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 900; cursor: pointer; transition: background 0.15s, color 0.15s; }
 .pop-sort button.is-selected { background: var(--chip-active); color: var(--ink); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
 .pop-caption { margin: 0 0 8px; font-size: 12px; font-weight: 700; color: var(--faint); }
+.pop-err { color: #e3344f; font-weight: 800; }
+.pop-state { padding: 28px 12px; text-align: center; font-size: 13px; font-weight: 700; color: var(--faint); }
+.pop-ratio-na { color: var(--faint); font-weight: 700; justify-self: center; }
 
 .pop-table { display: flex; flex-direction: column; }
 .pop-row {
