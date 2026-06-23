@@ -1,0 +1,114 @@
+@startuml
+' ============================================================
+' 주만추 (Jumanchu) — 데모 버전 Use Case Diagram (발표용 압축본)
+' 기준: dev 브랜치 통합 코드 (2026-06)
+' 렌더(graphviz 필요): java -jar plantuml.jar -tpng ucd_demo.puml
+' 레이아웃: 사용자=좌측 / 외부 시스템·관리자=우측 (hidden 제약으로 좌우 균형)
+' ============================================================
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Malgun Gothic"
+skinparam shadowing false
+skinparam ArrowColor #666666
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #2F2F2F
+  FontColor #1A1A1A
+}
+skinparam actor {
+  BackgroundColor #FFFFFF
+  BorderColor #2F2F2F
+  FontColor #1A1A1A
+}
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #2F2F2F
+  FontColor #111111
+  FontSize 16
+  FontStyle bold
+}
+
+left to right direction
+
+' ---------------- Actors (좌: 사용자 / 우: 외부·관리자) ----------------
+actor "미인증 사용자\n(비회원)" as Guest
+actor "인증된 사용자\n(회원)" as Member
+actor "외부 시스템" as Ext
+actor "관리자" as Admin
+
+rectangle "주만추 (Jumanchu) 주식 투자 서비스 시스템" {
+
+  ' 공개 기능
+  usecase "회원가입" as signup
+  usecase "로그인 / 로그아웃" as login
+  usecase "종목 검색" as search
+  usecase "종목 상세 조회" as detail
+  usecase "시세·차트 조회" as quote
+  usecase "재무제표 조회" as fin
+  usecase "시장 요약\n(지수·환율)" as market
+  usecase "뉴스 조회" as news
+  usecase "커뮤니티 글 조회" as postread
+
+  ' 회원 기능
+  usecase "투자성향 온보딩" as onboard
+  usecase "스와이프 종목 추천" as swipe
+  usecase "투자성향 기반 추천" as patternRec
+  usecase "트렌딩 뉴스 기반 추천" as newsRec
+  usecase "관심종목 등록/관리" as watch
+  usecase "장기투자 AI 리포트" as report
+  usecase "모의 매수/매도 주문" as order
+  usecase "포트폴리오 조회\n(잔고·자산배분)" as portfolio
+  usecase "투자 일기 작성" as diary
+  usecase "커뮤니티 글·댓글 작성" as postwrite
+
+  ' 외부 연동 (우측)
+  usecase "시세 데이터 연동\n(KIS)" as intgPrice
+  usecase "재무 데이터 연동\n(DART·yfinance)" as intgFin
+  usecase "뉴스 데이터 연동\n(RSS·네이버)" as intgNews
+  usecase "AI 분석 연동\n(GMS GPT-4o)" as intgAI
+
+  ' 관리자 기능 (우측)
+  usecase "회원 관리" as adminUser
+  usecase "게시글·댓글 관리" as adminPost
+}
+
+' ---------------- 좌측 사용자 연결 ----------------
+Guest -- signup
+Guest -- login
+Guest -- search
+Guest -- detail
+Guest -- fin
+Guest -- market
+Guest -- news
+Guest -- postread
+Member -- onboard
+Member -- swipe
+Member -- watch
+Member -- report
+Member -- order
+Member -- portfolio
+Member -- diary
+Member -- postwrite
+
+' ---------------- include (좌→우 흐름) ----------------
+detail ..> quote : <<include>>
+swipe ..> patternRec : <<include>>
+swipe ..> newsRec : <<include>>
+
+' ---------------- 우측 블록 위치 고정 (hidden, 비표시) ----------------
+quote -[hidden]- intgPrice
+quote -[hidden]- intgFin
+patternRec -[hidden]- intgNews
+newsRec -[hidden]- intgAI
+patternRec -[hidden]- adminUser
+newsRec -[hidden]- adminPost
+
+' ---------------- 우측 액터 (유스케이스 -- 액터 → 액터가 최우측) ----------------
+intgPrice -- Ext
+intgFin -- Ext
+intgNews -- Ext
+intgAI -- Ext
+adminUser -- Admin
+adminPost -- Admin
+
+@enduml
