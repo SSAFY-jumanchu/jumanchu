@@ -3,13 +3,13 @@
 =====================================================================
  register_batch_tasks.ps1 — 주만추 Windows 작업 스케줄러 등록
 =====================================================================
- run_batch / warm_volume_loop 를 Windows 작업 스케줄러에 4개 작업으로 등록한다.
+ run_batch / warm_loop 를 Windows 작업 스케줄러에 4개 작업으로 등록한다.
  (schtasks.exe 가 아니라 ScheduledTasks 모듈: Register-ScheduledTask)
 
    (1) Jumanchu-Daily     평일 16:00     run_batch daily   (장 마감 15:30 후·PC 가동시간 내)
    (2) Jumanchu-Weekly    월요일 09:30   run_batch weekly  (마스터/메타/재무)
    (3) Jumanchu-Hourly    매시 정각      run_batch hourly  (뉴스 수집)
-   (4) Jumanchu-VolWarmer 시스템 시작 시 warm_volume_loop  (장중 ~30초 워밍, 죽으면 재시작)
+   (4) Jumanchu-VolWarmer 시스템 시작 시 warm_loop  (인기랭킹 시세·체결강도 ~30초 워밍, 죽으면 재시작)
 
  시각은 호스트 로컬(KST). PC 가동시간(평일 09:00~18:00) 안으로 맞춰 둠.
  -WakeToRun: 작업 시각에 PC가 *절전(sleep)* 이면 깨워서 실행. 단 완전 종료(shutdown)는
@@ -106,14 +106,14 @@ Register-ScheduledTask -TaskName 'Jumanchu-Hourly' -Principal $principal -Settin
     -Description '주만추 시간배치: 뉴스 수집' | Out-Null
 Write-Host '  + Jumanchu-Hourly (매시 정각)'
 
-# 워머: 시스템 시작 시 1회 기동 → warm_volume_loop 가 스스로 30초 루프(장중 게이트).
+# 워머: 시스템 시작 시 1회 기동 → warm_loop 가 스스로 30초 루프(인기랭킹 시세+체결강도 워밍).
 # ExecutionTimeLimit Zero = 무제한(루프 죽이지 않음), 죽으면 1분 간격 재시작.
 $warmerSettings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew `
     -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 Register-ScheduledTask -TaskName 'Jumanchu-VolWarmer' -Principal $principal -Settings $warmerSettings `
     -Trigger (New-ScheduledTaskTrigger -AtStartup) `
-    -Action (New-ManageAction 'warm_volume_loop' 'volwarmer.log') `
-    -Description '주만추 체결강도 Redis 워머 (장중 ~30초 루프)' | Out-Null
+    -Action (New-ManageAction 'warm_loop' 'volwarmer.log') `
+    -Description '주만추 인기랭킹 시세·체결강도 Redis 워머 (~30초 루프)' | Out-Null
 Write-Host '  + Jumanchu-VolWarmer (시작 시 상시 루프)'
 
 Write-Host ''

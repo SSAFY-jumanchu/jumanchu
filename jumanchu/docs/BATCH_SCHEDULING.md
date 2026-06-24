@@ -10,10 +10,10 @@
 | 종류 | 명령 | 성격 | 스케줄 |
 |---|---|---|---|
 | **데이터 적재** | `python manage.py run_batch {daily\|weekly\|hourly}` | 의존 순서대로 한 번 실행 | cron형(특정 시각) |
-| **실시간 워머** | `python manage.py warm_volume_loop` | 스스로 30초마다 반복하는 상시 루프 | 부팅 시 1회 기동 |
+| **실시간 워머** | `python manage.py warm_loop` | 스스로 30초마다 반복하는 상시 루프 | 부팅 시 1회 기동 |
 
 - `run_batch daily` = 가격→지표→DNA→장투점수 / `weekly` = 마스터·메타·재무 / `hourly` = 뉴스.
-- `warm_volume_loop` = 인기종목 체결강도를 장중 ~30초마다 Redis 워밍(랭킹 거래비율용). cron은 분 단위라 못 해서 **루프 프로그램**으로 만든 것.
+- `warm_loop` = 인기종목 **시세+체결강도**를 ~30초마다 Redis 워밍(랭킹 시세·거래비율용). cron은 분 단위라 못 해서 **루프 프로그램**으로 만든 것. (`warm_popular_prices` + `warm_volume_power` 묶음)
 
 ---
 
@@ -84,14 +84,16 @@ crontab deploy/jumanchu.cron        # 확인: crontab -l
 
 ---
 
-## 4. `warm_volume_loop` 동작
+## 4. `warm_loop` 동작
 
-- 매 패스 전 `_is_market_open('KOSPI') or _is_market_open('NASDAQ')` 로 **장중인지 게이트** (price_dispatch 재사용).
-- 장중이면 `warm_volume_power` 호출 후 `--interval`(기본 30초) 대기, 장 마감이면 호출 없이 더 길게(≥60초) 쉼.
-- 테스트: `--once`(1패스 후 종료) · `--always`(시장시간 무시) · `--size/--chunk/--ttl`(워머 옵션 전달).
+- 한 사이클마다 `warm_popular_prices`(인기 시세) + `warm_volume_power`(체결강도)를 호출해 랭킹용 Redis 캐시(`stock:rankprice:*`·`stock:volpower:*`)를 데움.
+- `--interval`(기본 30초) 주기 무한 루프. 한 사이클이 실패해도 루프는 안 죽음(다음 주기 재시도).
+- **`close_old_connections()`** 로 Neon 유휴 연결을 정리 — 장수명 루프 안전.
+- 시장시간 게이트는 없음(항상 워밍). 장 마감 시 KIS가 빈/정지 응답이라 캐시가 빌 뿐 무해. 실제론 PC 가동시간(09–18)에만 돈다.
+- 테스트: `--once`(1사이클 후 종료) · `--size/--chunk`(워머 옵션 전달).
 
 ```bash
-python manage.py warm_volume_loop --once --always   # 시장 닫혀 있어도 1패스 검증
+python manage.py warm_loop --once     # 1사이클만 검증
 ```
 
 ---
@@ -101,7 +103,7 @@ python manage.py warm_volume_loop --once --always   # 시장 닫혀 있어도 1�
 | 항목 | 내용 |
 |---|---|
 | **타임존** | 스케줄 시각은 호스트 로컬(KST 가정). cron은 `TZ=Asia/Seoul` 명시. US 서머타임은 `_is_market_open`의 zoneinfo가 처리. |
-| **공휴일 미고려** | `_is_market_open`은 공휴일을 모른다 → 휴장일에도 `daily`가 돈다. daily는 멱등(재적재 무해)이라 큰 문제 없음. 워머는 평일 시간 게이트로 자연 차단. (KR/US 공휴일 캘린더는 후속) |
+| **공휴일 미고려** | `_is_market_open`은 공휴일을 모른다 → 휴장일에도 `daily`가 돈다. daily는 멱등(재적재 무해)이라 큰 문제 없음. 워머(warm_loop)는 게이트가 없어 항상 워밍하나, 휴장 시 KIS가 빈/정지 응답이라 무해. (KR/US 공휴일 캘린더는 후속) |
 | **동시 실행 방지** | 배치가 길어져 다음 트리거와 겹치면 중복 적재 위험 → Linux `flock -n`, Windows 작업 `MultipleInstances IgnoreNew`로 차단. |
 | **실패 감지/알림** | `run_batch`는 실패 단계 있으면 **비-0 종료**. 야간 실패를 아침에 모르지 않으려면 종료코드를 받아 Slack/메일로 알리는 래퍼 권장(미구현 — 후속). 우선은 `*.log` 확인. |
 | **로그 분리·로테이션** | 데이터배치/워머 로그를 별도 파일로(daily/weekly/hourly/volwarmer.log). Linux는 `logrotate`, Docker는 logging `max-size/max-file`. |
@@ -113,4 +115,4 @@ python manage.py warm_volume_loop --once --always   # 시장 닫혀 있어도 1�
 
 - 정책 표: [API_스키마_v1.5.md §10.3](API_스키마_v1.5.md)
 - 산출물: [register_batch_tasks.ps1](../deploy/register_batch_tasks.ps1) · [jumanchu.cron](../deploy/jumanchu.cron) · [docker-compose.scheduler.yml](../deploy/docker-compose.scheduler.yml)
-- 오케스트레이터: `backend/stocks/management/commands/run_batch.py` · 워머: `warm_volume_loop.py`
+- 오케스트레이터: `backend/stocks/management/commands/run_batch.py` · 워머: `warm_loop.py` (= `warm_popular_prices` + `warm_volume_power`)
