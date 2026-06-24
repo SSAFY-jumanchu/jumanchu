@@ -182,10 +182,11 @@ class PopularStockSerializer(serializers.Serializer):
     code = serializers.CharField()
     name = serializers.CharField()
     market = serializers.CharField()
+    sector = serializers.CharField(allow_null=True, required=False)              # 업종(표시용)
     currency = serializers.CharField()                                          # KRW/USD (원본 통화)
-    current = serializers.DecimalField(max_digits=18, decimal_places=4)         # 원본 통화 현재가
-    current_krw = serializers.DecimalField(max_digits=18, decimal_places=4, allow_null=True)  # KRW 환산 현재가
-    change = serializers.DecimalField(max_digits=18, decimal_places=4)
+    current = serializers.DecimalField(max_digits=18, decimal_places=4, allow_null=True)       # 원본 통화 현재가
+    current_krw = serializers.DecimalField(max_digits=18, decimal_places=4, allow_null=True)   # KRW 환산 현재가
+    change = serializers.DecimalField(max_digits=18, decimal_places=4, allow_null=True)
     change_rate = serializers.FloatField()
     trading_value = serializers.DecimalField(max_digits=24, decimal_places=4, allow_null=True)       # 원본 통화
     trading_value_krw = serializers.DecimalField(max_digits=24, decimal_places=4, allow_null=True)   # 정렬용 KRW 환산
@@ -200,6 +201,7 @@ class PopularRankingResponseSerializer(serializers.Serializer):
     items = PopularStockSerializer(many=True)
     market = serializers.ChoiceField(choices=['all', 'domestic', 'overseas'])
     sort = serializers.ChoiceField(choices=['value', 'volume', 'up', 'down'])
+    usd_krw_rate = serializers.DecimalField(max_digits=10, decimal_places=2)  # 기간탭 원화환산용 환율
     fetched_at = serializers.DateTimeField()
 
 

@@ -18,11 +18,13 @@ from decimal import Decimal
 import requests
 from django.conf import settings
 from django.core.cache import cache
+from django.db.models import F
 from django.utils import timezone
 
 from stocks.models import Stock
 from stocks.services.price_dispatch import (
-    VOLPOWER_TTL, fetch_volume_power, get_kis_client, volpower_key,
+    VOLPOWER_EMPTY, VOLPOWER_TTL, fetch_rank_price, fetch_volume_power,
+    get_kis_client, rankprice_key, volpower_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -189,64 +191,103 @@ USD_KRW_RATE = settings.USD_KRW_RATE  # USD→KRW 환산(전체 탭 정렬·원�
 _POPULAR_SORT = {
     "value":  (lambda x: x["trading_value_krw"] or Decimal("0"), True),   # 거래대금 ↓
     "volume": (lambda x: x["volume"] or 0, True),                          # 거래량 ↓
-    "up":     (lambda x: x["change_rate"], True),                          # 급상승 ↓
-    "down":   (lambda x: x["change_rate"], False),                         # 급하락 ↑
+    "up":     (lambda x: x["change_rate"] or 0.0, True),                   # 급상승 ↓
+    "down":   (lambda x: x["change_rate"] or 0.0, False),                  # 급하락 ↑
 }
 
-
-def _popular_pool(markets: list[str], raw_rows: list, mapper) -> list[dict]:
-    """KIS 거래량순위 행 → 우리 활성 DB 종목만 + 종목별 market 태깅 + 거래대금 KRW 환산."""
-    code_to_market = dict(
-        Stock.objects.filter(market__in=markets, is_active=True).values_list("code", "market")
-    )
-    out = []
-    for row in raw_rows:
-        m = mapper(row)
-        mk = code_to_market.get(m["code"])
-        if mk is None:
-            continue  # 우리 DB 비활성/미수록 종목 제외(클릭 불가 방지)
-        m["market"] = mk
-        is_us = mk in _US_MARKETS
-        m["currency"] = "USD" if is_us else "KRW"          # 원본 통화(해외 탭 토글 라벨용)
-        tv = m.get("trading_value")
-        m["trading_value_krw"] = tv * USD_KRW_RATE if (tv is not None and is_us) else tv
-        cur = m.get("current")                              # 전체/국내 탭 원화 통일용 환산 현재가
-        m["current_krw"] = cur * USD_KRW_RATE if (cur is not None and is_us) else cur
-        out.append(m)
-    return out
+# 후보 시장: FE와 동일(전체=국내+해외, 국내=KOSPI, 해외=NASDAQ). KOSDAQ/NYSE는 후속 확장.
+_POPULAR_CANDIDATE_MARKETS = {
+    "all": ["KOSPI", "NASDAQ"], "domestic": ["KOSPI"], "overseas": ["NASDAQ"],
+}
+_PRICE_FILL_LIMIT = 12  # 시세 캐시 미스 중 요청 경로에서 즉석 채울 최대 개수(워밍 전·드리프트 대응)
 
 
-def popular_ranking(market: str = "all", sort: str = "value", size: int = 30) -> list[dict]:
-    """인기 종목 랭킹. 거래량순위 TR(거래대금·거래량·등락률·현재가 포함)을 시장별로 받아
-    전체(all)는 합쳐 재정렬한다. 거래대금 정렬은 USD→KRW 환산해 통화를 통일.
-    급상승/급하락은 '거래대금 상위 풀 내'에서 등락률 정렬(=활발히 거래되는 종목 중 등락 큰 순)."""
-    c = get_kis_client()
-    items: list[dict] = []
-    if market in ("all", "domestic"):
-        rows = _retry(c.get_domestic_volume_rank).get("output", [])
-        items += _popular_pool(_KR_MARKETS, rows, _map_kr_rank)
-    if market in ("all", "overseas"):
-        rows = _retry(lambda: c.get_overseas_volume_rank(_US_EXCD)).get("output2", [])
-        items += _popular_pool(_US_MARKETS, rows, _map_us_rank)
+def _market_cap_candidates(market: str, size: int) -> list[Stock]:
+    """랭킹 후보 = DB 시총상위 (실시간 거래대금·등락률은 시세로 매김). 전체는 시장별 반반."""
+    markets = _POPULAR_CANDIDATE_MARKETS.get(market, _POPULAR_CANDIDATE_MARKETS["all"])
+    per = size // len(markets) if len(markets) > 1 else size
+    stocks: list[Stock] = []
+    for m in markets:
+        stocks += list(
+            Stock.objects.filter(market=m, is_active=True)
+            # market_cap NULL은 맨 뒤로 (기본 -market_cap은 Postgres에서 NULL이 앞 → 잡주가 1위 됨)
+            .order_by(F("market_cap").desc(nulls_last=True))[:per]
+        )
+    return stocks[:size]
+
+
+def _apply_currency(it: dict) -> None:
+    """current_krw/currency/trading_value_krw 부착 (US는 ×환율, KR은 그대로)."""
+    is_us = it["market"] in _US_MARKETS
+    it["currency"] = "USD" if is_us else "KRW"
+    cur, tv = it.get("current"), it.get("trading_value")
+    it["current_krw"] = cur * USD_KRW_RATE if (cur is not None and is_us) else cur
+    it["trading_value_krw"] = tv * USD_KRW_RATE if (tv is not None and is_us) else tv
+
+
+def _candidates_cached(market: str, size: int) -> list[dict]:
+    """시총상위 후보 메타(code/name/market/sector)를 캐시 — DB 쿼리를 요청 hot path에서 제거.
+    시총 후보는 거의 불변이라 5분 캐시. (요청마다 Neon 연결 ~0.5s 물던 것 제거)"""
+    key = f"markets:candidates:{market}:{size}"
+    items = cache.get(key)
+    if items is None:
+        items = [{"code": s.code, "name": s.name, "market": s.market, "sector": s.sector}
+                 for s in _market_cap_candidates(market, size)]
+        cache.set(key, items, timeout=300)
+    return items
+
+
+def _attach_prices(items: list[dict]) -> list[dict]:
+    """후보 행(dict)에 시세 부착. 랭킹 시세캐시(stock:rankprice:*) 우선, 미스는 ≤N개만 즉석 fetch.
+    시세 없는 행은 값 None(=FE '—'), 정렬키 change_rate는 0 처리."""
+    keys = [rankprice_key(it["market"], it["code"]) for it in items]
+    cached = cache.get_many(keys)
+    filled = 0
+    for it, k in zip(items, keys):
+        if k in cached or filled >= _PRICE_FILL_LIMIT:
+            continue
+        filled += 1
+        # 미스필은 DB 없이(미저장 Stock 인스턴스) fetch — market/code만 있으면 됨
+        p = fetch_rank_price(Stock(market=it["market"], code=it["code"]))
+        if p is not None:
+            cached[k] = p
+    for it, k in zip(items, keys):
+        p = cached.get(k)
+        it["current"] = p["current"] if p else None
+        it["change"] = p["change"] if p else None
+        it["change_rate"] = p["change_rate"] if p else 0.0
+        it["trading_value"] = p["trading_value"] if p else None
+        it["volume"] = p["volume"] if p else None
+    return items
+
+
+def popular_ranking(market: str = "all", sort: str = "value", size: int = 100) -> list[dict]:
+    """인기 종목 랭킹 = DB 시총상위 후보를 실시간 시세로 매겨 정렬.
+    시세는 랭킹 워밍캐시(stock:rankprice:*) 우선 → 요청당 KIS 라이브 호출 최소화(미스만 ≤N).
+    거래대금·현재가는 USD→KRW 환산값(_krw)도 같이 줘 전체/국내 원화통일·해외 토글 지원."""
+    items = _attach_prices(_candidates_cached(market, size))
+    for it in items:
+        _apply_currency(it)
+    _attach_volume_power(items)
     key, reverse = _POPULAR_SORT.get(sort, _POPULAR_SORT["value"])
     items.sort(key=key, reverse=reverse)
-    return _attach_volume_power(items[:size])
+    return items[:size]
 
 
 # ----- 체결강도(거래비율) 부착 — 워밍 캐시 우선 + 미스 즉석 채움 -----
 _VOLPOWER_FILL_LIMIT = 8  # 캐시 미스(새 진입 종목) 중 요청 경로에서 즉석 채울 최대 개수
 
 
-def popular_universe(size: int = 120) -> list[tuple[str, str]]:
-    """체결강도 워밍 대상 — 인기 풀(거래량 순위 KR+US 활성종목)의 (market, code) 목록.
-    표시(≤50)보다 넓게 워밍해 랭킹 드리프트(새 진입)를 미리 덮는다."""
-    c = get_kis_client()
-    items: list[dict] = []
-    items += _popular_pool(_KR_MARKETS, _retry(c.get_domestic_volume_rank).get("output", []), _map_kr_rank)
-    items += _popular_pool(
-        _US_MARKETS, _retry(lambda: c.get_overseas_volume_rank(_US_EXCD)).get("output2", []), _map_us_rank)
-    items.sort(key=lambda x: (x.get("volume") or 0), reverse=True)
-    return [(it["market"], it["code"]) for it in items[:size]]
+def popular_universe_stocks(size: int = 100) -> list[Stock]:
+    """워밍 대상 = 모든 탭(all/domestic/overseas) 후보의 합집합.
+    domestic=상위 size KOSPI, overseas=상위 size NASDAQ → 합쳐 워밍해야 어느 탭이든 캐시 히트.
+    (all 탭은 각 상위 size/2라 이 합집합의 부분집합 → 자동 커버)"""
+    return _market_cap_candidates("domestic", size) + _market_cap_candidates("overseas", size)
+
+
+def popular_universe(size: int = 100) -> list[tuple[str, str]]:
+    """체결강도 워밍 대상 (market, code) — 위 합집합."""
+    return [(s.market, s.code) for s in popular_universe_stocks(size)]
 
 
 def _attach_volume_power(items: list[dict]) -> list[dict]:
@@ -261,10 +302,9 @@ def _attach_volume_power(items: list[dict]) -> list[dict]:
         if k in cached or filled >= _VOLPOWER_FILL_LIMIT:
             continue
         filled += 1
-        vp = fetch_volume_power(it["market"], it["code"])
-        if vp is not None:
-            cache.set(k, vp, timeout=VOLPOWER_TTL)
-            cached[k] = vp
+        vp = fetch_volume_power(it["market"], it["code"]) or VOLPOWER_EMPTY
+        cache.set(k, vp, timeout=VOLPOWER_TTL)   # 음성(None)도 캐시 → 매 요청 라이브 재조회 방지
+        cached[k] = vp
     for it, k in zip(items, keys):
         vp = cached.get(k)
         it["volume_power"] = vp["volume_power"] if vp else None
