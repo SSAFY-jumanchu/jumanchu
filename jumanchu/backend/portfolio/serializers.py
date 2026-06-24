@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from accounts.models import Goal
 from portfolio.models import Account, Holding, Order
 from stocks.serializers import StockSerializer
 
@@ -147,3 +148,20 @@ class AllocationResponseSerializer(serializers.Serializer):
     by_sector = SectorAllocationSerializer(many=True)
     by_stock = StockAllocationSerializer(many=True)
     cash_rate = serializers.FloatField()
+
+
+class GoalSerializer(serializers.ModelSerializer):
+    icon = serializers.CharField(source='badge_emoji')
+
+    class Meta:
+        model = Goal
+        fields = ['id', 'name', 'target_amount', 'icon', 'description',
+                  'category', 'tier', 'sort_order']
+
+
+class MilestonesResponseSerializer(serializers.Serializer):
+    current_profit = serializers.DecimalField(max_digits=20, decimal_places=4)
+    achieved = GoalSerializer(many=True)
+    next = GoalSerializer(allow_null=True)
+    progress_percent = serializers.IntegerField()
+    total_count = serializers.IntegerField()

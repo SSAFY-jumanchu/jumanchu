@@ -270,3 +270,19 @@ class AllocationView(APIView):
         except services.PriceUnavailable:
             return _price_unavailable()
         return Response(s.AllocationResponseSerializer(result).data)
+
+
+@extend_schema(tags=['Portfolio'])
+class MilestonesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary='자산 마일스톤 (수익 기준 달성/다음목표/진행률)',
+        responses={200: s.MilestonesResponseSerializer},
+    )
+    def get(self, request):
+        try:
+            result = services.milestones(request.user)
+        except services.PriceUnavailable:
+            return _price_unavailable()
+        return Response(s.MilestonesResponseSerializer(result).data)

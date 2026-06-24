@@ -84,9 +84,15 @@ class Goal(models.Model):
     """목표 마스터 — 시스템 시드(모든 유저 공통). 누적수익 목표 + 달성 뱃지."""
 
     name = models.CharField(max_length=100)
-    target_amount = models.BigIntegerField(help_text="누적 수익 목표 금액")
+    target_amount = models.BigIntegerField(help_text="누적 수익(총자산-초기지급금) 목표 금액")
     badge_emoji = models.CharField(max_length=8)
     badge_name = models.CharField(max_length=50)
+    description = models.CharField(max_length=200, blank=True, help_text="달성 시 한 줄 멘트")
+    category = models.CharField(
+        max_length=20, blank=True,
+        help_text="electronics/luxury/travel/car/realestate/life",
+    )
+    tier = models.PositiveSmallIntegerField(null=True, blank=True, help_text="구간 1~5 (그룹핑용)")
     sort_order = models.PositiveSmallIntegerField(default=0)
 
     class Meta:

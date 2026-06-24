@@ -585,3 +585,45 @@ def allocation(user) -> dict:
         "by_stock": by_stock,
         "cash_rate": _pct(account.balance, total_assets),
     }
+
+
+# ───────────────────────── 자산 마일스톤 (수익 기준) ─────────────────────────
+
+
+def milestones(user) -> dict:
+    """자산 마일스톤 — '수익' 기준 달성/다음목표/진행률 (docs/자산마일스톤.md).
+
+    모두 1억 시드라 총자산 기준은 가입 즉시 다단계 자동달성 → 무의미.
+    그래서 수익(=총자산 − 초기지급금)으로 판정한다(시드 고정이라 수익금액=수익률×1억).
+    달성분은 UserGoal로 멱등 영속화(뱃지 획득 기록). 진행률은 직전 달성→다음 목표 구간 기준.
+    """
+    from accounts.models import Goal, UserGoal  # 지연 import(앱 간 순환 방지)
+
+    account = _account(user)
+    items = _priced_holdings(user)
+    total_current_value = _sum(items, "current_value")
+    profit = account.balance + total_current_value - account.initial_balance
+
+    goals = list(Goal.objects.order_by("sort_order", "target_amount"))
+    achieved = [g for g in goals if profit >= g.target_amount]
+    next_goal = next((g for g in goals if profit < g.target_amount), None)
+
+    # 달성한 목표를 뱃지로 영속화 (이미 있으면 그대로)
+    for g in achieved:
+        UserGoal.objects.get_or_create(user=user, goal=g)
+
+    base = achieved[-1].target_amount if achieved else 0
+    if next_goal is None:
+        percent = 100
+    else:
+        span = next_goal.target_amount - base
+        gained = float(profit) - float(base)
+        percent = max(0, min(100, int(gained / span * 100))) if span > 0 else 0
+
+    return {
+        "current_profit": profit,
+        "achieved": achieved,
+        "next": next_goal,
+        "progress_percent": percent,
+        "total_count": len(goals),
+    }
