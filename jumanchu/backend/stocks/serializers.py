@@ -83,6 +83,7 @@ class OrderBookSerializer(serializers.Serializer):
     bids = OrderBookEntrySerializer(many=True)
     total_ask_quantity = serializers.IntegerField()
     total_bid_quantity = serializers.IntegerField()
+    is_market_open = serializers.BooleanField()  # false + 빈 배열 = 장 마감, true + 빈 배열 = 호가 없음
     fetched_at = serializers.DateTimeField()
 
 

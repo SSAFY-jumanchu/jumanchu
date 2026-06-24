@@ -152,7 +152,7 @@ interface StockWarnings {
 
 ### 1.4 OrderBook (호가창)
 
-DB 저장 X (KIS API + Redis 캐시 1초).
+DB 저장 X (KIS API + Redis 캐시 — 장중 1s / 장외 30s).
 
 ```typescript
 interface OrderBook {
@@ -1027,7 +1027,7 @@ interface Diary extends DiaryWrite {
 | `GET /stocks/{code}/price/` | Redis | 장중 3s / 장외 60s |
 | `GET /stocks/{code}/chart/` | Redis | 분봉 5분 / 일봉 1시간 |
 | `GET /markets/summary/` | Redis | **5s** |
-| `GET /stocks/{code}/orderbook/` | (KIS 실시간) | 캐시 없음 |
+| `GET /stocks/{code}/orderbook/` | Redis | 장중 **1s** / 장외 **30s** |
 | `GET /longterm/{code}/report/` | DB `recommendation_cache` (rec_type=`long_term`) | **1일** — LLM 재호출 방지, `?refresh=1`로 무효화 |
 | `GET /recommendations/` | DB `recommendation_cache` (rec_type=`onboarding`) 부수 기록 | 1일 |
 
