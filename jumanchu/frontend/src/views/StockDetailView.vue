@@ -10,6 +10,7 @@ import {
 } from '../api/stocks'
 import { createOrder, fetchBalance, fetchHoldingDetail } from '../api/portfolio'
 import { fetchStockNews } from '../api/news'
+import { addWatchlist, removeWatchlist } from '../api/recommend'
 import { errMsg } from '../api/client'
 
 const router = useRouter()
@@ -76,6 +77,7 @@ async function loadStock(code) {
       employees: d.employee_count ?? null,
       industry: d.industry || d.sector || '',
     }
+    isWatched.value = !!d.is_in_watchlist // 관심종목 상태(BE UserLikedStock 기준)
     // 주문/시뮬 기본가를 실시간 현재가로 맞춤
     if (p) {
       orderPrice.value = Number(p.current)
@@ -85,6 +87,24 @@ async function loadStock(code) {
     loadError.value = errMsg(e)
   } finally {
     loading.value = false
+  }
+}
+
+// ===== 관심종목 토글 (BE /watchlist/ — UserLikedStock) =====
+const isWatched = ref(false)
+const watching = ref(false)
+async function toggleWatch() {
+  if (watching.value) return
+  watching.value = true
+  const next = !isWatched.value
+  isWatched.value = next // 낙관적 토글
+  try {
+    if (next) await addWatchlist(stock.value.code)
+    else await removeWatchlist(stock.value.code)
+  } catch {
+    isWatched.value = !next // 실패(비로그인 401 등) 시 롤백 — 별표 원복으로 신호
+  } finally {
+    watching.value = false
   }
 }
 
@@ -304,6 +324,7 @@ async function submitOrder() {
     orderMsg.value = {
       ok: true,
       text: `${orderSide.value === 'BUY' ? '매수' : '매도'} 체결 완료 (잔고 ${curSym.value}${fmt(balance.value)})`,
+      cta: true, // 체결 후 매매일기 작성 유도(BE order_id 핸드셰이크 — TradingDiary가 미작성 주문 노출)
     }
     orderQty.value = 0
     loadHolding(stock.value.code) // 체결 후 보유/시뮬 갱신
@@ -545,7 +566,13 @@ onMounted(async () => {
           <div class="sd-name-price">
             <h1>{{ stock.name }}</h1>
             <span class="sd-code">{{ stock.code }}</span>
-            <button class="watch-toggle-btn">☆ 관심종목 추가</button>
+            <button
+              class="watch-toggle-btn"
+              :class="{ on: isWatched }"
+              type="button"
+              :disabled="watching"
+              @click="toggleWatch"
+            >{{ isWatched ? '★ 관심종목' : '☆ 관심종목 추가' }}</button>
           </div>
           <div class="sd-price-row">
             <strong class="sd-price">{{ curSym }}{{ fmt(stock.price) }}</strong>
@@ -1157,6 +1184,12 @@ onMounted(async () => {
           >
             {{ orderMsg.text }}
           </p>
+          <button
+            v-if="orderMsg && orderMsg.ok && orderMsg.cta"
+            type="button"
+            class="diary-cta-btn"
+            @click="router.push('/trading-diary')"
+          >📓 이 매매 일기 쓰러가기 →</button>
         </div>
 
         <!-- 평단 시뮬레이션 (물타기) -->
@@ -1294,6 +1327,23 @@ onMounted(async () => {
   transition: background 0.18s;
 }
 .watch-toggle-btn:hover { background: rgba(245,183,0,0.16); }
+.watch-toggle-btn.on { background: rgba(245,183,0,0.22); color: #b07d00; border-color: rgba(245,183,0,0.7); }
+.watch-toggle-btn:disabled { opacity: 0.6; cursor: default; }
+
+.diary-cta-btn {
+  margin-top: 8px;
+  width: 100%;
+  padding: 9px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-subtle);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 0.16s;
+}
+.diary-cta-btn:hover { background: var(--surface-hover); }
 
 .sd-price-row {
   display: flex;

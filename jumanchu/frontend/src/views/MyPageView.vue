@@ -1,9 +1,11 @@
 <script setup>
 import { ref, computed, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { me as fetchMe, updateMe } from '../api/auth'
 import { fetchPortfolioSummary, fetchOrders } from '../api/portfolio'
 import { errMsg, retry } from '../api/client'
 
+const router = useRouter()
 const activeSection = ref('invest')
 
 // BE UserSerializer는 nickname/email/birth_year/date_joined/profile만 제공(name·phone·address 필드 없음).
@@ -398,7 +400,7 @@ onMounted(() => {
               <p class="invest-desc">온보딩 설문 응답을 바탕으로 분석된 나의 투자 성향이에요.</p>
             </template>
             <p v-else class="invest-desc">아직 투자 성향 검사를 하지 않았어요. 검사하면 맞춤 추천이 정확해져요.</p>
-            <button class="retest-btn">투자 성향 재검사</button>
+            <button class="retest-btn" type="button" @click="router.push('/onboarding')">투자 성향 재검사</button>
           </div>
 
           <!-- Personal Info Card -->

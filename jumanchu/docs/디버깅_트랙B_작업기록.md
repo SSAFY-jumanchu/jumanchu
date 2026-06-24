@@ -101,3 +101,26 @@
 - **범위 외 인지**: 계좌요약(balance/판매수익/배당/이자)·보유현황·월별수익률·활동내역·커뮤니티 통계(294 좋아요 등)는 여전히 목업이나 §7 트랙 B 미포함이라 미수정(account/holdings는 fetch 폴백, 나머지는 정적). 동일 fallback 패턴이라 후속 정리 대상.
 - **검증**: `npm run build` 성공(0 error, JS 331→329kB↓). BE 계약 — User(`nickname`/`email`/`birth_year`/`date_joined`/`profile.investment_style`, 전부 read_only), MeUpdate(`nickname`/`birth_year`만), Order(`side`/`price`/`total_amount`/`realized_pnl`/`created_at`).
 
+---
+
+## A+B 통합 후 핸드셰이크 배선 (2026-06-24, `feature/semifinal-ab`)
+
+> 트랙 A(`feature/semifinal-a`) 머지 후 BE 미완목록 재점검 + 풀린 항목 FE 연결.
+> `accounts.0006/0007`(goal/seed_goals) 마이그레이션 적용 완료.
+
+**BE 재점검 — '미완'이라 적었던 항목 대부분 실제로는 구현돼 있었음(정정):**
+- ✅ **관심종목**: `UserLikedStock` 모델 + `/watchlist/` GET/POST/DELETE + detail `is_in_watchlist`(views.py:212, UserLikedStock 기반 정확 채움). (이전 "모델 없음" 판정은 오판 — 이름만 Watchlist가 아님)
+- ✅ **매수→일지**: diary `order_id` 완전 지원.
+- ✅ **재검사**: A가 409 가드 제거(accounts/views.py:277).
+- ❌ **호가**: `StockOrderBookView.get`이 여전히 `return _stub()` = 501. **유일하게 진짜 미완** → 제거/구현 결정 대기.
+- ⚠️ **일지/점수 히스토리**: `HoldingDetail`이 `recent_orders`/`related_diaries_count`/`review`만 제공. 종목별 일지 리스트·점수 시계열 직접 소스 없음(부분).
+- ⚠️ **목표/손절 %**: 필드(target/stop_loss_price)는 있으나 %↔절대가 단위 합의 미정.
+- ❌ **실현수익 actual**: diary 직렬화에 `realized_pnl` 없음.
+
+**FE 배선 완료(3건):**
+- **매수 후 매매일기 유도** — StockDetail `submitOrder` 성공 시 `cta` 플래그 + "📓 이 매매 일기 쓰러가기 →" 버튼으로 `/trading-diary` 라우팅(TradingDiary가 미작성 주문을 자동 노출). order_id 별도 전달 불요.
+- **관심종목 토글** — StockDetail `watch-toggle-btn`에 `addWatchlist`/`removeWatchlist` 배선. `isWatched`(loadStock에서 `is_in_watchlist` 프리필) + 낙관적 토글·실패 시 별표 롤백. ★/☆ 상태 표시.
+- **투자성향 재검사** — MyPage `retest-btn`에 `@click="router.push('/onboarding')"`(`useRouter` import 추가). 409 가드 제거로 재제출 가능.
+- **검증**: `npm run build` 성공(119 modules, 0 error). 라우트 `/trading-diary`·`/onboarding` 실존. API `addWatchlist`/`removeWatchlist`(api/recommend.js) 실존.
+- **남은 →A**: 호가(501 결정), 일지/점수 히스토리(부분 소스), 목표/손절 %(단위합의), 실현수익(realized_pnl 미노출).
+
