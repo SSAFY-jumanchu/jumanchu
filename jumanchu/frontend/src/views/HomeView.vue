@@ -3,14 +3,16 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import SparklineChart from '../components/SparklineChart.vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { fetchMarketSummary } from '../api/stocks'
-import { fetchEconomyNews } from '../api/news'
+import { useFavoritesStore } from '../stores/favorites'
+import { fetchMarketSummary, fetchStockPrice } from '../api/stocks'
+import { fetchEconomyNews, fetchInterestNews } from '../api/news'
 import { fetchRecommendations } from '../api/recommend'
 import { fetchPortfolioSummary } from '../api/portfolio'
 import { retry } from '../api/client'
 
 const router = useRouter()
 const auth = useAuthStore()
+const favStore = useFavoritesStore()
 
 // 비로그인 랜딩 배너 캐러셀 (10초 자동 디졸브)
 const slides = [
@@ -32,6 +34,7 @@ onMounted(() => {
   // 공개 데이터는 항상, 개인 데이터는 로그인 시에만
   loadMarket()
   loadEconomyNews()
+  loadWatchlistNews()   // 선호 종목 뉴스는 비로그인도(로컬 선호목록) 동작 — 보유 뉴스는 로그인 시에만 합쳐짐
   if (auth.isAuthenticated) {
     loadRecommendations()
     loadHomeHoldings()
@@ -100,12 +103,30 @@ async function loadEconomyNews() {
       generalNews.value = items.slice(0, 6).map((n) => ({
         title: n.title,
         source: n.source,
+        url: n.url || '',
         time: timeAgo(n.published_at),
-        category: n.sectors?.[0] || n.categories?.[0] || '경제',
+        category: (n.sectors?.[0]?.sector ?? n.sectors?.[0]) || n.categories?.[0] || '경제',
       }))
     }
   } catch {
     // 실패 → 목업 유지
+  }
+}
+
+// 관심 종목 뉴스 = 보유 종목 뉴스 + 선호(스와이핑 저장) 종목 뉴스
+async function loadWatchlistNews() {
+  try {
+    const codes = favStore.items.map((s) => s.code)
+    const items = await fetchInterestNews(codes, { limit: 6, withHoldings: auth.isAuthenticated })
+    watchlistNews.value = items.map((n) => ({
+      title: n.title,
+      source: n.source,
+      url: n.url || '',
+      time: timeAgo(n.published_at),
+      ticker: n.stock?.name ?? '',
+    }))
+  } catch {
+    // 실패 → 빈 목록 유지
   }
 }
 
@@ -333,11 +354,30 @@ function advance() {
   requestAnimationFrame(enterCard)
 }
 
+// 현재 덱 카드를 선호 종목에 추가 + 실시간가 백그라운드 보강 (StocksView 선호 담기와 동일)
+function saveCurrentToFav() {
+  const c = current.value
+  if (!c || favStore.isFav(c.code)) return
+  favStore.toggle({
+    code: c.code,
+    name: c.name,
+    market: c.market.split(' · ')[0],   // 카드의 'KOSPI · 섹터'에서 시장만 분리
+    sector: c.sector,
+    color: colorFor(c.code),
+    price: null,
+    rate: null,
+  })
+  retry(() => fetchStockPrice(c.code), { attempts: 3, delayMs: 500 })
+    .then(({ price }) => favStore.updatePrice(c.code, Number(price.current), Number(price.change_rate)))
+    .catch(() => {})
+}
+
 // direction: 'left'=관심없음, 'right'=관심, 'save'=관심 종목 저장(위로)
 function swipe(direction) {
   const el = cardEl.value
   if (!auth.isAuthenticated || animating || !el) return
   animating = true
+  if (direction !== 'left') saveCurrentToFav()   // 관심(우)·저장(위) = 선호 담기, 패스(좌)만 건너뜀
   feedbackType.value = direction === 'save' ? 'save' : direction === 'right' ? 'like' : 'pass'
   feedbackOpacity.value = 1
   el.style.transition = `transform ${EXIT_MS}ms cubic-bezier(.4,0,.2,1), opacity ${EXIT_MS}ms ease`
@@ -442,12 +482,8 @@ const diaryTypeLabel = { buy: '매수', sell: '매도', hold: '홀딩' }
 
 function fmt(n) { return n.toLocaleString('ko-KR') }
 
-const watchlistNews = [
-  { title: 'SK하이닉스, HBM3E 양산 확대...AI 수요 견조', source: '이데일리', time: '30분 전', ticker: 'SK하이닉스' },
-  { title: '삼성전자, 파운드리 수주 회복세...2분기 기대감', source: '전자신문', time: '1시간 전', ticker: '삼성전자' },
-  { title: 'NVIDIA 실적 서프라이즈...관련 국내주 수혜', source: 'Bloomberg', time: '2시간 전', ticker: 'NVDA' },
-  { title: '애플 WWDC AI 기능 대거 공개 예정', source: '디지털데일리', time: '3시간 전', ticker: 'AAPL' },
-]
+// 관심 종목 뉴스 (실데이터: 보유 종목 + 선호 종목 뉴스 병합)
+const watchlistNews = ref([])
 </script>
 
 <template>
@@ -892,18 +928,25 @@ const watchlistNews = [
             <p class="eyebrow">최신 경제 뉴스</p>
             <h2>종합 뉴스</h2>
           </div>
-          <button class="more-btn">더보기 →</button>
+          <button class="more-btn" @click="router.push({ name: 'news', query: { tab: 'general' } })">더보기 →</button>
         </div>
 
         <div class="news-list">
-          <article v-for="item in generalNews" :key="item.title" class="news-item">
+          <a
+            v-for="item in generalNews"
+            :key="item.url || item.title"
+            class="news-item"
+            :href="item.url || undefined"
+            :target="item.url ? '_blank' : undefined"
+            rel="noopener"
+          >
             <div class="news-meta">
               <span class="news-category">{{ item.category }}</span>
               <span class="news-time">{{ item.time }}</span>
             </div>
             <h4 class="news-title">{{ item.title }}</h4>
             <span class="news-source">{{ item.source }}</span>
-          </article>
+          </a>
         </div>
       </section>
 
@@ -914,18 +957,28 @@ const watchlistNews = [
             <p class="eyebrow">내 관심 종목 소식</p>
             <h2>관심 종목 뉴스</h2>
           </div>
-          <button class="more-btn">더보기 →</button>
+          <button class="more-btn" @click="router.push({ name: 'news', query: { tab: 'watchlist' } })">더보기 →</button>
         </div>
 
         <div class="news-list">
-          <article v-for="item in watchlistNews" :key="item.title" class="news-item">
+          <a
+            v-for="item in watchlistNews"
+            :key="item.url || item.title"
+            class="news-item"
+            :href="item.url || undefined"
+            :target="item.url ? '_blank' : undefined"
+            rel="noopener"
+          >
             <div class="news-meta">
               <span class="news-ticker">{{ item.ticker }}</span>
               <span class="news-time">{{ item.time }}</span>
             </div>
             <h4 class="news-title">{{ item.title }}</h4>
             <span class="news-source">{{ item.source }}</span>
-          </article>
+          </a>
+          <p v-if="!watchlistNews.length" class="news-empty">
+            보유 종목이나 관심 종목을 담으면 관련 뉴스를 모아드려요.
+          </p>
         </div>
       </section>
     </div>
@@ -2097,11 +2150,14 @@ html[data-palette='love'] .match-btn.save {
 .news-list { display: grid; gap: 2px; }
 
 .news-item {
+  display: block;
   padding: 14px 12px;
   border-radius: calc(var(--radius) - 2px);
   transition: background 0.15s ease;
   cursor: pointer;
   border-bottom: 1px solid var(--line);
+  text-decoration: none;
+  color: inherit;
 }
 
 .news-item:last-child { border-bottom: 0; }
@@ -2155,6 +2211,15 @@ html[data-palette='love'] .match-btn.save {
 .news-source {
   color: var(--faint);
   font-size: 12px;
+  font-weight: 700;
+}
+
+.news-empty {
+  padding: 28px 12px;
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
   font-weight: 700;
 }
 
