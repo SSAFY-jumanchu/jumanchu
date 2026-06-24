@@ -14,4 +14,5 @@ urlpatterns = [
     path('portfolio/holdings/<str:code>/', views.HoldingDetailView.as_view(), name='portfolio-holding-detail'),
     path('portfolio/balance/', views.BalanceView.as_view(), name='portfolio-balance'),
     path('portfolio/allocation/', views.AllocationView.as_view(), name='portfolio-allocation'),
+    path('portfolio/milestones/', views.MilestonesView.as_view(), name='portfolio-milestones'),
 ]

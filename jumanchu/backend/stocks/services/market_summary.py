@@ -11,15 +11,35 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import timedelta
 from decimal import Decimal
 
+import requests
 from django.utils import timezone
 
 from stocks.models import Stock
 from stocks.services.price_dispatch import get_kis_client
 
 logger = logging.getLogger(__name__)
+
+
+def _retry(fn, attempts: int = 3, delay: float = 0.5):
+    """KIS 간헐 5xx/timeout 대비 짧은 재시도. 4xx는 재시도 무의미해 즉시 중단, 마지막 실패는 raise."""
+    last = None
+    for i in range(attempts):
+        try:
+            return fn()
+        except (requests.HTTPError, requests.Timeout, RuntimeError) as exc:
+            resp = getattr(exc, "response", None)
+            status = getattr(resp, "status_code", None)
+            if isinstance(exc, requests.HTTPError) and status is not None and status < 500:
+                raise
+            last = exc
+            if i < attempts - 1:
+                time.sleep(delay)
+    raise last
+
 
 # (응답 code, 표시 name, KIS iscd)
 _KR_INDICES = [("KOSPI", "코스피", "0001"), ("KOSDAQ", "코스닥", "1001")]
@@ -51,23 +71,30 @@ def _map_us_index(code: str, name: str, o1: dict) -> dict:
             "change": change, "change_rate": change_rate}
 
 
+def _index_placeholder(code: str, name: str) -> dict:
+    """지수 조회 실패 시 슬롯 보존용 — FE가 항상 4칸을 고정 순서로 받도록(값은 null)."""
+    return {"code": code, "name": name, "current": None, "change": None, "change_rate": None}
+
+
 def get_indices() -> list[dict]:
-    """대표 지수 4개를 KIS에서 조회. 개별 실패는 skip(홈은 P0)."""
+    """대표 지수 4개를 KIS에서 조회. 개별 실패해도 슬롯 유지(null 값) → 항상 4개·고정 순서 보장."""
     client = get_kis_client()
     out: list[dict] = []
     for code, name, iscd in _KR_INDICES:
         try:
-            out.append(_map_kr_index(code, name, client.get_domestic_index(iscd)["output"]))
+            out.append(_map_kr_index(code, name, _retry(lambda i=iscd: client.get_domestic_index(i))["output"]))
         except Exception:  # noqa: BLE001 — 지수 1개 실패가 홈 전체를 막지 않도록
             logger.warning("국내지수 조회 실패: %s", code, exc_info=True)
+            out.append(_index_placeholder(code, name))
     today = timezone.now().date()
     d_to = today.strftime("%Y%m%d")
     d_from = (today - timedelta(days=10)).strftime("%Y%m%d")  # 휴장 대비
     for code, name, iscd in _US_INDICES:
         try:
-            out.append(_map_us_index(code, name, client.get_overseas_index(iscd, d_from, d_to)["output1"]))
+            out.append(_map_us_index(code, name, _retry(lambda i=iscd: client.get_overseas_index(i, d_from, d_to))["output1"]))
         except Exception:  # noqa: BLE001
             logger.warning("해외지수 조회 실패: %s", code, exc_info=True)
+            out.append(_index_placeholder(code, name))
     return out
 
 
@@ -113,9 +140,9 @@ def _kr_rankings() -> dict:
     def keep(rows: list) -> list:
         return [m for m in (_map_kr_rank(r) for r in rows) if m["code"] in active]
 
-    gainers = keep(c.get_domestic_fluctuation("0").get("output", []))
-    losers = keep(c.get_domestic_fluctuation("1").get("output", []))
-    active_rows = keep(c.get_domestic_volume_rank().get("output", []))
+    gainers = keep(_retry(lambda: c.get_domestic_fluctuation("0")).get("output", []))
+    losers = keep(_retry(lambda: c.get_domestic_fluctuation("1")).get("output", []))
+    active_rows = keep(_retry(c.get_domestic_volume_rank).get("output", []))
     # KIS 순위 행 순서가 등락률과 100% 일치하진 않아 직접 정렬(거래량은 KIS 순서 신뢰).
     return {
         "top_gainers": sorted(gainers, key=lambda r: r["change_rate"], reverse=True)[:_RANK_LIMIT],
@@ -133,7 +160,7 @@ def _us_rankings() -> dict:
     active = _active_codes(_US_MARKETS)
     pool = [
         m for m in (_map_us_rank(r) for r in
-                    c.get_overseas_volume_rank(_US_EXCD).get("output2", []))
+                    _retry(lambda: c.get_overseas_volume_rank(_US_EXCD)).get("output2", []))
         if m["code"] in active
     ]
     return {
