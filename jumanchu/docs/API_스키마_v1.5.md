@@ -1033,24 +1033,32 @@ interface Diary extends DiaryWrite {
 
 > 그 외(community·diary·news·portfolio·orders 등)는 응답 캐시 없음.
 
-### 10.3 배치 (management command — cron 등록 대상)
+### 10.3 배치 (management command)
 
-> ⚠️ 현재 스케줄러 **미등록**(수동 실행). 아래는 권장 주기.
+> 데이터 적재 배치는 오케스트레이터 **`python manage.py run_batch {daily|weekly|hourly}`** 로 의존 순서대로 묶어 실행(`stocks/management/commands/run_batch.py`). 스케줄러(cron 등) **미등록** — 권장 주기는 아래.
 > 의존 순서: 마스터 → 메타·플래그 → 가격 → 지표 → 재무 → DNA·장투점수.
 
-| 커맨드 | 목적 | 권장 주기 |
+| 커맨드 | 목적 | run_batch 묶음 | 권장 주기 |
+|---|---|---|---|
+| `sync_stock_master` · `sync_us_stock_master` | KIS 마스터로 KR/US 종목 적재 | weekly | 주 1회 |
+| `enrich_stock_meta_from_dart` · `_from_kis` · `enrich_us_stock_meta` | 섹터·시총·CEO·PER/PBR 등 메타 보강 | weekly | 주 1회 / 수시 |
+| `sync_us_index_flags` | S&P500·NASDAQ100 플래그 + 비인덱스 비활성화 | weekly | 주 1회 |
+| `normalize_sectors` | 섹터명 KR 기준 정규화 (Stock·StockDna) | weekly | 마스터/메타 갱신 후 |
+| `enrich_financials` | DART/yfinance 재무 + roe/roa/배당 | weekly | 분기 (공시 후) |
+| `sync_stock_prices` | KIS(KR)/yfinance(US) 일봉 수집 | daily | **매일** (장 마감 후) |
+| `calc_market_indicators` | beta·volatility·52주 고저 계산 | daily | **매일** (가격 후) |
+| `calc_stock_dna` | 4축 DNA 분위수 정규화 | daily | **매일** (지표·재무 후) |
+| `calc_longterm_scores` | 장투 소계(재무·성장) 적재 | daily | **매일** (지표·재무 후) |
+| `ingest_rss` | 연합뉴스 RSS 수집·태깅 | hourly | 시간별 |
+| `seed_economic_events` | 경제 캘린더 목업 시드 | — | 1회 / 수시 |
+
+**🔴 실시간 워머 (run_batch 묶음과 별개 — 의존성 없음, 장중에만 짧은 주기로 반복):**
+
+| 커맨드 | 목적 | 주기 |
 |---|---|---|
-| `sync_stock_master` · `sync_us_stock_master` | KIS 마스터로 KR/US 종목 적재 | 주 1회 |
-| `enrich_stock_meta_from_dart` · `_from_kis` · `enrich_us_stock_meta` | 섹터·시총·CEO·PER/PBR 등 메타 보강 | 주 1회 / 수시 |
-| `sync_us_index_flags` | S&P500·NASDAQ100 플래그 + 비인덱스 비활성화 | 주 1회 |
-| `normalize_sectors` | 섹터명 KR 기준 정규화 (Stock·StockDna) | 마스터/메타 갱신 후 |
-| `sync_stock_prices` | KIS(KR)/yfinance(US) 일봉 수집 | **매일** (장 마감 후) |
-| `calc_market_indicators` | beta·volatility·52주 고저 계산 | **매일** (가격 후) |
-| `enrich_financials` | DART/yfinance 재무 + roe/roa/배당 | 분기 (공시 후) |
-| `calc_stock_dna` | 4축 DNA 분위수 정규화 | **매일** (지표·재무 후) |
-| `calc_longterm_scores` | 장투 소계(재무·성장) 적재 | **매일** (지표·재무 후) |
-| `ingest_rss` | 연합뉴스 RSS 수집·태깅 | 시간별 |
-| `seed_economic_events` | 경제 캘린더 목업 시드 | 1회 / 수시 |
+| `warm_volume_power` | 인기 top-N(기본 120) 체결강도를 KIS 페이싱(초당 ≤chunk) 조회 → Redis `stock:volpower:*` 워밍 (TTL 60s). 랭킹 API는 이 캐시만 읽음(라이브 KIS 0콜), 미스 종목만 요청 경로서 ≤8개 즉석 채움 | **장중 ~30초** |
+
+> ⚠️ `warm_volume_power`는 **cron(분 단위)로 부족** — 30초 루프 래퍼(`while; sleep 30`)·systemd timer·전용 워커로 돌리고, **시장시간(KR 09:00–15:30 / US 23:30–06:00 KST)에만** 실행. 데이터 파이프라인이 아니라 §10.2 캐시(`stock:volpower:*`)를 채우는 워머라 `run_batch`에 안 들어감.
 
 ---
 
@@ -1152,3 +1160,4 @@ def execute_order(user, stock_code, side, quantity, idempotency_key):
 | 2026-06-01 | **v1.3** — 캔들 차트 API `GET /stocks/{code}/chart/` 실구현. 일봉/주봉/월봉=DB(StockPrice resample), 분봉=KIS(KR FHKST03010200 1m + 클라이언트 _resample / US HHDFS76950200 NMIN). 장중 today 한 칸 합성(B 패턴, 일봉 한정). 캐싱: 분봉 5분 / 일봉 1시간. period×interval 유효성 400 | 강재민 |
 | 2026-06-22 | **v1.4** — `risk_type` 제거 → `investment_style`(성향 4유형), onboarding 요청 스키마를 q1~q6로 정정 | 강재민 |
 | 2026-06-23 | **v1.5** — 누락 모듈 문서화: Recommend(§6)·Community(§7)·Diary(§8)·News(§9 요약)·economic-events(§3.9). [URL_MAP.md](URL_MAP.md) 신설, 섹션 재번호(기존 6~9 → 10~13). §10 권한·캐싱·배치(cron) 3표 정리(markets TTL 10초→**5s** 정정). 파일명 `API_스키마_v1.md` → `API_스키마_v1.5.md` 동기화 | 강재민 |
+| 2026-06-24 | §10.3에 `warm_volume_power`(장중 체결강도 Redis 워머, run_batch 묶음과 별개) 추가 + 데이터 배치를 `run_batch {daily/weekly/hourly}` 오케스트레이터로 묶음 매핑 | 강재민 |
