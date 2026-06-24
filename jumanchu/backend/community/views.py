@@ -41,6 +41,7 @@ class PostListCreateView(APIView):
             OpenApiParameter('category', str, required=False,
                              enum=['QUESTION', 'REVIEW', 'ANALYSIS', 'SHARE']),
             OpenApiParameter('sort', str, required=False, enum=['latest', 'popular']),
+            OpenApiParameter('mine', bool, required=False, description='로그인 유저 본인 글만'),
             OpenApiParameter('page', int, required=False),
             OpenApiParameter('size', int, required=False),
         ],
@@ -57,6 +58,8 @@ class PostListCreateView(APIView):
             qs = qs.filter(stock__code=p['stock_code'])
         if p.get('category'):
             qs = qs.filter(category=p['category'])
+        if p.get('mine') in ('1', 'true', 'True') and request.user.is_authenticated:
+            qs = qs.filter(user=request.user)
         if p.get('sort') == 'popular':
             qs = qs.order_by('-like_count', '-created_at')
         else:

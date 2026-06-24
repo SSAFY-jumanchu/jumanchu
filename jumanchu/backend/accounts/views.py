@@ -273,12 +273,9 @@ class OnboardingView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # 이미 온보딩 완료면 409 (웰컴 보너스 중복 방지)
-        existing = getattr(request.user, 'investment_profile', None)
-        if existing and existing.profiled_at:
-            return Response({'detail': '이미 온보딩을 완료했습니다.'},
-                            status=status.HTTP_409_CONFLICT)
-
+        # 재검사 허용: update_or_create로 프로필/관심섹터/시그니처를 재산출(덮어쓰기).
+        # 온보딩 자체엔 웰컴 보너스가 없어 중복 차단이 불필요 → 409 가드 제거.
+        # (무제한 재검사를 막거나 시그니처 종목을 가입 시점으로 고정하려면 여기서 분기.)
         q = {f'q{i}': data[f'q{i}'] for i in range(1, 7)}
         q1, q2, q3, q4, q5, q6 = q['q1'], q['q2'], q['q3'], q['q4'], q['q5'], q['q6']
 

@@ -51,7 +51,7 @@ TOKEN_CACHE_PATH = Path.home() / ".kis_token_cache.json"
 class KISConfig:
     app_key: str = ""
     app_secret: str = ""
-    env: str = "vts"
+    env: str = "prod"
 
     @property
     def base_url(self) -> str:
@@ -64,7 +64,7 @@ class KISConfig:
         return cls(
             app_key=os.environ["KIS_APP_KEY"],
             app_secret=os.environ["KIS_APP_SECRET"],
-            env=os.environ.get("KIS_ENV", "vts"),
+            env=os.environ.get("KIS_ENV", "prod"),
         )
 
 

@@ -82,6 +82,12 @@ def _current_price(stock: Stock) -> Decimal:
         raise PriceUnavailable(stock.code) from exc
 
 
+def _account(user):
+    """유저의 가상 계좌. 없으면 생성(가입 누락·덤프/레거시 유저 방어, 1억 기본) → 500 방지."""
+    account, _ = Account.objects.get_or_create(user=user)
+    return account
+
+
 def _holding_snapshot(
     stock: Stock,
     quantity: int,
@@ -132,7 +138,7 @@ def preview_order(user, stock_code: str, side: str, quantity: int) -> dict:
     total = price * quantity
     fee = _fee(total)
 
-    account = Account.objects.get(user=user)
+    account = _account(user)
     holding = Holding.objects.filter(user=user, stock=stock).first()
 
     errors: list[str] = []
@@ -214,7 +220,7 @@ def execute_buy(user, stock_code: str, quantity: int, idempotency_key: str) -> d
 
     try:
         with transaction.atomic():
-            account = Account.objects.select_for_update().get(user=user)  # 행 잠금
+            account, _ = Account.objects.select_for_update().get_or_create(user=user)  # 행 잠금
             if account.balance < need:
                 raise InsufficientBalance(f"잔액 부족: 보유 {account.balance}, 필요 {need}")
             account.balance -= need
@@ -286,7 +292,7 @@ def execute_sell(user, stock_code: str, quantity: int, idempotency_key: str) -> 
 
     try:
         with transaction.atomic():
-            account = Account.objects.select_for_update().get(user=user)  # 락 순서: account 먼저
+            account, _ = Account.objects.select_for_update().get_or_create(user=user)  # 락 순서: account 먼저
             holding = (
                 Holding.objects.select_for_update().filter(user=user, stock=stock).first()
             )
@@ -356,7 +362,7 @@ def order_result(order: Order) -> dict:
     원래 체결 시점의 잔액은 따로 저장하지 않으므로, 재요청 시엔 현재 잔액/보유를 보여준다.
     신규 체결 응답은 execute_buy/sell이 트랜잭션 안에서 _build_result로 직접 만든다.
     """
-    account = Account.objects.get(user=order.user)
+    account = _account(order.user)
     holding = Holding.objects.filter(user=order.user, stock=order.stock).first()
     return _build_result(order, account.balance, holding)
 
@@ -477,7 +483,7 @@ def portfolio_summary(user) -> dict:
     total_invested = _sum(items, "total_invested")
     total_current_value = _sum(items, "current_value")
     total_profit_loss = total_current_value - total_invested
-    account = Account.objects.get(user=user)
+    account = _account(user)
     preview = sorted(items, key=lambda h: h["current_value"], reverse=True)[:5]
     return {
         "account": account,
@@ -550,7 +556,7 @@ def holding_detail(user, stock_code: str):
 def allocation(user) -> dict:
     """자산 배분 — 섹터/종목별 비중 + 현금 비중 (모두 총자산 기준, 합 ≈ 100%)."""
     items = _priced_holdings(user)
-    account = Account.objects.get(user=user)
+    account = _account(user)
     total_value = _sum(items, "current_value")        # 주식 평가액 합
     total_assets = total_value + account.balance       # 현금 포함
 
@@ -578,4 +584,46 @@ def allocation(user) -> dict:
         "by_sector": by_sector,
         "by_stock": by_stock,
         "cash_rate": _pct(account.balance, total_assets),
+    }
+
+
+# ───────────────────────── 자산 마일스톤 (수익 기준) ─────────────────────────
+
+
+def milestones(user) -> dict:
+    """자산 마일스톤 — '수익' 기준 달성/다음목표/진행률 (docs/자산마일스톤.md).
+
+    모두 1억 시드라 총자산 기준은 가입 즉시 다단계 자동달성 → 무의미.
+    그래서 수익(=총자산 − 초기지급금)으로 판정한다(시드 고정이라 수익금액=수익률×1억).
+    달성분은 UserGoal로 멱등 영속화(뱃지 획득 기록). 진행률은 직전 달성→다음 목표 구간 기준.
+    """
+    from accounts.models import Goal, UserGoal  # 지연 import(앱 간 순환 방지)
+
+    account = _account(user)
+    items = _priced_holdings(user)
+    total_current_value = _sum(items, "current_value")
+    profit = account.balance + total_current_value - account.initial_balance
+
+    goals = list(Goal.objects.order_by("sort_order", "target_amount"))
+    achieved = [g for g in goals if profit >= g.target_amount]
+    next_goal = next((g for g in goals if profit < g.target_amount), None)
+
+    # 달성한 목표를 뱃지로 영속화 (이미 있으면 그대로)
+    for g in achieved:
+        UserGoal.objects.get_or_create(user=user, goal=g)
+
+    base = achieved[-1].target_amount if achieved else 0
+    if next_goal is None:
+        percent = 100
+    else:
+        span = next_goal.target_amount - base
+        gained = float(profit) - float(base)
+        percent = max(0, min(100, int(gained / span * 100))) if span > 0 else 0
+
+    return {
+        "current_profit": profit,
+        "achieved": achieved,
+        "next": next_goal,
+        "progress_percent": percent,
+        "total_count": len(goals),
     }

@@ -1,18 +1,14 @@
 from rest_framework import serializers
 
+from accounts.models import Goal
 from portfolio.models import Account, Holding, Order
 from stocks.serializers import StockSerializer
 
 
 class AccountSerializer(serializers.ModelSerializer):
-    initial_balance = serializers.SerializerMethodField()
-
     class Meta:
         model = Account
         fields = ['user_id', 'balance', 'initial_balance', 'created_at', 'updated_at']
-
-    def get_initial_balance(self, obj) -> int:
-        return 100_000_000
 
 
 class HoldingSerializer(serializers.ModelSerializer):
@@ -33,10 +29,13 @@ class HoldingSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     stock_code = serializers.CharField(source='stock.code', read_only=True)
     stock_name = serializers.CharField(source='stock.name', read_only=True)
+    market = serializers.CharField(source='stock.market', read_only=True)
+    currency = serializers.CharField(source='stock.currency', read_only=True)
 
     class Meta:
         model = Order
         fields = ['id', 'user', 'account', 'stock_code', 'stock_name',
+                  'market', 'currency',
                   'side', 'quantity', 'price', 'total_amount',
                   'fee', 'tax', 'realized_pnl', 'status',
                   'idempotency_key', 'created_at', 'executed_at']
@@ -152,3 +151,20 @@ class AllocationResponseSerializer(serializers.Serializer):
     by_sector = SectorAllocationSerializer(many=True)
     by_stock = StockAllocationSerializer(many=True)
     cash_rate = serializers.FloatField()
+
+
+class GoalSerializer(serializers.ModelSerializer):
+    icon = serializers.CharField(source='badge_emoji')
+
+    class Meta:
+        model = Goal
+        fields = ['id', 'name', 'target_amount', 'icon', 'description',
+                  'category', 'tier', 'sort_order']
+
+
+class MilestonesResponseSerializer(serializers.Serializer):
+    current_profit = serializers.DecimalField(max_digits=20, decimal_places=4)
+    achieved = GoalSerializer(many=True)
+    next = GoalSerializer(allow_null=True)
+    progress_percent = serializers.IntegerField()
+    total_count = serializers.IntegerField()

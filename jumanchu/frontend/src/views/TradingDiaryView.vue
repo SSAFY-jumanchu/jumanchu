@@ -1,14 +1,20 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { fetchDiaries, createDiary, updateDiary } from '../api/diary'
+import { fetchOrders } from '../api/portfolio'
 import { errMsg } from '../api/client'
 
 // 액션/사유 enum ↔ 한글 라벨
 const ACTION_LABEL = { BUY: '매수', SELL: '매도', WATCH: '관심' }
 const ACTION_ENUM = { 매수: 'BUY', 매도: 'SELL', 관심: 'WATCH' }
 const REASON_LABEL = {
+  // 매수 사유
   GROWTH: '장기 성장성', EARNINGS: '실적 개선', UNDERVALUED: '저평가',
   THEME: '테마/모멘텀', NEWS: '뉴스 호재', TECHNICAL: '기술적 반등',
+  DIVIDEND: '배당 매력', DIVERSIFY: '분산 목적',
+  // 매도 사유(결과)
+  TARGET_HIT: '목표 달성', STOP_LOSS: '손절', PROFIT_TAKING: '차익 실현',
+  DETERIORATED: '펀더멘털 악화', BETTER_OPP: '더 좋은 기회', REBALANCE: '리밸런싱',
 }
 const REASON_ENUM = Object.fromEntries(Object.entries(REASON_LABEL).map(([k, v]) => [v, k]))
 const DIARY_PALETTE = ['#0f9f6e', '#3b5bdb', '#76b900', '#f59e0b', '#06b6d4', '#ec4899']
@@ -18,13 +24,15 @@ function diaryColor(code) {
   return DIARY_PALETTE[h % DIARY_PALETTE.length]
 }
 
-// ===== 작성 대기 (미작성 매매가 있다고 가정) =====
-const pendingTrade = { name: '로보스타', code: '090360', logo: '로', color: '#0f9f6e', side: '매수', date: '06.09' }
 const loadError = ref('')
+
+// ===== 나의 매매일기 (BE 연동, 목업 fallback 제거) =====
+const entries = ref([])
 
 function mapDiary(d) {
   return {
     id: d.id,
+    order_id: d.order_id ?? null,
     name: d.stock_name,
     logo: (d.stock_name || '?').slice(0, 1),
     color: diaryColor(d.stock_code),
@@ -39,37 +47,55 @@ function mapDiary(d) {
     note: d.memo || '',
   }
 }
-async function loadDiaries() {
+
+// ===== 작성 대기: 일지가 아직 없는 최근 주문 (주문내역 기반) =====
+const pendingTrades = ref([])
+const selectedPendingId = ref(null)
+const pendingOpen = ref(false) // 여러 건일 때 대기목록 펼침 토글
+const pendingTrade = computed(
+  () => pendingTrades.value.find((p) => p.order_id === selectedPendingId.value) || null,
+)
+function mapOrder(o) {
+  return {
+    order_id: o.id,
+    name: o.stock_name || o.stock_code,
+    code: o.stock_code,
+    logo: (o.stock_name || o.stock_code || '?').slice(0, 1),
+    color: diaryColor(o.stock_code),
+    side: ACTION_LABEL[o.side] || o.side,
+    date: (o.created_at || o.executed_at || '').slice(5, 10).replace(/-/g, '.'),
+  }
+}
+function selectPending(p) {
+  selectedPendingId.value = p.order_id
+  if (p.side === '매수' || p.side === '매도') setDiaryType(p.side)
+}
+
+async function loadAll() {
+  loadError.value = ''
   try {
-    const { items = [] } = await fetchDiaries({ size: 30 })
-    if (items.length) entries.value = items.map(mapDiary)
+    const [diaryRes, orderRes] = await Promise.all([
+      fetchDiaries({ size: 30 }),
+      fetchOrders({ size: 30 }),
+    ])
+    const diaryItems = diaryRes.items || []
+    entries.value = diaryItems.map(mapDiary)
+    // 이미 일기가 작성된 주문(order_id 연결)은 작성 대기에서 제외
+    const journaled = new Set(diaryItems.map((d) => d.order_id).filter((x) => x != null))
+    pendingTrades.value = (orderRes.items || [])
+      .filter((o) => !journaled.has(o.id))
+      .map(mapOrder)
+    selectedPendingId.value = pendingTrades.value[0]?.order_id ?? null
   } catch (e) {
     loadError.value = errMsg(e)
   }
 }
-onMounted(loadDiaries)
-
-// ===== 나의 매매일기 (종목 전체) =====
-const entries = ref([
-  {
-    id: 1, name: '로보스타', logo: '로', color: '#0f9f6e', date: '2026.06.09', side: '매수',
-    reasons: ['장기 성장성', '테마/모멘텀'], target: '+20%', stop: '-10%', confidence: 4,
-    actual: '+5.2%', review: null, note: '',
-  },
-  {
-    id: 2, name: '삼성전자', logo: '삼', color: '#3b5bdb', date: '2026.05.28', side: '매수',
-    reasons: ['저평가'], target: '+15%', stop: '-10%', confidence: 3,
-    actual: '+2.4%', review: { verdict: '보류', learned: '단기 변동성에 흔들려 추가 매수를 못 했다. 다음엔 분할매수로 접근하자.' }, note: '',
-  },
-  {
-    id: 3, name: 'NVIDIA', logo: 'NV', color: '#76b900', date: '2026.05.15', side: '매수',
-    reasons: ['실적 개선', '테마/모멘텀'], target: '+30%', stop: '-15%', confidence: 5,
-    actual: '+8.2%', review: { verdict: '성공', learned: '실적 모멘텀에 대한 확신이 맞았다. 비중을 더 실어도 좋았을 듯.' }, note: '',
-  },
-])
+onMounted(loadAll)
 
 // ===== 새 매매일기 작성 =====
-const reasonOptions = ['장기 성장성', '실적 개선', '저평가', '테마/모멘텀', '뉴스 호재', '기술적 반등', '배당 매력', '분산 목적']
+// 매수/매도 이유 세트 분리 — 매도는 "결과" 사유
+const BUY_REASONS = ['장기 성장성', '실적 개선', '저평가', '테마/모멘텀', '뉴스 호재', '기술적 반등', '배당 매력', '분산 목적']
+const SELL_REASONS = ['목표 달성', '손절', '차익 실현', '펀더멘털 악화', '더 좋은 기회', '리밸런싱']
 const targetOptions = ['+10%', '+20%', '+30%', '+50%']
 const stopOptions = ['-5%', '-10%', '-15%', '-20%']
 const typeOptions = [
@@ -79,6 +105,15 @@ const typeOptions = [
 ]
 
 const newDiary = ref({ type: '매수', reasons: ['장기 성장성', '테마/모멘텀'], confidence: 4, target: '+20%', stop: '-10%', note: '' })
+
+// 매매 유형에 맞는 이유 목록 + 유형 전환(이유 세트가 달라 선택 초기화)
+const reasonOptions = computed(() => (newDiary.value.type === '매도' ? SELL_REASONS : BUY_REASONS))
+const isSell = computed(() => newDiary.value.type === '매도')
+function setDiaryType(key) {
+  if (newDiary.value.type === key) return
+  newDiary.value.type = key
+  newDiary.value.reasons = []
+}
 
 function toggleReason(r) {
   const arr = newDiary.value.reasons
@@ -90,19 +125,22 @@ function toggleReason(r) {
 const saving = ref(false)
 async function saveDiary() {
   if (saving.value) return
+  const pending = pendingTrade.value
+  if (!pending) { loadError.value = '작성할 매매 내역을 위에서 선택해 주세요.'; return }
   saving.value = true
   loadError.value = ''
   // 첫 번째 매핑 가능한 사유만 단일 enum으로 전송(BE는 reason_category 단일)
   const reasonEnum = newDiary.value.reasons.map((r) => REASON_ENUM[r]).find(Boolean)
   try {
     await createDiary({
-      stock_code: pendingTrade.code,
+      stock_code: pending.code,
+      order_id: pending.order_id, // 주문 연결 → 작성 대기에서 제외됨
       action_type: ACTION_ENUM[newDiary.value.type] || 'BUY',
       reason_category: reasonEnum || '',
       confidence: newDiary.value.confidence,
       memo: newDiary.value.note, // 목표/손절은 %라 절대가 변환 불가 → 미전송
     })
-    await loadDiaries()
+    await loadAll()
     newDiary.value = { type: '매수', reasons: [], confidence: 3, target: '+20%', stop: '-10%', note: '' }
   } catch (e) {
     loadError.value = errMsg(e)
@@ -146,19 +184,48 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
       <p class="td-sub">왜 샀는지 고르기만 하면 끝 — 나중에 결과로 복기하며 투자 습관을 만들어요.</p>
     </header>
 
+    <!-- 로드 오류 -->
+    <p v-if="loadError" class="td-error">{{ loadError }}</p>
+
     <!-- 작성 대기 알림 -->
     <div class="td-pending panel">
       <div class="td-pending-left">
         <span class="td-pending-ico">📝</span>
         <div>
-          <strong>작성 대기 1건</strong>
-          <span class="td-pending-desc">매매했는데 아직 일기를 안 쓴 거래예요.</span>
+          <strong>작성 대기 {{ pendingTrades.length }}건</strong>
+          <span class="td-pending-desc">
+            {{ pendingTrades.length ? '매매했는데 아직 일기를 안 쓴 거래예요. 선택해 작성하세요.' : '작성할 매매 내역이 없어요.' }}
+          </span>
         </div>
       </div>
-      <button class="td-pending-chip">
-        <span class="td-chip-logo" :style="{ background: pendingTrade.color }">{{ pendingTrade.logo }}</span>
-        {{ pendingTrade.name }} · {{ pendingTrade.side }} · {{ pendingTrade.date }} →
-      </button>
+      <div v-if="pendingTrades.length" class="td-pending-select">
+        <!-- 현재 선택된 대기 (여러 건이면 ▾로 목록 펼침) -->
+        <button
+          v-if="pendingTrade"
+          type="button"
+          class="td-pending-chip on"
+          @click="pendingTrades.length > 1 ? (pendingOpen = !pendingOpen) : null"
+        >
+          <span class="td-chip-logo" :style="{ background: pendingTrade.color }">{{ pendingTrade.logo }}</span>
+          {{ pendingTrade.name }} · {{ pendingTrade.side }} · {{ pendingTrade.date }}
+          <span v-if="pendingTrades.length > 1" class="td-pending-arrow" :class="{ open: pendingOpen }">▾</span>
+        </button>
+
+        <!-- 펼친 대기 목록 -->
+        <div v-if="pendingOpen && pendingTrades.length > 1" class="td-pending-dropdown panel">
+          <button
+            v-for="p in pendingTrades"
+            :key="p.order_id"
+            type="button"
+            class="td-pending-chip"
+            :class="{ on: selectedPendingId === p.order_id }"
+            @click="selectPending(p); pendingOpen = false"
+          >
+            <span class="td-chip-logo" :style="{ background: p.color }">{{ p.logo }}</span>
+            {{ p.name }} · {{ p.side }} · {{ p.date }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <div class="td-grid">
@@ -221,7 +288,8 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 
         <!-- 새 매매일기 작성 -->
         <section class="panel td-form" aria-label="새 매매일기 작성">
-          <p class="td-form-title">🔍 새 매매일기 ({{ pendingTrade.name }} · {{ pendingTrade.date }}) — 다 고르기만!</p>
+          <p v-if="pendingTrade" class="td-form-title">🔍 새 매매일기 ({{ pendingTrade.name }} · {{ pendingTrade.date }}) — 다 고르기만!</p>
+          <p v-else class="td-form-title">🔍 작성할 매매 내역을 위에서 선택하세요</p>
 
           <div class="td-field">
             <span class="td-field-label">매매 유형</span>
@@ -233,7 +301,7 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
                 class="td-chip-btn"
                 :class="{ on: newDiary.type === t.key }"
                 :style="newDiary.type === t.key ? { background: t.color, borderColor: t.color, color: '#fff' } : {}"
-                @click="newDiary.type = t.key"
+                @click="setDiaryType(t.key)"
               >{{ t.key }}</button>
             </div>
           </div>
@@ -266,7 +334,8 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
             </div>
           </div>
 
-          <div class="td-field">
+          <!-- 목표/손절은 진입 시점 목표 → 매도(결과) 기록 땐 숨김 -->
+          <div v-if="!isSell" class="td-field">
             <span class="td-field-label">목표 수익률</span>
             <div class="td-chips">
               <button
@@ -280,7 +349,7 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
             </div>
           </div>
 
-          <div class="td-field">
+          <div v-if="!isSell" class="td-field">
             <span class="td-field-label">손절 라인</span>
             <div class="td-chips">
               <button
@@ -294,15 +363,7 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
             </div>
           </div>
 
-          <div class="td-field">
-            <textarea
-              v-model="newDiary.note"
-              class="td-textarea"
-              placeholder="일지를 작성해 주세요. (더 정확한 추천이 가능해집니다!)"
-            ></textarea>
-          </div>
-
-          <button class="td-save-btn" type="button" @click="saveDiary">매매일기 저장</button>
+          <button class="td-save-btn" type="button" @click="saveDiary" :disabled="!pendingTrade || saving">매매일기 저장</button>
           <p class="td-form-hint">자유 서술·눈치 전부 없이, 선택만으로 1초 작성</p>
         </section>
       </div>
@@ -333,7 +394,22 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
   font-size: 13px; font-weight: 900; cursor: pointer; transition: background 0.16s;
 }
 .td-pending-chip:hover { background: var(--surface-hover); }
+.td-pending-chip.on { border-color: var(--accent); background: rgba(var(--accent-rgb),0.12); color: var(--accent); }
+.td-pending-select { position: relative; }
+.td-pending-arrow { margin-left: 4px; font-size: 11px; transition: transform 0.18s; }
+.td-pending-arrow.open { transform: rotate(180deg); }
+.td-pending-dropdown {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20;
+  display: flex; flex-direction: column; gap: 6px; padding: 8px;
+  min-width: 230px; max-height: 280px; overflow-y: auto;
+}
+.td-pending-dropdown .td-pending-chip { width: 100%; justify-content: flex-start; }
 .td-chip-logo { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 900; }
+.td-error {
+  margin: 0; padding: 10px 14px; border-radius: var(--radius);
+  border: 1px solid rgba(207,61,61,0.3); background: rgba(207,61,61,0.08);
+  color: #cf3d3d; font-size: 13px; font-weight: 800;
+}
 
 /* 레이아웃 */
 .td-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
@@ -396,6 +472,7 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
   box-shadow: 0 6px 18px rgba(var(--accent-rgb),0.3); transition: opacity 0.16s, transform 0.16s;
 }
 .td-save-btn:hover { opacity: 0.92; transform: translateY(-1px); }
+.td-save-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 .td-form-hint { margin: 10px 0 0; text-align: center; font-size: 11px; font-weight: 700; color: var(--faint); }
 
 /* 일지 textarea (작성/수정 공통) */

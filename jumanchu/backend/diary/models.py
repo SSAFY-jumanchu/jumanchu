@@ -9,6 +9,7 @@ class StockDiary(models.Model):
         WATCH = "WATCH", "관심"
 
     class ReasonCategory(models.TextChoices):
+        # 매수 사유
         GROWTH = "GROWTH", "장기 성장성"
         EARNINGS = "EARNINGS", "실적 개선"
         UNDERVALUED = "UNDERVALUED", "저평가"
@@ -17,6 +18,13 @@ class StockDiary(models.Model):
         TECHNICAL = "TECHNICAL", "기술적 반등"
         DIVIDEND = "DIVIDEND", "배당 매력"
         DIVERSIFY = "DIVERSIFY", "분산 목적"
+        # 매도 사유(결과 기록)
+        TARGET_HIT = "TARGET_HIT", "목표 달성"
+        STOP_LOSS = "STOP_LOSS", "손절"
+        PROFIT_TAKING = "PROFIT_TAKING", "차익 실현"
+        DETERIORATED = "DETERIORATED", "펀더멘털 악화"
+        BETTER_OPP = "BETTER_OPP", "더 좋은 기회"
+        REBALANCE = "REBALANCE", "리밸런싱"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="diaries"
