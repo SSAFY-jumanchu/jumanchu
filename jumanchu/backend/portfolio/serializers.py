@@ -29,10 +29,13 @@ class HoldingSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     stock_code = serializers.CharField(source='stock.code', read_only=True)
     stock_name = serializers.CharField(source='stock.name', read_only=True)
+    market = serializers.CharField(source='stock.market', read_only=True)
+    currency = serializers.CharField(source='stock.currency', read_only=True)
 
     class Meta:
         model = Order
         fields = ['id', 'user', 'account', 'stock_code', 'stock_name',
+                  'market', 'currency',
                   'side', 'quantity', 'price', 'total_amount',
                   'fee', 'tax', 'realized_pnl', 'status',
                   'idempotency_key', 'created_at', 'executed_at']

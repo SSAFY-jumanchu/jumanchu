@@ -22,3 +22,7 @@ export const toggleCommentLike = (id) => client.post(`/comments/${id}/like/`).th
 // 팔로우
 export const followUser = (userId) => client.post(`/users/${userId}/follow/`).then((r) => r.data)
 export const unfollowUser = (userId) => client.delete(`/users/${userId}/follow/`).then((r) => r.data)
+
+// 팔로워/팔로잉 목록 → { items, total }
+export const fetchFollowers = (userId) => client.get(`/users/${userId}/followers/`).then((r) => r.data)
+export const fetchFollowing = (userId) => client.get(`/users/${userId}/following/`).then((r) => r.data)

@@ -5,6 +5,7 @@ import { fetchHoldings } from '../api/portfolio'
 import { fetchStockFinancials } from '../api/stocks'
 import { fetchLongtermReport } from '../api/recommend'
 import { fetchHoldingsNews } from '../api/news'
+import { fetchDiaries } from '../api/diary'
 import { errMsg, retry } from '../api/client'
 
 const router = useRouter()
@@ -84,6 +85,28 @@ async function loadPortfolio() {
       // 뉴스 실패 무시
     }
 
+    // 내 매매일지도 한 번만 호출해 종목코드별로 그룹핑(장투 페이지에 반영)
+    const REASON_LABEL = {
+      GROWTH: '장기 성장성', EARNINGS: '실적 개선', UNDERVALUED: '저평가',
+      THEME: '테마/모멘텀', NEWS: '뉴스 호재', TECHNICAL: '기술적 반등',
+    }
+    const diaryByCode = {}
+    try {
+      const dz = await fetchDiaries({ size: 100 })
+      for (const d of dz.items || []) {
+        const c = d.stock_code
+        if (!c) continue
+        const side = d.action_type === 'SELL' ? 'sell' : 'buy'
+        ;(diaryByCode[c] ||= []).push({
+          side,
+          date: (d.created_at || '').slice(0, 10).replace(/-/g, '.'),
+          note: d.memo || REASON_LABEL[d.reason_category] || (side === 'sell' ? '매도 기록' : '매수 기록'),
+        })
+      }
+    } catch {
+      // 일지 실패 무시
+    }
+
     holdings.value = await Promise.all(
       items.map(async (it) => {
         const code = it.stock.code
@@ -121,7 +144,7 @@ async function loadPortfolio() {
           compat: uf
             ? { score: Math.round(uf.score), note: uf.summary, items: [] }
             : { score: 0, note: '온보딩을 완료하면 궁합 분석을 볼 수 있어요.', items: [] },
-          journal: [],
+          journal: diaryByCode[code] || [],
           history: [],
           news: newsByCode[code] || [],
         }
@@ -143,7 +166,7 @@ onMounted(loadPortfolio)
 
     <!-- 헤더 -->
     <header class="lt-header">
-      <h1>장투 페이지</h1>
+      <h1>장투 페이지 <span class="ai-tag ai-tag-lg">AI</span></h1>
       <p class="lt-sub">내가 산 종목, 계속 들고 갈 만한가요? — 재무 30% · 성장 40% · 궁합 30% 가중으로 점검해드려요.</p>
     </header>
 
@@ -195,7 +218,7 @@ onMounted(loadPortfolio)
               <span class="lt-ov-code">{{ s.code }}</span>
             </div>
             <div class="lt-ov-reco" :style="{ color: gradeColor(total(s)) }">{{ s.recommend }}</div>
-            <p class="lt-ov-summary">🐤 {{ s.summary }}</p>
+            <p class="lt-ov-summary"><span class="ai-tag">AI</span> {{ s.summary }}</p>
           </div>
           <button class="lt-ov-go" type="button" @click="router.push(`/stocks/${s.code}`)">
             종목 상세 →
@@ -204,7 +227,7 @@ onMounted(loadPortfolio)
 
         <!-- 리포트 없는 종목: 0점 카드 대신 안내 -->
         <section v-if="!s.hasReport" class="panel lt-no-report">
-          🐤 아직 이 종목의 장투 리포트가 준비되지 않았어요. 분석이 완료되면 재무·성장·궁합 점수가 표시됩니다.
+          <span class="ai-tag">AI</span> 아직 이 종목의 장투 리포트가 준비되지 않았어요. 분석이 완료되면 재무·성장·궁합 점수가 표시됩니다.
         </section>
 
         <!-- 재무 / 성장 / 궁합 -->
@@ -221,7 +244,7 @@ onMounted(loadPortfolio)
                 <strong>{{ it.value }}</strong>
               </div>
             </div>
-            <p class="lt-score-note">🐤 {{ card.note }}</p>
+            <p class="lt-score-note"><span class="ai-tag">AI</span> {{ card.note }}</p>
           </div>
         </div>
 
@@ -333,6 +356,30 @@ onMounted(loadPortfolio)
 .lt-ov-code { font-size: 13px; font-weight: 700; color: var(--muted); }
 .lt-ov-reco { font-size: 15px; font-weight: 900; margin: 4px 0 8px; }
 .lt-ov-summary { margin: 0; font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.6; word-break: keep-all; }
+
+/* LLM 분석 표시용 텍스트형 AI 배지 */
+.ai-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-right: 5px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+}
+/* 헤더 옆 큰 버전 */
+.ai-tag-lg {
+  font-size: 16px;
+  padding: 3px 11px;
+  border-radius: 8px;
+  letter-spacing: 1px;
+  margin-left: 4px;
+  vertical-align: 4px;
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb),0.3);
+}
 .lt-ov-go {
   align-self: flex-start;
   flex-shrink: 0;

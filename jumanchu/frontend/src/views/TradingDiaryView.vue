@@ -8,8 +8,13 @@ import { errMsg } from '../api/client'
 const ACTION_LABEL = { BUY: '매수', SELL: '매도', WATCH: '관심' }
 const ACTION_ENUM = { 매수: 'BUY', 매도: 'SELL', 관심: 'WATCH' }
 const REASON_LABEL = {
+  // 매수 사유
   GROWTH: '장기 성장성', EARNINGS: '실적 개선', UNDERVALUED: '저평가',
   THEME: '테마/모멘텀', NEWS: '뉴스 호재', TECHNICAL: '기술적 반등',
+  DIVIDEND: '배당 매력', DIVERSIFY: '분산 목적',
+  // 매도 사유(결과)
+  TARGET_HIT: '목표 달성', STOP_LOSS: '손절', PROFIT_TAKING: '차익 실현',
+  DETERIORATED: '펀더멘털 악화', BETTER_OPP: '더 좋은 기회', REBALANCE: '리밸런싱',
 }
 const REASON_ENUM = Object.fromEntries(Object.entries(REASON_LABEL).map(([k, v]) => [v, k]))
 const DIARY_PALETTE = ['#0f9f6e', '#3b5bdb', '#76b900', '#f59e0b', '#06b6d4', '#ec4899']
@@ -46,6 +51,7 @@ function mapDiary(d) {
 // ===== 작성 대기: 일지가 아직 없는 최근 주문 (주문내역 기반) =====
 const pendingTrades = ref([])
 const selectedPendingId = ref(null)
+const pendingOpen = ref(false) // 여러 건일 때 대기목록 펼침 토글
 const pendingTrade = computed(
   () => pendingTrades.value.find((p) => p.order_id === selectedPendingId.value) || null,
 )
@@ -62,7 +68,7 @@ function mapOrder(o) {
 }
 function selectPending(p) {
   selectedPendingId.value = p.order_id
-  if (p.side === '매수' || p.side === '매도') newDiary.value.type = p.side
+  if (p.side === '매수' || p.side === '매도') setDiaryType(p.side)
 }
 
 async function loadAll() {
@@ -87,7 +93,9 @@ async function loadAll() {
 onMounted(loadAll)
 
 // ===== 새 매매일기 작성 =====
-const reasonOptions = ['장기 성장성', '실적 개선', '저평가', '테마/모멘텀', '뉴스 호재', '기술적 반등', '배당 매력', '분산 목적']
+// 매수/매도 이유 세트 분리 — 매도는 "결과" 사유
+const BUY_REASONS = ['장기 성장성', '실적 개선', '저평가', '테마/모멘텀', '뉴스 호재', '기술적 반등', '배당 매력', '분산 목적']
+const SELL_REASONS = ['목표 달성', '손절', '차익 실현', '펀더멘털 악화', '더 좋은 기회', '리밸런싱']
 const targetOptions = ['+10%', '+20%', '+30%', '+50%']
 const stopOptions = ['-5%', '-10%', '-15%', '-20%']
 const typeOptions = [
@@ -97,6 +105,15 @@ const typeOptions = [
 ]
 
 const newDiary = ref({ type: '매수', reasons: ['장기 성장성', '테마/모멘텀'], confidence: 4, target: '+20%', stop: '-10%', note: '' })
+
+// 매매 유형에 맞는 이유 목록 + 유형 전환(이유 세트가 달라 선택 초기화)
+const reasonOptions = computed(() => (newDiary.value.type === '매도' ? SELL_REASONS : BUY_REASONS))
+const isSell = computed(() => newDiary.value.type === '매도')
+function setDiaryType(key) {
+  if (newDiary.value.type === key) return
+  newDiary.value.type = key
+  newDiary.value.reasons = []
+}
 
 function toggleReason(r) {
   const arr = newDiary.value.reasons
@@ -181,18 +198,33 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
           </span>
         </div>
       </div>
-      <div v-if="pendingTrades.length" class="td-pending-chips">
+      <div v-if="pendingTrades.length" class="td-pending-select">
+        <!-- 현재 선택된 대기 (여러 건이면 ▾로 목록 펼침) -->
         <button
-          v-for="p in pendingTrades"
-          :key="p.order_id"
+          v-if="pendingTrade"
           type="button"
-          class="td-pending-chip"
-          :class="{ on: selectedPendingId === p.order_id }"
-          @click="selectPending(p)"
+          class="td-pending-chip on"
+          @click="pendingTrades.length > 1 ? (pendingOpen = !pendingOpen) : null"
         >
-          <span class="td-chip-logo" :style="{ background: p.color }">{{ p.logo }}</span>
-          {{ p.name }} · {{ p.side }} · {{ p.date }}
+          <span class="td-chip-logo" :style="{ background: pendingTrade.color }">{{ pendingTrade.logo }}</span>
+          {{ pendingTrade.name }} · {{ pendingTrade.side }} · {{ pendingTrade.date }}
+          <span v-if="pendingTrades.length > 1" class="td-pending-arrow" :class="{ open: pendingOpen }">▾</span>
         </button>
+
+        <!-- 펼친 대기 목록 -->
+        <div v-if="pendingOpen && pendingTrades.length > 1" class="td-pending-dropdown panel">
+          <button
+            v-for="p in pendingTrades"
+            :key="p.order_id"
+            type="button"
+            class="td-pending-chip"
+            :class="{ on: selectedPendingId === p.order_id }"
+            @click="selectPending(p); pendingOpen = false"
+          >
+            <span class="td-chip-logo" :style="{ background: p.color }">{{ p.logo }}</span>
+            {{ p.name }} · {{ p.side }} · {{ p.date }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -269,7 +301,7 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
                 class="td-chip-btn"
                 :class="{ on: newDiary.type === t.key }"
                 :style="newDiary.type === t.key ? { background: t.color, borderColor: t.color, color: '#fff' } : {}"
-                @click="newDiary.type = t.key"
+                @click="setDiaryType(t.key)"
               >{{ t.key }}</button>
             </div>
           </div>
@@ -302,7 +334,8 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
             </div>
           </div>
 
-          <div class="td-field">
+          <!-- 목표/손절은 진입 시점 목표 → 매도(결과) 기록 땐 숨김 -->
+          <div v-if="!isSell" class="td-field">
             <span class="td-field-label">목표 수익률</span>
             <div class="td-chips">
               <button
@@ -316,7 +349,7 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
             </div>
           </div>
 
-          <div class="td-field">
+          <div v-if="!isSell" class="td-field">
             <span class="td-field-label">손절 라인</span>
             <div class="td-chips">
               <button
@@ -328,14 +361,6 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
                 @click="newDiary.stop = o"
               >{{ o }}</button>
             </div>
-          </div>
-
-          <div class="td-field">
-            <textarea
-              v-model="newDiary.note"
-              class="td-textarea"
-              placeholder="일지를 작성해 주세요. (더 정확한 추천이 가능해집니다!)"
-            ></textarea>
           </div>
 
           <button class="td-save-btn" type="button" @click="saveDiary" :disabled="!pendingTrade || saving">매매일기 저장</button>
@@ -370,7 +395,15 @@ const verdictColor = { 성공: '#0f9f6e', 보류: '#315dff', 실패: '#cf3d3d' }
 }
 .td-pending-chip:hover { background: var(--surface-hover); }
 .td-pending-chip.on { border-color: var(--accent); background: rgba(var(--accent-rgb),0.12); color: var(--accent); }
-.td-pending-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.td-pending-select { position: relative; }
+.td-pending-arrow { margin-left: 4px; font-size: 11px; transition: transform 0.18s; }
+.td-pending-arrow.open { transform: rotate(180deg); }
+.td-pending-dropdown {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20;
+  display: flex; flex-direction: column; gap: 6px; padding: 8px;
+  min-width: 230px; max-height: 280px; overflow-y: auto;
+}
+.td-pending-dropdown .td-pending-chip { width: 100%; justify-content: flex-start; }
 .td-chip-logo { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 900; }
 .td-error {
   margin: 0; padding: 10px 14px; border-radius: var(--radius);

@@ -2,7 +2,8 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { me as fetchMe, updateMe } from '../api/auth'
-import { fetchPortfolioSummary, fetchOrders } from '../api/portfolio'
+import { fetchPortfolioSummary, fetchOrders, fetchHoldings } from '../api/portfolio'
+import { fetchPosts, fetchFollowers, fetchFollowing } from '../api/community'
 import { errMsg, retry } from '../api/client'
 
 const router = useRouter()
@@ -10,15 +11,21 @@ const activeSection = ref('invest')
 
 // BE UserSerializer는 nickname/email/birth_year/date_joined/profile만 제공(name·phone·address 필드 없음).
 const user = reactive({
+  id: null,
   nickname: '',
   email: '',
   birthYear: '',
   investType: '',
   joinDate: '',
-  posts: 12,
-  followers: 47,
-  following: 31,
+  posts: 0,
+  followers: 0,
+  following: 0,
 })
+
+// 아바타 이니셜 — 닉네임 첫 글자(하드코딩 '김' 제거)
+const avatarChar = computed(() => (user.nickname || '?').slice(0, 1))
+// 받은 좋아요 — 내 글들의 like_count 합(하드코딩 294 제거)
+const likesReceived = computed(() => myPosts.value.reduce((a, p) => a + (p.likes || 0), 0))
 
 // 프로필 헤더 아이콘 (와이어프레임 slide 9/10/11 공통 헤더)
 const headerBadges = [
@@ -27,21 +34,33 @@ const headerBadges = [
   { id: 3, icon: '🔥', name: '연속 투자' },
 ]
 
-const activities = [
-  { id: 1, type: 'post', time: '2시간 전', content: '삼성전자 지금 매수 타이밍 맞나요? 제 생각엔...', likes: 24, comments: 8 },
-  { id: 2, type: 'comment', time: '5시간 전', content: '→ "NVIDIA 실적 발표 분석" 에 댓글: "좋은 분석이네요. 저도 비슷한 생각이에요"', likes: 3, comments: null },
-  { id: 3, type: 'like', time: '어제', content: '❤️ "고배당주 포트폴리오 구성 전략" 글을 좋아해요', likes: null, comments: null },
-  { id: 4, type: 'post', time: '3일 전', content: '2025 상반기 포트폴리오 리뷰 — 수익률 +18.3% 달성 후기', likes: 67, comments: 22 },
-  { id: 5, type: 'comment', time: '4일 전', content: '→ "달러 환율 전망" 에 댓글: "환율 리스크 헷징은 어떻게 하시나요?"', likes: 7, comments: null },
-  { id: 6, type: 'like', time: '5일 전', content: '❤️ "SK하이닉스 HBM 수요 전망" 글을 좋아해요', likes: null, comments: null },
-]
+// 활동 내역: 본인이 작성한 글(GET /posts/?mine=true) — 하드코딩 목업 제거.
+const CAT_LABEL = { QUESTION: '질문', REVIEW: '후기', ANALYSIS: '분석', SHARE: '공유' }
+const myPosts = ref([])
+function relTime(iso) {
+  if (!iso) return ''
+  const diff = Math.max(0, Date.now() - new Date(iso).getTime())
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return '방금'
+  if (m < 60) return `${m}분 전`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}시간 전`
+  return `${Math.floor(h / 24)}일 전`
+}
+function mapPost(p) {
+  return {
+    id: p.id,
+    category: CAT_LABEL[p.category] || p.category,
+    title: p.title,
+    likes: p.like_count,
+    comments: p.comment_count,
+    time: relTime(p.created_at),
+  }
+}
 
-const myPosts = [
-  { id: 1, time: '2시간 전', category: '질문', title: '삼성전자 지금 매수 타이밍 맞나요?', likes: 24, comments: 8, views: 183 },
-  { id: 2, time: '3일 전', category: '후기', title: '2025 상반기 포트폴리오 리뷰 — 수익률 +18.3% 달성 후기', likes: 67, comments: 22, views: 1204 },
-  { id: 3, time: '2주 전', category: '분석', title: 'NAVER vs 카카오 — 하반기 반등 가능성 비교', likes: 41, comments: 15, views: 876 },
-  { id: 4, time: '1달 전', category: '공유', title: '주린이가 처음 1년 동안 배운 것들', likes: 132, comments: 44, views: 5321 },
-]
+// 통화 헬퍼 — KRW=국내(원), 그 외=해외($)
+const isKR = (cur) => cur === 'KRW'
+const curUnit = (cur) => (isKR(cur) ? '원' : '$')
 
 // 매매 내역(실데이터: GET /orders/) — 목업 fallback 제거(실패/빈응답 시 가짜 노출 방지)
 const trades = ref([])
@@ -51,32 +70,25 @@ const filteredTrades = computed(() => {
   if (tradeFilter.value === 'all') return trades.value
   return trades.value.filter(t => t.side === tradeFilter.value)
 })
+const domesticTrades = computed(() => filteredTrades.value.filter(t => isKR(t.currency)))
+const overseasTrades = computed(() => filteredTrades.value.filter(t => !isKR(t.currency)))
 
+// 계좌 요약 — 전부 BE GET /portfolio/ 제공값(하드코딩 제거)
 const account = reactive({
-  balance: 10532800,
-  totalInvested: 9285000,
-  monthProfit: 318400,
-  sellProfit: 110500,
-  dividend: 24800,
-  interest: 3200,
+  balance: 0,        // 예수금(현금성자산)
+  totalInvested: 0,  // 매수 총액
+  totalValue: 0,     // 현재 평가액
+  totalAssets: 0,    // 총자산(예수금 + 주식 평가액)
+  profitLoss: 0,     // 총손익
+  profitRate: 0,     // 총손익률(%)
 })
-
-const profitPct = computed(() => ((account.monthProfit / account.totalInvested) * 100).toFixed(2))
 // 실현 손익 합계(음수 가능) — 리터럴 '+' 이중부호 방지용
 const realizedPnl = computed(() => trades.value.filter(t => t.pnl !== null).reduce((a, t) => a + t.pnl, 0))
 
-const holdings = ref([
-  { name:'삼성전자', qty:20, avg:310500, cur:317000, color:'#315dff' },
-  { name:'SK하이닉스', qty:10, avg:238000, cur:243000, color:'#7d4ee8' },
-  { name:'NVIDIA', qty:3, avg:1251000, cur:1285000, color:'#22c55e' },
-  { name:'NAVER', qty:8, avg:189500, cur:184000, color:'#f59e0b' },
-  { name:'APPLE', qty:2, avg:248000, cur:261000, color:'#06b6d4' },
-])
-
-const monthlyReturns = [
-  { label:'1월', val: 4.2 }, { label:'2월', val: -1.8 }, { label:'3월', val: 7.1 },
-  { label:'4월', val: 3.5 }, { label:'5월', val: 9.3 }, { label:'6월', val: 3.4 },
-]
+// 보유 목록(BE GET /portfolio/holdings/) — 국내/해외 분리, 목업 fallback 제거
+const holdings = ref([])
+const domesticHoldings = computed(() => holdings.value.filter(h => isKR(h.currency)))
+const overseasHoldings = computed(() => holdings.value.filter(h => !isKR(h.currency)))
 
 const tabs = [
   { key: 'invest',  label: '내 투자' },
@@ -105,14 +117,30 @@ function holdColor(code) {
 async function loadMe() {
   try {
     const { user: u } = await fetchMe()
+    user.id = u.id
     user.nickname = u.nickname
     user.email = u.email
     user.birthYear = String(u.birth_year ?? '')
     user.joinDate = (u.date_joined || '').slice(0, 10).replace(/-/g, '.')
     if (u.profile?.investment_style) user.investType = u.profile.investment_style
+    loadActivity() // user.id 확보 후 활동(내 글·팔로워·팔로잉)
   } catch {
     // 실패 → 빈 값 유지
   }
+}
+
+// 활동: 본인 글 목록 + 팔로워/팔로잉 수 (전부 실데이터, 없으면 0/빈 목록)
+async function loadActivity() {
+  try {
+    const { items = [], total = 0 } = await fetchPosts({ mine: true, size: 50 })
+    myPosts.value = items.map(mapPost)
+    user.posts = total
+  } catch {
+    myPosts.value = []
+  }
+  if (!user.id) return
+  try { user.followers = (await fetchFollowers(user.id)).total ?? 0 } catch { /* 0 유지 */ }
+  try { user.following = (await fetchFollowing(user.id)).total ?? 0 } catch { /* 0 유지 */ }
 }
 
 // 매매 내역 (GET /orders/)
@@ -126,6 +154,7 @@ async function loadOrders() {
       date: (o.created_at || '').slice(0, 10).replace(/-/g, '.'),
       code: o.stock_code,
       name: o.stock_name,
+      currency: o.currency || 'KRW', // 국내/해외 구분
       side: String(o.side).toLowerCase(), // BUY → buy
       qty: o.quantity,
       price: Number(o.price),
@@ -138,25 +167,40 @@ async function loadOrders() {
   }
 }
 
-// 계좌·보유 (GET /portfolio/ 요약, KIS 503 재시도)
+function mapHolding(it) {
+  return {
+    code: it.stock.code,
+    name: it.stock.name,
+    currency: it.stock.currency,
+    market: it.stock.market,
+    qty: Number(it.quantity),
+    avg: Number(it.average_price),
+    cur: Number(it.current_price),
+    value: Number(it.current_value),
+    pnl: Number(it.profit_loss),
+    pnlRate: Number(it.profit_loss_rate),
+    color: holdColor(it.stock.code),
+  }
+}
+
+// 계좌 요약 + 보유 목록 (GET /portfolio/, /portfolio/holdings/, KIS 503 재시도)
 async function loadPortfolio() {
   try {
     const d = await retry(() => fetchPortfolioSummary(), { attempts: 5, delayMs: 500 })
-    account.balance = Number(d.account?.balance ?? account.balance)
-    account.totalInvested = Number(d.total_invested ?? account.totalInvested)
-    account.monthProfit = Number(d.total_profit_loss ?? account.monthProfit)
-    const hp = d.holdings_preview || []
-    if (hp.length) {
-      holdings.value = hp.map((it) => ({
-        name: it.stock.name,
-        qty: Number(it.quantity),
-        avg: Number(it.average_price),
-        cur: Number(it.current_price),
-        color: holdColor(it.stock.code),
-      }))
-    }
+    account.balance = Number(d.account?.balance ?? 0)
+    account.totalInvested = Number(d.total_invested ?? 0)
+    account.totalValue = Number(d.total_current_value ?? 0)
+    account.totalAssets = Number(d.total_assets ?? 0)
+    account.profitLoss = Number(d.total_profit_loss ?? 0)
+    account.profitRate = Number(d.total_profit_loss_rate ?? 0)
   } catch {
-    // 실패 → 목업 유지
+    // 실패 → 0 유지
+  }
+  try {
+    const { items = [] } = await retry(() => fetchHoldings(), { attempts: 5, delayMs: 500 })
+    holdings.value = items.map(mapHolding)
+  } catch {
+    holdings.value = []
   }
 }
 
@@ -190,7 +234,7 @@ onMounted(() => {
 
     <!-- Profile Header -->
     <div class="profile-header panel">
-      <div class="ph-avatar">김</div>
+      <div class="ph-avatar">{{ avatarChar }}</div>
       <div class="ph-info">
         <div class="ph-name">{{ user.nickname }}</div>
         <div class="ph-nick">@{{ user.nickname }}</div>
@@ -235,69 +279,49 @@ onMounted(() => {
 
         <!-- 상단 3카드 -->
         <div class="invest-cards">
-          <!-- 기본계좌 + 수익분석 (한 카드) -->
+          <!-- 기본계좌: 총자산(예수금 + 주식 평가액) -->
           <div class="panel acc-balance-card">
-            <div class="acc-label">기본계좌 · 주식</div>
-            <div class="acc-balance">{{ fmt(account.balance) }}<span class="acc-unit">원</span></div>
+            <div class="acc-label">기본계좌 · 총자산</div>
+            <div class="acc-balance">{{ fmt(account.totalAssets) }}<span class="acc-unit">원</span></div>
+            <dl class="acc-breakdown">
+              <div><dt>예수금</dt><dd>{{ fmt(account.balance) }}원</dd></div>
+              <div><dt>주식 평가액</dt><dd>{{ fmt(account.totalValue) }}원</dd></div>
+            </dl>
             <div class="acc-actions">
               <button class="acc-btn accent">채우기</button>
               <button class="acc-btn">보내기</button>
               <button class="acc-btn">환전</button>
             </div>
-
-            <!-- 수익분석 -->
-            <div class="acc-analysis">
-              <div class="acc-label">수익분석</div>
-              <div class="analysis-bars">
-                <div v-for="m in monthlyReturns" :key="m.label" class="ab-col">
-                  <div class="ab-bar-wrap">
-                    <div
-                      class="ab-bar"
-                      :class="m.val >= 0 ? 'pos-bar' : 'neg-bar'"
-                      :style="{ height: Math.abs(m.val) * 5 + 'px' }"
-                    ></div>
-                  </div>
-                  <div class="ab-val" :class="m.val >= 0 ? 'pos' : 'neg'">{{ m.val > 0 ? '+' : '' }}{{ m.val }}%</div>
-                  <div class="ab-label">{{ m.label }}</div>
-                </div>
-              </div>
-            </div>
           </div>
 
-          <!-- Profit Card -->
+          <!-- 총손익: 매수금액 → 평가금액 -->
           <div class="panel acc-profit-card">
-            <div class="acc-label">이달 수익</div>
-            <div class="acc-profit-num" :class="account.monthProfit >= 0 ? 'pos' : 'neg'">{{ signedFmt(account.monthProfit) }}원</div>
-            <div class="acc-profit-pct" :class="account.monthProfit >= 0 ? 'pos' : 'neg'">{{ account.monthProfit >= 0 ? '+' : '' }}{{ profitPct }}%</div>
-            <dl class="acc-dl mt16">
-              <div class="acc-row">
-                <dt>판매수익</dt>
-                <dd :class="account.sellProfit >= 0 ? 'pos' : 'neg'">{{ signedFmt(account.sellProfit) }}원</dd>
-              </div>
-              <div class="acc-row">
-                <dt>배당금</dt>
-                <dd>{{ fmt(account.dividend) }}원</dd>
-              </div>
-              <div class="acc-row">
-                <dt>이자</dt>
-                <dd>{{ fmt(account.interest) }}원</dd>
-              </div>
+            <div class="acc-label">총 손익</div>
+            <div class="acc-profit-num" :class="account.profitLoss >= 0 ? 'pos' : 'neg'">{{ signedFmt(account.profitLoss) }}원</div>
+            <div class="acc-profit-pct" :class="account.profitLoss >= 0 ? 'pos' : 'neg'">{{ account.profitLoss >= 0 ? '+' : '' }}{{ account.profitRate.toFixed(2) }}%</div>
+            <dl class="acc-breakdown">
+              <div><dt>매수 금액</dt><dd>{{ fmt(account.totalInvested) }}원</dd></div>
+              <div><dt>평가 금액</dt><dd>{{ fmt(account.totalValue) }}원</dd></div>
             </dl>
           </div>
 
-          <!-- Holdings Summary -->
+          <!-- 보유 종목 현황 (국내/해외 분리) -->
           <div class="panel acc-holdings-card">
             <div class="acc-label">보유 종목 현황</div>
-            <div class="holdings-list">
-              <div v-for="h in holdings" :key="h.name" class="holding-row">
-                <div class="hr-dot" :style="{ background: h.color }"></div>
-                <div class="hr-name">{{ h.name }}</div>
-                <div class="hr-qty">{{ h.qty }}주</div>
-                <div class="hr-pnl" :class="(h.cur - h.avg) >= 0 ? 'pos' : 'neg'">
-                  {{ ((h.cur - h.avg) / h.avg * 100).toFixed(1) }}%
+            <template v-for="g in [{ label: '🇰🇷 국내', rows: domesticHoldings }, { label: '🇺🇸 해외', rows: overseasHoldings }]" :key="g.label">
+              <template v-if="g.rows.length">
+                <div class="hold-group-label">{{ g.label }}</div>
+                <div class="holdings-list">
+                  <div v-for="h in g.rows" :key="h.code" class="holding-row">
+                    <div class="hr-dot" :style="{ background: h.color }"></div>
+                    <div class="hr-name">{{ h.name }}</div>
+                    <div class="hr-qty">{{ h.qty }}주</div>
+                    <div class="hr-pnl" :class="h.pnl >= 0 ? 'pos' : 'neg'">{{ h.pnl >= 0 ? '+' : '' }}{{ h.pnlRate.toFixed(1) }}%</div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </template>
+            </template>
+            <p v-if="!holdings.length" class="holdings-empty">보유 중인 종목이 없어요.</p>
           </div>
         </div>
 
@@ -315,47 +339,48 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="panel trade-table-wrap">
-          <table class="trade-table">
-            <thead>
-              <tr>
-                <th>날짜</th>
-                <th>종목</th>
-                <th>구분</th>
-                <th class="num">수량</th>
-                <th class="num">체결 단가</th>
-                <th class="num">총 금액</th>
-                <th class="num">손익</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="!filteredTrades.length">
-                <td colspan="7" class="trade-empty">
-                  {{ tradesError ? '거래 내역을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.' : '아직 거래 내역이 없어요.' }}
-                </td>
-              </tr>
-              <tr v-for="t in filteredTrades" :key="t.id">
-                <td class="trade-date">{{ t.date }}</td>
-                <td>
-                  <div class="trade-name">{{ t.name }}</div>
-                  <div class="trade-code">{{ t.code }}</div>
-                </td>
-                <td>
-                  <span class="side-badge" :class="t.side">
-                    {{ t.side === 'buy' ? '매수' : '매도' }}
-                  </span>
-                </td>
-                <td class="num">{{ t.qty }}주</td>
-                <td class="num">{{ fmt(t.price) }}원</td>
-                <td class="num">{{ fmt(t.total) }}원</td>
-                <td class="num" :class="t.pnl !== null ? (t.pnl >= 0 ? 'pos' : 'neg') : ''">
-                  <template v-if="t.pnl !== null">{{ signedFmt(t.pnl) }}원</template>
-                  <template v-else>—</template>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <template v-for="g in [{ label: '🇰🇷 국내', rows: domesticTrades }, { label: '🇺🇸 해외', rows: overseasTrades }]" :key="g.label">
+          <div class="trade-group-head">{{ g.label }} 거래내역 <span class="tgh-count">{{ g.rows.length }}</span></div>
+          <div class="panel trade-table-wrap">
+            <table class="trade-table">
+              <thead>
+                <tr>
+                  <th>날짜</th>
+                  <th>종목</th>
+                  <th>구분</th>
+                  <th class="num">수량</th>
+                  <th class="num">체결 단가</th>
+                  <th class="num">총 금액</th>
+                  <th class="num">손익</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="!g.rows.length">
+                  <td colspan="7" class="trade-empty">
+                    {{ tradesError ? '거래 내역을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.' : '거래 내역이 없어요.' }}
+                  </td>
+                </tr>
+                <tr v-for="t in g.rows" :key="t.id">
+                  <td class="trade-date">{{ t.date }}</td>
+                  <td>
+                    <div class="trade-name">{{ t.name }}</div>
+                    <div class="trade-code">{{ t.code }}</div>
+                  </td>
+                  <td>
+                    <span class="side-badge" :class="t.side">{{ t.side === 'buy' ? '매수' : '매도' }}</span>
+                  </td>
+                  <td class="num">{{ t.qty }}주</td>
+                  <td class="num">{{ fmt(t.price) }}{{ curUnit(t.currency) }}</td>
+                  <td class="num">{{ fmt(t.total) }}{{ curUnit(t.currency) }}</td>
+                  <td class="num" :class="t.pnl !== null ? (t.pnl >= 0 ? 'pos' : 'neg') : ''">
+                    <template v-if="t.pnl !== null">{{ signedFmt(t.pnl) }}{{ curUnit(t.currency) }}</template>
+                    <template v-else>—</template>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
 
         <!-- Summary Row -->
         <div class="trade-summary">
@@ -437,7 +462,7 @@ onMounted(() => {
           <div class="panel info-card span2">
             <div class="info-card-title">커뮤니티 프로필</div>
             <div class="community-profile">
-              <div class="cp-avatar">김</div>
+              <div class="cp-avatar">{{ avatarChar }}</div>
               <div class="cp-details">
                 <div class="cp-name">{{ user.nickname }}</div>
                 <div class="cp-sub">주만추 멤버 · {{ user.joinDate }} 가입</div>
@@ -445,7 +470,7 @@ onMounted(() => {
                   <span>글 <strong>{{ user.posts }}</strong></span>
                   <span>팔로워 <strong>{{ user.followers }}</strong></span>
                   <span>팔로잉 <strong>{{ user.following }}</strong></span>
-                  <span>받은 좋아요 <strong>294</strong></span>
+                  <span>받은 좋아요 <strong>{{ likesReceived }}</strong></span>
                 </div>
               </div>
             </div>
@@ -474,28 +499,7 @@ onMounted(() => {
                     <span class="post-meta post-time">{{ post.time }}</span>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            <!-- Activity Stream -->
-            <div class="panel act-block">
-              <div class="act-block-title">최근 활동</div>
-              <div class="activity-list">
-                <div v-for="act in activities" :key="act.id" class="act-item" :class="act.type">
-                  <div class="act-icon">
-                    <span v-if="act.type === 'post'">✏️</span>
-                    <span v-else-if="act.type === 'comment'">💬</span>
-                    <span v-else>❤️</span>
-                  </div>
-                  <div class="act-body">
-                    <div class="act-content">{{ act.content }}</div>
-                    <div class="act-time">{{ act.time }}</div>
-                  </div>
-                  <div v-if="act.likes !== null" class="act-stats">
-                    <span>♥ {{ act.likes }}</span>
-                    <span v-if="act.comments !== null">💬 {{ act.comments }}</span>
-                  </div>
-                </div>
+                <p v-if="!myPosts.length" class="act-empty">아직 작성한 글이 없어요.</p>
               </div>
             </div>
           </div>
@@ -506,8 +510,6 @@ onMounted(() => {
               <div class="act-block-title">활동 통계</div>
               <dl class="stats-dl">
                 <div class="stats-row"><dt>총 게시글</dt><dd>{{ user.posts }}개</dd></div>
-                <div class="stats-row"><dt>총 댓글</dt><dd>38개</dd></div>
-                <div class="stats-row"><dt>받은 좋아요</dt><dd>294개</dd></div>
                 <div class="stats-row"><dt>팔로워</dt><dd>{{ user.followers }}명</dd></div>
                 <div class="stats-row"><dt>팔로잉</dt><dd>{{ user.following }}명</dd></div>
               </dl>
@@ -663,14 +665,6 @@ onMounted(() => {
   align-items: start;
 }
 
-/* 기본계좌 카드 안에 들어간 수익분석 영역 */
-.acc-analysis {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-}
-.acc-analysis .acc-label { margin-bottom: 12px; }
-
 /* ---- 프로필 ---- */
 .info-grid {
   display: grid;
@@ -773,21 +767,7 @@ onMounted(() => {
 .post-item-right { display: flex; gap: 10px; flex-shrink: 0; }
 .post-meta { font-size: 12px; color: var(--muted); }
 .post-time { font-size: 11px; }
-
-.activity-list { display: flex; flex-direction: column; gap: 0; }
-.act-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--faint);
-}
-.act-item:last-child { border-bottom: none; }
-.act-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
-.act-body { flex: 1; min-width: 0; }
-.act-content { font-size: 13px; color: var(--ink); line-height: 1.5; }
-.act-time { font-size: 11px; color: var(--muted); margin-top: 3px; }
-.act-stats { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-shrink: 0; padding-top: 2px; }
+.act-empty { margin: 8px 0 2px; font-size: 13px; font-weight: 700; color: var(--muted); }
 
 .act-stats-panel { padding: 20px; }
 .stats-dl { display: flex; flex-direction: column; gap: 0; }
@@ -887,21 +867,25 @@ onMounted(() => {
 }
 .acc-btn.accent:hover { background: rgba(var(--accent-rgb),0.18); }
 
-.acc-dl { display: flex; flex-direction: column; gap: 0; }
-.acc-row {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 8px 0; border-bottom: 1px solid var(--faint);
-  font-size: 13px;
-}
-.acc-row:last-child { border-bottom: none; }
-.acc-row dt { color: var(--muted); }
-.acc-row dd { font-weight: 700; color: var(--ink); margin: 0; }
-
 .acc-profit-num { font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; margin-bottom: 4px; }
-.acc-profit-pct { font-size: 14px; font-weight: 700; margin-bottom: 0; }
-.mt16 { margin-top: 16px; }
+.acc-profit-pct { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+
+/* 계좌 카드 내역(예수금/주식평가액, 매수/평가금액) */
+.acc-breakdown { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 0; }
+.acc-breakdown > div { display: flex; justify-content: space-between; font-size: 12px; }
+.acc-breakdown dt { color: var(--muted); }
+.acc-breakdown dd { margin: 0; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* 보유 종목 국내/해외 그룹 라벨 */
+.hold-group-label { font-size: 11px; font-weight: 900; color: var(--muted); margin: 10px 0 2px; }
+.hold-group-label:first-of-type { margin-top: 4px; }
+
+/* 거래내역 국내/해외 헤더 */
+.trade-group-head { font-size: 14px; font-weight: 900; color: var(--ink); margin: 14px 0 8px; }
+.tgh-count { font-size: 12px; font-weight: 800; color: var(--muted); margin-left: 4px; }
 
 .holdings-list { display: flex; flex-direction: column; gap: 0; }
+.holdings-empty { margin: 4px 0; font-size: 13px; font-weight: 700; color: var(--muted); }
 .holding-row {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 0; border-bottom: 1px solid var(--faint);
@@ -912,22 +896,4 @@ onMounted(() => {
 .hr-name { flex: 1; font-weight: 700; color: var(--ink); }
 .hr-qty { color: var(--muted); font-size: 12px; }
 .hr-pnl { font-weight: 800; font-size: 13px; min-width: 52px; text-align: right; }
-
-.analysis-bars {
-  display: flex; align-items: flex-end; gap: 8px;
-  padding-top: 8px; height: 120px;
-}
-.ab-col {
-  flex: 1; display: flex; flex-direction: column; align-items: center;
-  justify-content: flex-end; gap: 3px;
-}
-.ab-bar-wrap {
-  display: flex; align-items: flex-end; justify-content: center;
-  height: 60px; width: 100%;
-}
-.ab-bar { width: 100%; max-width: 28px; border-radius: 4px 4px 0 0; min-height: 4px; }
-.pos-bar { background: var(--positive); }
-.neg-bar { background: var(--negative); border-radius: 0 0 4px 4px; }
-.ab-val { font-size: 10px; font-weight: 700; }
-.ab-label { font-size: 11px; color: var(--muted); }
 </style>
