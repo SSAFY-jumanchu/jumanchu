@@ -23,8 +23,15 @@ client.interceptors.response.use(
   async (error) => {
     const { response, config } = error
     const auth = useAuthStore()
-    const isRefreshCall = config?.url?.includes('/auth/token/refresh')
-    if (response?.status === 401 && config && !config._retried && !isRefreshCall) {
+    // 로그인/회원가입/refresh의 401은 "access 만료"가 아니라 인증 실패 그 자체다.
+    // 여기서 refresh를 재시도하면 (refresh 쿠키가 없어) "refresh 토큰이 없습니다" 에러가
+    // 원래의 "이메일 또는 비밀번호가 올바르지 않습니다"를 덮어버린다 → 재시도 금지.
+    const url = config?.url || ''
+    const skipRefreshRetry =
+      url.includes('/auth/login') ||
+      url.includes('/auth/signup') ||
+      url.includes('/auth/token/refresh')
+    if (response?.status === 401 && config && !config._retried && !skipRefreshRetry) {
       config._retried = true
       try {
         refreshing ??= auth.refresh()

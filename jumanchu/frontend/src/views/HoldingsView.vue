@@ -300,8 +300,8 @@ onMounted(() => {
             target="_blank"
             rel="noopener"
           >
-            <span class="hv-news-chip">{{ n.ticker }}</span>
-            <div>
+            <span class="hv-news-chip" :title="n.ticker">{{ n.ticker }}</span>
+            <div class="hv-news-body">
               <p class="hv-news-title">{{ n.title }}</p>
               <span class="hv-news-src">{{ n.source }} · {{ n.time }}</span>
             </div>
@@ -415,14 +415,39 @@ onMounted(() => {
 .hv-news-item { display: flex; gap: 10px; align-items: flex-start; padding: 11px 0; border-bottom: 1px solid var(--line); cursor: pointer; text-decoration: none; color: inherit; }
 .hv-news-item:last-of-type { border-bottom: 0; }
 .hv-news-item:hover .hv-news-title { color: var(--accent); }
-.hv-news-chip { flex-shrink: 0; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 900; background: rgba(var(--purple-rgb),0.1); color: var(--purple); }
-.hv-news-title { font-size: 13px; font-weight: 700; color: var(--ink); margin: 0 0 3px; line-height: 1.4; word-break: keep-all; transition: color 0.14s; }
+.hv-news-chip {
+  flex-shrink: 0;
+  width: 66px;                /* 고정 길이 */
+  box-sizing: border-box;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  background: rgba(var(--purple-rgb),0.1);
+  color: var(--purple);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hv-news-body { flex: 1; min-width: 0; }   /* min-width:0 이라야 타이틀이 줄어들어 말줄임 됨 */
+.hv-news-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 3px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.14s;
+}
 .hv-news-src { font-size: 11px; font-weight: 700; color: var(--faint); }
 .hv-news-empty { padding: 18px 0 4px; text-align: center; font-size: 13px; font-weight: 700; color: var(--faint); }
 
-/* 등락 색상 (한국식: 상승=빨강, 하락=파랑) */
-.is-up { color: #e3344f; }
-.is-down { color: #2b59d6; }
+/* 등락 색상 (한국식: 상승=빨강, 하락=파랑) — 전역 .is-up/.is-down(초록/빨강) !important를 덮어쓴다 */
+.is-up { color: #e3344f !important; }
+.is-down { color: #2b59d6 !important; }
 
 @media (max-width: 1100px) {
   .holdings-grid { grid-template-columns: 1fr; }

@@ -1,9 +1,31 @@
 <script setup>
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchPosts, togglePostLike, fetchComments, createComment } from '../api/community'
+import { useAuthStore } from '../stores/auth'
+import { useFavoritesStore } from '../stores/favorites'
+import { useRecentStocksStore } from '../stores/recentStocks'
+import {
+  fetchPosts, createPost, updatePost, deletePost, togglePostLike,
+  fetchComments, createComment, toggleCommentLike as apiToggleCommentLike,
+  followUser, unfollowUser, fetchFollowing,
+} from '../api/community'
+import { fetchStocks, fetchPopularRanking } from '../api/stocks'
+import { fetchHoldings } from '../api/portfolio'
 
 const router = useRouter()
+const auth = useAuthStore()
+const favStore = useFavoritesStore()
+const recentStore = useRecentStocksStore()
+
+// 현재 유저 이니셜(아바타) — 비로그인이면 '나'
+const myInitial = computed(() => auth.user?.nickname?.slice(0, 1) || '나')
+
+// 로그인 필요 액션 가드 — 비로그인이면 로그인으로
+function requireAuth() {
+  if (auth.isAuthenticated) return true
+  router.push({ name: 'login', query: { redirect: '/community' } })
+  return false
+}
 
 // 글 타입(enum) → 한글 라벨
 const CATEGORY_LABEL = { QUESTION: '질문', REVIEW: '후기', ANALYSIS: '분석', SHARE: '공유' }
@@ -14,149 +36,223 @@ function cmColor(id) {
 function cmTimeAgo(iso) {
   if (!iso) return ''
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
+  if (diff < 60) return '방금'
   if (diff < 3600) return `${Math.max(1, Math.round(diff / 60))}분전`
   if (diff < 86400) return `${Math.round(diff / 3600)}시간전`
   return `${Math.round(diff / 86400)}일전`
 }
+// 종목 코드(문자열) 기반 색상 — cmColor는 숫자 user_id용
+function stockColor(code) {
+  let h = 0
+  for (const ch of String(code)) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return CM_PALETTE[h % CM_PALETTE.length]
+}
+function fmtRate(rate) {
+  const up = Number(rate) >= 0
+  return (up ? '+' : '') + Number(rate).toFixed(2) + '%'
+}
 
 // ===== 카테고리 탭 =====
 const selectedCategory = ref('전체')
-const categories = ['전체', '팔로잉', '뉴스']
+const categories = ['전체', '팔로잉', '관심 종목']
 
-// ===== 글쓰기 상태 =====
+// 관심 종목 = 선호(favorite) 종목 + 보유 종목 코드
+const holdingCodes = ref([])
+const interestCodes = computed(() => {
+  const set = new Set(favStore.items.map((s) => s.code))
+  for (const c of holdingCodes.value) set.add(c)
+  return set
+})
+const interestLoaded = ref(false)
+
+async function loadHoldingCodes() {
+  if (!auth.isAuthenticated) return
+  try {
+    const { items = [] } = await fetchHoldings()
+    holdingCodes.value = items.map((it) => it.stock?.code).filter(Boolean)
+  } catch {
+    // 무시
+  }
+}
+
+function selectTab(cat) {
+  selectedCategory.value = cat
+  if (cat === '관심 종목') loadInterestPosts()
+}
+
+// ===== 글쓰기 상태 (모든 글은 종목에 속함 → 종목 선택 필수) =====
 const writeMode = ref(false)
+const writeTitle = ref('')
 const writeText = ref('')
+const writeError = ref('')
+const writing = ref(false)
+
+// 종목 검색 드롭다운 (종목명 → 검색 → 선택)
+const stockQuery = ref('')
+const stockResults = ref([])
+const selectedStock = ref(null)        // { code, name, market, sector }
+const stockDropdownOpen = ref(false)
+let stockSearchTimer = null
+function onStockSearch() {
+  selectedStock.value = null           // 다시 입력하면 선택 해제
+  stockDropdownOpen.value = true
+  clearTimeout(stockSearchTimer)
+  const q = stockQuery.value.trim()
+  if (!q) { stockResults.value = []; return }
+  stockSearchTimer = setTimeout(async () => {
+    try {
+      const { items = [] } = await fetchStocks({ q, size: 8 })
+      stockResults.value = items.map((s) => ({ code: s.code, name: s.name, market: s.market, sector: s.sector }))
+    } catch {
+      stockResults.value = []
+    }
+  }, 250)
+}
+function pickStock(s) {
+  selectedStock.value = s
+  stockQuery.value = s.name
+  stockResults.value = []
+  stockDropdownOpen.value = false
+}
+
+const canSubmitPost = computed(
+  () => selectedStock.value && writeTitle.value.trim() && writeText.value.trim(),
+)
+function openWrite() {
+  if (!requireAuth()) return
+  writeMode.value = true
+}
+function cancelWrite() {
+  writeMode.value = false
+  writeTitle.value = ''
+  writeText.value = ''
+  writeError.value = ''
+  stockQuery.value = ''
+  stockResults.value = []
+  selectedStock.value = null
+  stockDropdownOpen.value = false
+}
+async function submitPost() {
+  if (!requireAuth() || !canSubmitPost.value || writing.value) return
+  writing.value = true
+  writeError.value = ''
+  try {
+    const created = await createPost({
+      stock_code: selectedStock.value.code,
+      title: writeTitle.value.trim(),
+      body: writeText.value.trim(),
+    })
+    posts.value.unshift(mapPost(created))
+    cancelWrite()
+  } catch (e) {
+    writeError.value =
+      e?.response?.data?.detail ||
+      e?.response?.data?.stock_code?.[0] ||
+      '작성에 실패했어요. 잠시 후 다시 시도해 주세요.'
+  } finally {
+    writing.value = false
+  }
+}
+
+// ===== 글 ··· 메뉴 + 수정/삭제 (본인 글만) =====
+const openMenuId = ref(null)
+const editingId = ref(null)
+const editTitle = ref('')
+const editBody = ref('')
+const editError = ref('')
+const editSaving = ref(false)
+function toggleMenu(postId) { openMenuId.value = openMenuId.value === postId ? null : postId }
+function startEdit(post) {
+  openMenuId.value = null
+  editingId.value = post.id
+  editTitle.value = post.title
+  editBody.value = post.content || ''
+  editError.value = ''
+}
+function cancelEdit() { editingId.value = null; editError.value = '' }
+async function saveEdit(post) {
+  if (!editTitle.value.trim() || !editBody.value.trim() || editSaving.value) return
+  editSaving.value = true
+  editError.value = ''
+  try {
+    const updated = await updatePost(post.id, { title: editTitle.value.trim(), body: editBody.value.trim() })
+    post.title = updated.title
+    post.content = updated.body
+    editingId.value = null
+  } catch (e) {
+    editError.value = e?.response?.data?.detail || '수정에 실패했어요.'
+  } finally {
+    editSaving.value = false
+  }
+}
+async function removePost(post) {
+  openMenuId.value = null
+  if (!window.confirm('이 글을 삭제할까요?')) return
+  try {
+    await deletePost(post.id)
+    posts.value = posts.value.filter((p) => p.id !== post.id)
+  } catch {
+    // 무시
+  }
+}
 
 // ===== 반응형 상태 =====
-const likedPosts = reactive({})
-const followedUsers = reactive({ '국내주식토론': true, '미국주식이야기': false, '따박배당': false })
+const likedPosts = reactive({})        // postId → true
+const followedUserIds = reactive({})   // userId → true (팔로우 중)
 const expandedPost = ref(null)
-const likedComments = reactive({})
+const likedComments = reactive({})     // `${postId}-${commentId}` → true
 const commentInputs = reactive({})
 
-// ===== 포스트 데이터 =====
-const posts = ref([
-  {
-    id: 1,
-    username: '국내주식토론', avatar: '국', userType: 'channel', color: '#315dff',
-    time: '6시간전', category: '국내주식토론',
-    title: '달러환율 금융위기수준까지상승',
-    content: null,
-    chart: 'exchange-rate',
-    likes: 199, comments: 32, shares: 6,
-    commentsList: [
-      { id: 1, user: '투자자A', avatar: '투', time: '5시간전', content: '벌써 1500원을 넘었네요... 수입 기업들 큰일 났겠는데요.', likes: 12 },
-      { id: 2, user: '환율걱정중', avatar: '환', time: '4시간전', content: '2009년 금융위기 수준이면 경제 전반에 큰 영향이 있겠죠?', likes: 8 },
-      { id: 3, user: '달러매수자', avatar: '달', time: '3시간전', content: '달러 환전해놨더니 저절로 수익이 났습니다 ㅎㅎ', likes: 34 },
-    ],
-  },
-  {
-    id: 2,
-    username: '국내주식토론', avatar: '국', userType: 'channel', color: '#315dff',
-    time: '5시간전', category: '국내주식토론',
-    title: '코스피 변동성이 커지는 건 당연한 사실',
-    content: '삼성전자+닉스 집중된 삼성세\n외국인은 팔고 개인은 사고\n높아난 빚투에\n레버리지\n차발 선거 종료까지',
-    chart: 'kospi-bar',
-    likes: 150, comments: 34, shares: 4,
-    commentsList: [
-      { id: 1, user: '코스피투자자', avatar: '코', time: '4시간전', content: '외국인 매도세가 정말 장기화되고 있네요. 언제까지 갈까요.', likes: 15 },
-      { id: 2, user: '개인투자자', avatar: '개', time: '3시간전', content: '변동성이 커질수록 오히려 기회가 생기는 것 같아요.', likes: 7 },
-    ],
-  },
-  {
-    id: 3,
-    username: '짱짱맛플리', avatar: '짱', userType: 'user', color: '#7d4ee8',
-    time: '6시간전(수정됨)', category: '뭐든해봐',
-    title: '환율 1545원 돌파',
-    content: '외국인 순매도 2008년 금융위기 62조\n2020년 코로나 25조\n현재 103조원 18일연속 순매도 역사적인 신기록중',
-    chart: 'alert-box',
-    likes: 89, comments: 18, shares: 12,
-    commentsList: [
-      { id: 1, user: '충격받음', avatar: '충', time: '5시간전', content: '103조?? 이게 실화인가요 진짜로??', likes: 34 },
-      { id: 2, user: '역사적기록', avatar: '역', time: '4시간전', content: '역대 최장 순매도 기록이네요. 저도 기사 찾아봐야겠어요.', likes: 8 },
-    ],
-  },
-  {
-    id: 4,
-    username: 'NVDA장기홀더', avatar: 'N', userType: 'user', color: '#76b900',
-    time: '3시간전', category: '미국주식',
-    title: 'NVIDIA Blackwell 수요 예상치 초과 — Q2 가이던스 대폭 상향',
-    content: '방금 실적 발표 나왔습니다. 데이터센터 매출이 예상치를 30% 이상 초과했어요. EPS도 컨센서스 대비 크게 상회. 내일 프리마켓 올라갈 것 같습니다. 보유하시는 분들 축하드립니다!',
-    chart: null,
-    likes: 312, comments: 87, shares: 45,
-    commentsList: [
-      { id: 1, user: '엔비디아홀더', avatar: '엔', time: '2시간전', content: '드디어!!! 홀드한 보람이 있네요 ㅎㅎ 내일 기대됩니다', likes: 78 },
-      { id: 2, user: '부러워요', avatar: '부', time: '2시간전', content: '저도 오늘 바로 매수해야겠어요. 지금 들어가도 늦지 않겠죠?', likes: 12 },
-      { id: 3, user: 'AI투자자', avatar: 'A', time: '1시간전', content: 'Blackwell 수요가 이 정도면 내년 실적도 기대됩니다.', likes: 25 },
-    ],
-  },
-  {
-    id: 5,
-    username: '삼전장기투자', avatar: '삼', userType: 'user', color: '#1428A0',
-    time: '1시간전', category: '국내주식',
-    title: '삼성전자 지금 추가 매수 타이밍일까요?',
-    content: '317,000원인데... 52주 최저가 55,600원 기준으로 보면 아직 고점에 있는 것 같기도 하고. HBM 수주 기대감은 있는데 판단이 어렵습니다. 고수분들 의견 부탁드립니다!',
-    chart: null,
-    likes: 45, comments: 23, shares: 3,
-    commentsList: [
-      { id: 1, user: '전업투자자', avatar: '전', time: '50분전', content: 'PER 14배면 장기 관점에서 나쁘지 않은 가격입니다. 분할 매수 추천해요.', likes: 18 },
-      { id: 2, user: '분산투자자', avatar: '분', time: '40분전', content: '분할 매수로 접근하는 게 리스크 관리 측면에서 좋습니다.', likes: 11 },
-    ],
-  },
-  {
-    id: 6,
-    username: '따박배당', avatar: '배', userType: 'user', color: '#0f9f6e',
-    time: '30분전', category: '배당투자',
-    title: '고배당주 포트폴리오 올해 수익률 공개 (+18.4%)',
-    content: '개인 포트폴리오 수익률 공개합니다.\n삼성전자 +2.4% (배당 포함)\nKB금융 +22.1%\nKT +15.8%\n한국전력 +31.2%\n미국 JEPI ETF +14.6%\n\n배당재투자 복리 효과가 정말 크네요!',
-    chart: null,
-    likes: 234, comments: 56, shares: 28,
-    commentsList: [
-      { id: 1, user: '배당초보', avatar: '배', time: '25분전', content: '대단하세요! 어떤 전략으로 종목 선정하셨나요?', likes: 22 },
-      { id: 2, user: '배당고수', avatar: '고', time: '20분전', content: '한전이 이렇게 오를 줄은 몰랐어요. 좋은 성과 축하드려요!', likes: 15 },
-    ],
-  },
-  {
-    id: 7,
-    username: '미국주식이야기', avatar: '미', userType: 'channel', color: '#e58b10',
-    time: '2시간전', category: '미국주식이야기',
-    title: '🇺🇸 오늘의 미국 시장 요약 (06/05)',
-    content: '• S&P500 -0.8% / NASDAQ -1.2%\n• NVIDIA +3.1% (실적 서프라이즈)\n• Apple -0.5% (iPhone 수요 우려)\n• 공포탐욕지수: 45 → 48 (중립)\n• 달러인덱스: 103.2 (+0.4%)',
-    chart: null,
-    likes: 445, comments: 89, shares: 67,
-    commentsList: [
-      { id: 1, user: '미장투자자', avatar: '미', time: '1시간전', content: 'NVDA 실적 너무 좋네요! 내일 한국 반도체주도 기대됩니다.', likes: 45 },
-    ],
-  },
-])
+// ===== 포스트 데이터 (실데이터: GET /posts/) =====
+const posts = ref([])
 
-// ===== 인기글 =====
-const popularPosts = [
-  { rank: 1, title: '현시점', likes: 1328, comments: 319 },
-  { rank: 2, title: '1~5차 신규 집입 6차 5,000주 추가 합계 30,0...', likes: 361, comments: 311 },
-  { rank: 3, title: '고등학생입니다. 라버리지로 1억을 만들었는데 알...', likes: 512, comments: 302 },
-  { rank: 4, title: '음... 그간 종목잡아 수익보계하고 글올리...', likes: 521, comments: 294 },
-  { rank: 5, title: '나스닥 빠른 전체적으로 양호한 하루네요 나스닥도...', likes: 372, comments: 212 },
-  { rank: 6, title: '"결혼하면 돈 못 모른다?" 커뮤니티 썰이 숨기는 부...', likes: 386, comments: 158 },
-  { rank: 7, title: '저기...혹시', likes: 643, comments: 92 },
-  { rank: 8, title: '삼성전자 적청가 5만원', likes: 643, comments: 345 },
-  { rank: 9, title: '어딜감히 떨어진다고 입을 놀리나!!', likes: 764, comments: 78 },
-]
+// ===== 주간 인기글 (실데이터: GET /posts?sort=popular) =====
+const popularPosts = ref([])
+async function loadPopularPosts() {
+  try {
+    const { items = [] } = await fetchPosts({ sort: 'popular', size: 9 })
+    popularPosts.value = items.map((p, i) => ({
+      rank: i + 1,
+      id: p.id,
+      title: p.title,
+      likes: p.like_count,
+      comments: p.comment_count,
+      stockCode: p.stock_code || '',
+    }))
+  } catch {
+    // 무시
+  }
+}
 
-// ===== 현재 인기 종목 커뮤니티 =====
-const popularStockCommunities = [
-  { code: '005930', name: '삼성전자', logo: '삼', color: '#3b5bdb', members: '128.4K', hot: true },
-  { code: '000660', name: 'SK하이닉스', logo: 'SK', color: '#e3344f', members: '96.1K', hot: true },
-  { code: 'NVDA', name: 'NVIDIA', logo: 'N', color: '#76b900', members: '74.3K', hot: false },
-  { code: '035420', name: 'NAVER', logo: 'N', color: '#22c55e', members: '41.2K', hot: false },
-]
+// ===== 인기 종목 커뮤니티 (실데이터: 인기 종목 top 5) =====
+const popularStockCommunities = ref([])
+async function loadPopularStockCommunities() {
+  try {
+    const { items = [] } = await fetchPopularRanking({ market: 'all', sort: 'value', size: 5 })
+    popularStockCommunities.value = items.map((it, i) => ({
+      code: it.code,
+      name: it.name,
+      logo: (it.name || '?').slice(0, 2),
+      color: stockColor(it.code),
+      rate: fmtRate(it.change_rate),
+      up: Number(it.change_rate) >= 0,
+      hot: i < 2,
+    }))
+  } catch {
+    // 무시
+  }
+}
 
-// ===== 최근 조회한 주식 커뮤니티 =====
-const recentStockCommunities = [
-  { code: '000660', name: 'SK하이닉스', logo: 'SK', color: '#e3344f', time: '방금' },
-  { code: 'AAPL', name: 'Apple', logo: 'A', color: '#333a45', time: '10분 전' },
-  { code: '005930', name: '삼성전자', logo: '삼', color: '#3b5bdb', time: '1시간 전' },
-]
+// ===== 최근 조회한 주식 (실데이터: recentStocks 스토어) =====
+const recentStockCommunities = computed(() =>
+  recentStore.items.map((s) => ({
+    code: s.code,
+    name: s.name,
+    logo: (s.name || '?').slice(0, 2),
+    color: stockColor(s.code),
+    time: cmTimeAgo(s.viewedAt),
+  })),
+)
 
 function goStockCommunity(code) {
   router.push(`/stocks/${code}`)
@@ -164,13 +260,16 @@ function goStockCommunity(code) {
 
 // ===== 필터링 =====
 const filteredPosts = computed(() => {
-  if (selectedCategory.value === '팔로잉') return posts.value.filter(p => followedUsers[p.username])
-  if (selectedCategory.value === '뉴스') return posts.value.filter(p => p.userType === 'channel')
+  if (selectedCategory.value === '팔로잉') return posts.value.filter(p => followedUserIds[p.userId])
+  if (selectedCategory.value === '관심 종목') return posts.value.filter(p => interestCodes.value.has(p.stockCode))
   return posts.value
 })
 
-// ===== 상호작용 함수 =====
+const isMyPost = (post) => auth.user?.id != null && post.userId === auth.user.id
+
+// ===== 좋아요 =====
 async function toggleLike(postId) {
+  if (!requireAuth()) return
   const post = posts.value.find(p => p.id === postId)
   if (!post) return
   // 낙관적 업데이트 후 서버 응답으로 보정
@@ -189,8 +288,33 @@ async function toggleLike(postId) {
   }
 }
 
-function toggleFollow(username) {
-  followedUsers[username] = !followedUsers[username]
+// ===== 팔로우 (POST/DELETE /users/:id/follow/) =====
+async function toggleFollow(post) {
+  if (!requireAuth() || isMyPost(post)) return
+  const uid = post.userId
+  const wasFollowing = !!followedUserIds[uid]
+  if (wasFollowing) delete followedUserIds[uid]
+  else followedUserIds[uid] = true
+  try {
+    if (wasFollowing) await unfollowUser(uid)
+    else await followUser(uid)
+  } catch {
+    // 실패 → 롤백
+    if (wasFollowing) followedUserIds[uid] = true
+    else delete followedUserIds[uid]
+  }
+}
+
+// ===== 댓글 =====
+function mapComment(c) {
+  return {
+    id: c.id,
+    user: c.nickname,
+    avatar: (c.nickname || '?').slice(0, 1),
+    time: cmTimeAgo(c.created_at),
+    content: c.body,
+    likes: 0,   // 목록 응답엔 like_count가 없어 0에서 시작 → 토글 시 서버 값으로 보정
+  }
 }
 
 async function toggleComments(postId) {
@@ -200,32 +324,40 @@ async function toggleComments(postId) {
   if (!post || post._commentsLoaded) return
   try {
     const { items = [] } = await fetchComments(postId)
-    post.commentsList = items.map(c => ({
-      id: c.id, user: c.nickname, avatar: (c.nickname || '?').slice(0, 1),
-      time: cmTimeAgo(c.created_at), content: c.body, likes: 0,
-    }))
+    post.commentsList = items.map(mapComment)
     post._commentsLoaded = true
   } catch {
     // 무시
   }
 }
 
-function toggleCommentLike(postId, commentId) {
+async function toggleCommentLike(postId, commentId) {
+  if (!requireAuth()) return
   const key = `${postId}-${commentId}`
-  likedComments[key] = !likedComments[key]
+  const post = posts.value.find(p => p.id === postId)
+  const comment = post?.commentsList.find(c => c.id === commentId)
+  const wasLiked = !!likedComments[key]
+  likedComments[key] = !wasLiked
+  if (comment) comment.likes += wasLiked ? -1 : 1
+  try {
+    const res = await apiToggleCommentLike(commentId)
+    likedComments[key] = res.liked
+    if (comment) comment.likes = res.like_count
+  } catch {
+    likedComments[key] = wasLiked
+    if (comment) comment.likes += wasLiked ? 1 : -1
+  }
 }
 
 async function submitComment(postId) {
+  if (!requireAuth()) return
   const text = (commentInputs[postId] || '').trim()
   if (!text) return
   const post = posts.value.find(p => p.id === postId)
   if (!post) return
   try {
     const c = await createComment(postId, text)
-    post.commentsList.push({
-      id: c.id, user: c.nickname, avatar: (c.nickname || '?').slice(0, 1),
-      time: cmTimeAgo(c.created_at), content: c.body, likes: 0,
-    })
+    post.commentsList.push(mapComment(c))
     post.comments++
     commentInputs[postId] = ''
   } catch {
@@ -233,68 +365,82 @@ async function submitComment(postId) {
   }
 }
 
-// ===== 글 목록 로딩 =====
+// ===== 글 목록 로딩 (실데이터) =====
 const loadError = ref('')
 function mapPost(p) {
   return {
     id: p.id,
+    userId: p.user_id,
     username: p.nickname,
     avatar: (p.nickname || '?').slice(0, 1),
-    userType: 'user',
     color: cmColor(p.user_id),
     time: cmTimeAgo(p.created_at),
-    category: CATEGORY_LABEL[p.category] || p.stock_name || '',
+    createdAt: p.created_at,
+    stockCode: p.stock_code || '',
+    stockName: p.stock_name || '',
+    category: CATEGORY_LABEL[p.category] || '',
     title: p.title,
     content: p.body,
-    chart: null,
     likes: p.like_count,
     comments: p.comment_count,
-    shares: 0,
     commentsList: [],
-    userId: p.user_id,
+    _commentsLoaded: false,
   }
+}
+// 새 글들을 posts에 병합(중복 id 제외) 후 최신순 정렬 — 좋아요/댓글 등이 단일 배열에서 동작
+function mergePosts(items) {
+  const existing = new Set(posts.value.map((p) => p.id))
+  for (const it of items) {
+    if (existing.has(it.id)) continue
+    posts.value.push(mapPost(it))
+    if (it.is_liked) likedPosts[it.id] = true
+    existing.add(it.id)
+  }
+  posts.value.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
 }
 async function loadPosts() {
   try {
     const { items = [] } = await fetchPosts({ sort: 'latest', size: 20 })
-    if (items.length) {
-      posts.value = items.map(mapPost)
-      for (const it of items) if (it.is_liked) likedPosts[it.id] = true
-    }
+    posts.value = items.map(mapPost)
+    for (const it of items) if (it.is_liked) likedPosts[it.id] = true
   } catch (e) {
-    loadError.value = e?.response?.data?.detail || ''
+    loadError.value = e?.response?.data?.detail || '글을 불러오지 못했어요.'
   }
 }
-onMounted(loadPosts)
-
-// ===== 차트 SVG 헬퍼 =====
-// 달러/원 환율 라인 차트 포인트
-function exchangeRatePath(w, h) {
-  const vals = [1200,1230,1210,1260,1290,1270,1310,1350,1330,1390,1420,1410,1460,1490,1520,1510,1545]
-  const min = 1180, max = 1560, range = max - min, n = vals.length
-  const pts = vals.map((v, i) => {
-    const x = (i / (n - 1)) * w
-    const y = h - 12 - ((v - min) / range) * (h - 28)
-    return [x.toFixed(1), y.toFixed(1)]
-  })
-  const line = pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x},${y}`).join(' ')
-  const area = `${line} L${w},${h} L0,${h} Z`
-  return { line, area }
+// 관심 종목(선호+보유) 종목별 글을 모아 병합 (탭 첫 진입 시 1회)
+async function loadInterestPosts() {
+  if (interestLoaded.value) return
+  interestLoaded.value = true
+  const codes = [...interestCodes.value].slice(0, 10)   // 외부 호출 폭주 방지
+  if (!codes.length) return
+  try {
+    const results = await Promise.all(
+      codes.map((code) =>
+        fetchPosts({ stock_code: code, sort: 'latest', size: 10 }).catch(() => ({ items: [] })),
+      ),
+    )
+    for (const r of results) mergePosts(r.items || [])
+  } catch {
+    // 무시
+  }
 }
-
-// 코스피 외국인 순매도 막대 데이터
-const koBarData = [
-  -5174, -5100, 14000, -5100, -7221, 6002, -2225, -9210, 2460, -5222, 4214, -1342, 6219, -6195,
-]
-function koBarRect(vals, idx, w, h) {
-  const maxAbs = Math.max(...vals.map(Math.abs))
-  const barW = w / vals.length - 2
-  const x = (idx / vals.length) * w + 1
-  const v = vals[idx]
-  const barH = (Math.abs(v) / maxAbs) * (h / 2 - 8)
-  const y = v >= 0 ? h / 2 - barH : h / 2
-  return { x, y, barW, barH, pos: v >= 0 }
+// 내가 팔로우 중인 유저 id 집합 (팔로우 버튼 초기 상태)
+async function loadFollowing() {
+  if (!auth.isAuthenticated || auth.user?.id == null) return
+  try {
+    const { items = [] } = await fetchFollowing(auth.user.id)
+    for (const u of items) followedUserIds[u.user_id] = true
+  } catch {
+    // 무시
+  }
 }
+onMounted(() => {
+  loadPosts()
+  loadFollowing()
+  loadHoldingCodes()
+  loadPopularPosts()
+  loadPopularStockCommunities()
+})
 </script>
 
 <template>
@@ -311,44 +457,72 @@ function koBarRect(vals, idx, w, h) {
           </svg>
           <input type="search" placeholder="커뮤니티 검색" />
         </label>
-        <button class="write-btn" @click="writeMode = !writeMode">
+        <button class="write-btn" @click="openWrite">
           <span>✏️</span> 글쓰기
         </button>
       </div>
     </header>
 
-    <!-- ===== 글쓰기 바 ===== -->
+    <!-- ===== 글쓰기 바 (모든 글은 종목에 속함) ===== -->
     <div class="write-bar panel" :class="{ 'is-expanded': writeMode }">
       <div class="write-bar-inner">
-        <div class="write-avatar">김</div>
+        <div class="write-avatar">{{ myInitial }}</div>
         <input
           v-if="!writeMode"
           class="write-prompt"
           placeholder="오늘 시장 어떻게 보세요?"
           readonly
-          @click="writeMode = true"
+          @click="openWrite"
         />
-        <textarea
-          v-else
-          v-model="writeText"
-          class="write-textarea"
-          placeholder="투자 인사이트를 공유해보세요..."
-          rows="3"
-          autofocus
-        ></textarea>
+        <div v-else class="write-form">
+          <div class="write-fields">
+            <!-- 종목명 검색 → 드롭다운에서 선택 -->
+            <div class="stock-search-wrap">
+              <input
+                v-model="stockQuery"
+                class="write-field"
+                :class="{ 'is-picked': selectedStock }"
+                placeholder="종목명 검색 (예: 삼성전자, NVIDIA)"
+                @focus="stockDropdownOpen = true"
+                @blur="stockDropdownOpen = false"
+                @input="onStockSearch"
+              />
+              <span v-if="selectedStock" class="stock-pick-badge">{{ selectedStock.code }}</span>
+              <div v-if="stockDropdownOpen && stockResults.length" class="stock-dropdown">
+                <button
+                  v-for="s in stockResults"
+                  :key="s.code"
+                  type="button"
+                  class="stock-dd-row"
+                  @mousedown.prevent="pickStock(s)"
+                >
+                  <span class="stock-dd-name">{{ s.name }}</span>
+                  <span class="stock-dd-meta">{{ s.market }} · {{ s.code }}</span>
+                </button>
+              </div>
+            </div>
+            <input v-model="writeTitle" class="write-field" placeholder="제목" />
+          </div>
+          <textarea
+            v-model="writeText"
+            class="write-textarea"
+            placeholder="투자 인사이트를 공유해보세요..."
+            rows="3"
+          ></textarea>
+        </div>
       </div>
       <div class="write-bar-actions" v-if="writeMode">
-        <div class="write-options">
-          <button class="write-opt-btn">📷 사진</button>
-          <button class="write-opt-btn">📊 차트</button>
-          <button class="write-opt-btn">🏷️ 태그</button>
-        </div>
+        <span class="write-error">{{ writeError }}</span>
         <div class="write-submit-row">
-          <button class="write-cancel-btn" @click="writeMode = false; writeText = ''">취소</button>
-          <button class="write-submit-btn" :disabled="!writeText.trim()">의견 남기기</button>
+          <button class="write-cancel-btn" @click="cancelWrite">취소</button>
+          <button
+            class="write-submit-btn"
+            :disabled="!canSubmitPost || writing"
+            @click="submitPost"
+          >{{ writing ? '게시 중…' : '게시하기' }}</button>
         </div>
       </div>
-      <button v-else class="write-cta-btn">의견 남기기</button>
+      <button v-else class="write-cta-btn" @click="openWrite">의견 남기기</button>
     </div>
 
     <!-- ===== 카테고리 탭 ===== -->
@@ -358,7 +532,7 @@ function koBarRect(vals, idx, w, h) {
         :key="cat"
         class="cm-tab"
         :class="{ 'is-active': selectedCategory === cat }"
-        @click="selectedCategory = cat"
+        @click="selectTab(cat)"
       >{{ cat }}</button>
     </div>
 
@@ -368,10 +542,13 @@ function koBarRect(vals, idx, w, h) {
       <!-- 피드 -->
       <div class="cm-feed">
 
-        <!-- 팔로잉 탭에서 아무것도 없을 때 -->
+        <!-- 비어 있을 때 -->
         <div v-if="filteredPosts.length === 0" class="empty-feed">
-          <span>👤</span>
-          <p>팔로우한 채널의 글이 없습니다.<br>관심 있는 채널을 팔로우해보세요.</p>
+          <span>{{ selectedCategory === '팔로잉' ? '👤' : selectedCategory === '관심 종목' ? '⭐' : '📝' }}</span>
+          <p v-if="loadError">{{ loadError }}</p>
+          <p v-else-if="selectedCategory === '팔로잉'">팔로우한 사람의 글이 없습니다.<br>관심 있는 작성자를 팔로우해보세요.</p>
+          <p v-else-if="selectedCategory === '관심 종목'">선호·보유 종목에 대한 글이 없습니다.<br>종목을 담거나 보유하면 관련 글이 모여요.</p>
+          <p v-else>아직 글이 없습니다.<br>첫 글을 남겨보세요!</p>
         </div>
 
         <!-- 포스트 카드 -->
@@ -387,106 +564,64 @@ function koBarRect(vals, idx, w, h) {
               <div class="post-author-info">
                 <div class="post-author-name-row">
                   <strong>{{ post.username }}</strong>
-                  <span v-if="post.userType === 'channel'" class="channel-badge">채널</span>
                 </div>
                 <div class="post-meta-row">
+                  <button
+                    v-if="post.stockName"
+                    type="button"
+                    class="post-stock-chip"
+                    @click="goStockCommunity(post.stockCode)"
+                  >📈 {{ post.stockName }}</button>
                   <span class="post-time">{{ post.time }}</span>
-                  <span class="post-dot">·</span>
-                  <span class="post-category">{{ post.category }}</span>
+                  <template v-if="post.category">
+                    <span class="post-dot">·</span>
+                    <span class="post-category">{{ post.category }}</span>
+                  </template>
                 </div>
               </div>
             </div>
             <div class="post-header-actions">
               <button
+                v-if="!isMyPost(post)"
                 class="follow-btn"
-                :class="{ 'is-following': followedUsers[post.username] }"
-                @click="toggleFollow(post.username)"
+                :class="{ 'is-following': followedUserIds[post.userId] }"
+                @click="toggleFollow(post)"
               >
-                {{ followedUsers[post.username] ? '팔로잉' : '팔로우' }}
+                {{ followedUserIds[post.userId] ? '팔로잉' : '팔로우' }}
               </button>
-              <button class="more-btn">···</button>
+              <!-- ··· 메뉴: 본인 글에만 (수정/삭제) -->
+              <div v-if="isMyPost(post)" class="post-menu-wrap">
+                <button class="more-btn" @click.stop="toggleMenu(post.id)">···</button>
+                <template v-if="openMenuId === post.id">
+                  <div class="menu-backdrop" @click="openMenuId = null"></div>
+                  <div class="post-menu">
+                    <button class="post-menu-item" @click="startEdit(post)">✏️ 수정</button>
+                    <button class="post-menu-item is-danger" @click="removePost(post)">🗑️ 삭제</button>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
 
           <!-- 포스트 내용 -->
           <div class="post-body">
-            <h3 class="post-title">{{ post.title }}</h3>
-            <p v-if="post.content" class="post-content" style="white-space: pre-line">{{ post.content }}</p>
-
-            <!-- 달러환율 라인 차트 -->
-            <div v-if="post.chart === 'exchange-rate'" class="post-chart-wrap">
-              <div class="chart-label-row">
-                <span class="chart-source">Bloomberg</span>
-                <span class="chart-tag">달러/원 환율 추이</span>
+            <template v-if="editingId === post.id">
+              <input v-model="editTitle" class="edit-field" placeholder="제목" />
+              <textarea v-model="editBody" class="edit-textarea" rows="4" placeholder="내용"></textarea>
+              <span v-if="editError" class="write-error">{{ editError }}</span>
+              <div class="edit-actions">
+                <button class="write-cancel-btn" @click="cancelEdit">취소</button>
+                <button
+                  class="write-submit-btn"
+                  :disabled="!editTitle.trim() || !editBody.trim() || editSaving"
+                  @click="saveEdit(post)"
+                >{{ editSaving ? '저장 중…' : '저장' }}</button>
               </div>
-              <svg viewBox="0 0 480 180" preserveAspectRatio="none" class="post-chart-svg">
-                <defs>
-                  <linearGradient id="erGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="rgba(255,59,92,0.2)"/>
-                    <stop offset="100%" stop-color="rgba(255,59,92,0)"/>
-                  </linearGradient>
-                </defs>
-                <line v-for="y in [40,80,120,160]" :key="y" x1="0" :y1="y" x2="480" :y2="y"
-                  stroke="rgba(180,200,255,0.2)" stroke-width="1" />
-                <path :d="exchangeRatePath(480,180).area" fill="url(#erGrad)" />
-                <path :d="exchangeRatePath(480,180).line" fill="none" stroke="#FF3B5C" stroke-width="2.5"
-                  stroke-linecap="round" stroke-linejoin="round" />
-                <!-- Y축 레이블 -->
-                <text x="8" y="20" fill="rgba(150,170,200,0.8)" font-size="11">1,600</text>
-                <text x="8" y="90" fill="rgba(150,170,200,0.8)" font-size="11">1,400</text>
-                <text x="8" y="165" fill="rgba(150,170,200,0.8)" font-size="11">1,200</text>
-                <!-- 현재가 라벨 -->
-                <text x="420" y="22" fill="#FF3B5C" font-size="12" font-weight="900">1,545</text>
-                <!-- 2009 표시 -->
-                <text x="60" y="120" fill="rgba(255,255,255,0.5)" font-size="10">2009 금융위기</text>
-                <line x1="80" y1="108" x2="80" y2="180" stroke="rgba(255,255,255,0.2)" stroke-width="1" stroke-dasharray="3 3"/>
-              </svg>
-              <div class="chart-x-labels">
-                <span>'98</span><span>'02</span><span>'06</span><span>'10</span>
-                <span>'14</span><span>'18</span><span>'22</span><span>'25</span>
-              </div>
-            </div>
-
-            <!-- 코스피 순매도 막대 차트 -->
-            <div v-if="post.chart === 'kospi-bar'" class="post-chart-wrap">
-              <div class="chart-label-row">
-                <span class="chart-tag">외국인 코스피 순매도 추이</span>
-                <span class="chart-source">단위: 억원</span>
-              </div>
-              <svg viewBox="0 0 480 160" preserveAspectRatio="none" class="post-chart-svg">
-                <line x1="0" y1="80" x2="480" y2="80" stroke="rgba(180,200,255,0.4)" stroke-width="1"/>
-                <g v-for="(val, i) in koBarData" :key="i">
-                  <rect
-                    :x="koBarRect(koBarData, i, 480, 160).x"
-                    :y="koBarRect(koBarData, i, 480, 160).y"
-                    :width="koBarRect(koBarData, i, 480, 160).barW"
-                    :height="koBarRect(koBarData, i, 480, 160).barH"
-                    :fill="koBarRect(koBarData, i, 480, 160).pos ? 'rgba(0,102,204,0.75)' : 'rgba(255,59,92,0.75)'"
-                    rx="2"
-                  />
-                </g>
-              </svg>
-            </div>
-
-            <!-- 알림 박스 차트 -->
-            <div v-if="post.chart === 'alert-box'" class="alert-box">
-              <div class="alert-row is-neg">
-                <span class="alert-label">🚨 외국인 순매도</span>
-                <strong>18일 연속 · -103조원</strong>
-              </div>
-              <div class="alert-row">
-                <span class="alert-label">📊 2008 금융위기 당시</span>
-                <strong>62조원</strong>
-              </div>
-              <div class="alert-row">
-                <span class="alert-label">😷 2020년 코로나</span>
-                <strong>25조원</strong>
-              </div>
-              <div class="alert-row is-warn">
-                <span class="alert-label">⚠️ 현재 기록</span>
-                <strong>역사적 신기록 진행중</strong>
-              </div>
-            </div>
+            </template>
+            <template v-else>
+              <h3 class="post-title">{{ post.title }}</h3>
+              <p v-if="post.content" class="post-content" style="white-space: pre-line">{{ post.content }}</p>
+            </template>
           </div>
 
           <!-- 반응 바 -->
@@ -509,11 +644,6 @@ function koBarRect(vals, idx, w, h) {
                 <span>💬</span>
                 <span class="reaction-count">{{ post.comments }}</span>
               </button>
-
-              <button class="reaction-btn share-btn" @click="">
-                <span>🔗</span>
-                <span class="reaction-count">{{ post.shares }}</span>
-              </button>
             </div>
             <button class="bookmark-btn">🔖</button>
           </div>
@@ -524,7 +654,7 @@ function koBarRect(vals, idx, w, h) {
 
               <!-- 댓글 입력 -->
               <div class="comment-input-row">
-                <div class="comment-avatar cm-me">김</div>
+                <div class="comment-avatar cm-me">{{ myInitial }}</div>
                 <div class="comment-input-wrap">
                   <input
                     :value="commentInputs[post.id]"
@@ -563,7 +693,7 @@ function koBarRect(vals, idx, w, h) {
                         @click="toggleCommentLike(post.id, comment.id)"
                       >
                         {{ likedComments[`${post.id}-${comment.id}`] ? '♥' : '♡' }}
-                        {{ comment.likes + (likedComments[`${post.id}-${comment.id}`] ? 1 : 0) }}
+                        {{ comment.likes }}
                       </button>
                       <button class="comment-reply-btn">답글</button>
                     </div>
@@ -588,8 +718,9 @@ function koBarRect(vals, idx, w, h) {
           <div class="popular-list">
             <div
               v-for="item in popularPosts"
-              :key="item.rank"
+              :key="item.id"
               class="popular-item"
+              @click="item.stockCode && goStockCommunity(item.stockCode)"
             >
               <span class="popular-rank" :class="item.rank <= 3 ? 'is-top' : ''">
                 {{ item.rank }}
@@ -602,6 +733,7 @@ function koBarRect(vals, idx, w, h) {
                 </div>
               </div>
             </div>
+            <p v-if="!popularPosts.length" class="sidebar-empty">아직 인기글이 없어요.</p>
           </div>
         </div>
 
@@ -622,10 +754,11 @@ function koBarRect(vals, idx, w, h) {
               <span class="stock-comm-logo" :style="{ background: s.color }">{{ s.logo }}</span>
               <div class="stock-comm-info">
                 <strong>{{ s.name }}<span v-if="s.hot" class="hot-tag">HOT</span></strong>
-                <span>토론방 멤버 {{ s.members }}</span>
+                <span class="sc-rate" :class="s.up ? 'sc-up' : 'sc-down'">{{ s.rate }}</span>
               </div>
               <span class="stock-comm-go">→</span>
             </button>
+            <p v-if="!popularStockCommunities.length" class="sidebar-empty">불러오는 중…</p>
           </div>
         </div>
 
@@ -650,6 +783,7 @@ function koBarRect(vals, idx, w, h) {
               </div>
               <span class="stock-comm-go">→</span>
             </button>
+            <p v-if="!recentStockCommunities.length" class="sidebar-empty">최근 조회한 종목이 없어요.</p>
           </div>
         </div>
 
@@ -763,6 +897,73 @@ function koBarRect(vals, idx, w, h) {
   outline: none;
 }
 
+.write-form { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.write-fields { display: flex; gap: 8px; flex-wrap: wrap; }
+.write-field {
+  flex: 1;
+  min-width: 140px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+  transition: border-color 0.18s;
+}
+.write-field:focus { border-color: var(--accent); }
+.write-field::placeholder { color: var(--faint); }
+
+/* 종목명 검색 드롭다운 */
+.stock-search-wrap { position: relative; flex: 1; min-width: 140px; display: flex; }
+.stock-search-wrap .write-field { flex: 1; padding-right: 64px; }
+.write-field.is-picked { border-color: var(--accent); }
+.stock-pick-badge {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 900;
+  pointer-events: none;
+}
+.stock-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  padding: 6px;
+  border-radius: var(--radius);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 16px 40px rgba(17, 24, 39, 0.16);
+  max-height: 280px;
+  overflow-y: auto;
+}
+.stock-dd-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.14s;
+}
+.stock-dd-row:hover { background: var(--surface-soft); }
+.stock-dd-name { font-size: 13px; font-weight: 900; color: var(--ink); }
+.stock-dd-meta { font-size: 11px; font-weight: 700; color: var(--faint); }
+
 .write-textarea {
   flex: 1;
   padding: 12px 14px;
@@ -777,6 +978,8 @@ function koBarRect(vals, idx, w, h) {
   line-height: 1.6;
 }
 
+.write-error { font-size: 12px; font-weight: 800; color: var(--negative); }
+
 .write-bar-actions {
   display: flex;
   align-items: center;
@@ -786,22 +989,6 @@ function koBarRect(vals, idx, w, h) {
   flex-wrap: wrap;
   gap: 10px;
 }
-
-.write-options { display: flex; gap: 6px; }
-
-.write-opt-btn {
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--glass-border);
-  background: var(--surface-soft);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: background 0.16s;
-}
-
-.write-opt-btn:hover { background: var(--surface-hover); color: var(--ink); }
 
 .write-submit-row { display: flex; gap: 8px; }
 
@@ -930,15 +1117,6 @@ function koBarRect(vals, idx, w, h) {
   color: var(--ink);
 }
 
-.channel-badge {
-  font-size: 10px;
-  font-weight: 900;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(var(--accent-rgb),0.1);
-  color: var(--accent);
-}
-
 .post-meta-row {
   display: flex;
   align-items: center;
@@ -949,7 +1127,87 @@ function koBarRect(vals, idx, w, h) {
 .post-time, .post-category { font-size: 11px; font-weight: 700; color: var(--faint); }
 .post-dot { font-size: 11px; color: var(--faint); }
 
+/* 종목 칩 (작성 글의 종목 정보) */
+.post-stock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 0.14s;
+}
+.post-stock-chip:hover { background: rgba(var(--accent-rgb), 0.16); }
+
 .post-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* ··· 메뉴 (본인 글) */
+.post-menu-wrap { position: relative; }
+.menu-backdrop { position: fixed; inset: 0; z-index: 40; }
+.post-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 41;
+  min-width: 120px;
+  padding: 6px;
+  border-radius: var(--radius);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 14px 36px rgba(17, 24, 39, 0.18);
+}
+.post-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s;
+}
+.post-menu-item:hover { background: var(--surface-soft); }
+.post-menu-item.is-danger { color: var(--negative); }
+.post-menu-item.is-danger:hover { background: rgba(207, 61, 61, 0.08); }
+
+/* 인라인 수정 폼 */
+.edit-field {
+  width: 100%;
+  height: 40px;
+  padding: 0 14px;
+  margin-bottom: 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+  outline: none;
+}
+.edit-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+  outline: none;
+  resize: vertical;
+}
+.edit-field:focus, .edit-textarea:focus { border-color: var(--accent); }
+.edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 
 /* 팔로우 버튼 */
 .follow-btn {
@@ -1002,69 +1260,6 @@ function koBarRect(vals, idx, w, h) {
   line-height: 1.6;
   word-break: keep-all;
 }
-
-/* 차트 */
-.post-chart-wrap {
-  border-radius: var(--radius);
-  overflow: hidden;
-  background: rgba(10,15,30,0.75);
-  border: 1px solid rgba(255,255,255,0.08);
-  padding: 10px 10px 4px;
-  margin-top: 10px;
-}
-
-.chart-label-row {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 6px;
-  padding: 0 2px;
-}
-
-.chart-tag { font-size: 11px; font-weight: 700; color: rgba(200,220,255,0.7); }
-.chart-source { font-size: 10px; font-weight: 700; color: rgba(200,220,255,0.4); }
-
-.post-chart-svg {
-  width: 100%;
-  height: 150px;
-}
-
-.chart-x-labels {
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 2px 2px;
-  font-size: 10px;
-  font-weight: 700;
-  color: rgba(150,170,200,0.6);
-}
-
-/* 알림 박스 */
-.alert-box {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 10px;
-  border-radius: var(--radius);
-  overflow: hidden;
-  border: 1px solid var(--glass-border);
-}
-
-.alert-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  background: var(--glass-subtle);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.alert-row.is-neg { background: rgba(255,59,92,0.08); }
-.alert-row.is-warn { background: rgba(229,139,16,0.08); }
-
-.alert-label { color: var(--muted); }
-.alert-row strong { color: var(--ink); font-size: 14px; }
-.alert-row.is-neg strong { color: #FF3B5C; }
-.alert-row.is-warn strong { color: #e58b10; }
 
 /* ===== 반응 바 ===== */
 .post-reactions {
@@ -1345,6 +1540,13 @@ function koBarRect(vals, idx, w, h) {
 
 .stock-comm-go { color: var(--faint); font-size: 15px; font-weight: 900; flex-shrink: 0; }
 .stock-comm-item:hover .stock-comm-go { color: var(--accent); }
+
+/* 인기 종목 등락률 (상승=빨강/하락=파랑) */
+.sc-rate.sc-up { color: var(--krx-up); }
+.sc-rate.sc-down { color: var(--krx-down); }
+
+/* 사이드바 빈 상태 */
+.sidebar-empty { margin: 6px; padding: 12px 6px; text-align: center; font-size: 12px; font-weight: 700; color: var(--faint); }
 
 /* ===== 반응형 ===== */
 @media (max-width: 1100px) {
