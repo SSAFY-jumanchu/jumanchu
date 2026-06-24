@@ -230,6 +230,37 @@ class StockOrderBookTests(APITestCase):
         self.assertEqual(res.json().get('code'), 'EXTERNAL_API_ERROR')
 
 
+class VolumePowerEnrichTests(APITestCase):
+    """인기 랭킹 체결강도(거래비율) 부착 — 워밍 캐시 우선 + 미스 즉석 채움(캡)."""
+
+    def setUp(self):
+        cache.clear()
+
+    def test_cache_hit_and_miss_fill(self):
+        from stocks.services.market_summary import _attach_volume_power
+        from stocks.services.price_dispatch import volpower_key
+        cache.set(volpower_key('KOSPI', '005930'),
+                  {'volume_power': 120.0, 'buy_ratio': 54.5, 'sell_ratio': 45.5})
+        items = [{'market': 'KOSPI', 'code': '005930'},   # 캐시 히트
+                 {'market': 'KOSPI', 'code': '000660'}]    # 미스 → fetch None
+        with patch('stocks.services.market_summary.fetch_volume_power', return_value=None) as m:
+            out = _attach_volume_power(items)
+        self.assertEqual(out[0]['volume_power'], 120.0)    # 캐시값 그대로
+        self.assertEqual(out[0]['buy_ratio'], 54.5)
+        self.assertIsNone(out[1]['volume_power'])          # 미스+fetch None → null
+        self.assertEqual(m.call_count, 1)                  # 미스 1개만 즉석 호출
+
+    def test_miss_fill_capped(self):
+        from stocks.services.market_summary import _attach_volume_power, _VOLPOWER_FILL_LIMIT
+        items = [{'market': 'KOSPI', 'code': f'{i:06d}'} for i in range(20)]  # 전부 미스
+        vp = {'volume_power': 100.0, 'buy_ratio': 50.0, 'sell_ratio': 50.0}
+        with patch('stocks.services.market_summary.fetch_volume_power', return_value=vp) as m:
+            out = _attach_volume_power(items)
+        self.assertEqual(m.call_count, _VOLPOWER_FILL_LIMIT)  # 즉석 호출은 N개로 제한
+        self.assertEqual(sum(1 for it in out if it['volume_power'] is not None),
+                         _VOLPOWER_FILL_LIMIT)
+
+
 class MarketHoursTests(APITestCase):
     @classmethod
     def setUpTestData(cls):

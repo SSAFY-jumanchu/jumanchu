@@ -16,10 +16,13 @@ from datetime import timedelta
 from decimal import Decimal
 
 import requests
+from django.core.cache import cache
 from django.utils import timezone
 
 from stocks.models import Stock
-from stocks.services.price_dispatch import get_kis_client
+from stocks.services.price_dispatch import (
+    VOLPOWER_TTL, fetch_volume_power, get_kis_client, volpower_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +225,47 @@ def popular_ranking(market: str = "all", sort: str = "value", size: int = 30) ->
         items += _popular_pool(_US_MARKETS, rows, _map_us_rank)
     key, reverse = _POPULAR_SORT.get(sort, _POPULAR_SORT["value"])
     items.sort(key=key, reverse=reverse)
-    return items[:size]
+    return _attach_volume_power(items[:size])
+
+
+# ----- 체결강도(거래비율) 부착 — 워밍 캐시 우선 + 미스 즉석 채움 -----
+_VOLPOWER_FILL_LIMIT = 8  # 캐시 미스(새 진입 종목) 중 요청 경로에서 즉석 채울 최대 개수
+
+
+def popular_universe(size: int = 120) -> list[tuple[str, str]]:
+    """체결강도 워밍 대상 — 인기 풀(거래량 순위 KR+US 활성종목)의 (market, code) 목록.
+    표시(≤50)보다 넓게 워밍해 랭킹 드리프트(새 진입)를 미리 덮는다."""
+    c = get_kis_client()
+    items: list[dict] = []
+    items += _popular_pool(_KR_MARKETS, _retry(c.get_domestic_volume_rank).get("output", []), _map_kr_rank)
+    items += _popular_pool(
+        _US_MARKETS, _retry(lambda: c.get_overseas_volume_rank(_US_EXCD)).get("output2", []), _map_us_rank)
+    items.sort(key=lambda x: (x.get("volume") or 0), reverse=True)
+    return [(it["market"], it["code"]) for it in items[:size]]
+
+
+def _attach_volume_power(items: list[dict]) -> list[dict]:
+    """각 행에 volume_power/buy_ratio/sell_ratio 부착.
+    워밍 캐시(stock:volpower:*) 우선, 캐시에 없는 행은 상위 N개만 즉석 호출 후 적재(드리프트 대응)."""
+    if not items:
+        return items
+    keys = [volpower_key(it["market"], it["code"]) for it in items]
+    cached = cache.get_many(keys)
+    filled = 0
+    for it, k in zip(items, keys):
+        if k in cached or filled >= _VOLPOWER_FILL_LIMIT:
+            continue
+        filled += 1
+        vp = fetch_volume_power(it["market"], it["code"])
+        if vp is not None:
+            cache.set(k, vp, timeout=VOLPOWER_TTL)
+            cached[k] = vp
+    for it, k in zip(items, keys):
+        vp = cached.get(k)
+        it["volume_power"] = vp["volume_power"] if vp else None
+        it["buy_ratio"] = vp["buy_ratio"] if vp else None
+        it["sell_ratio"] = vp["sell_ratio"] if vp else None
+    return items
 
 
 # ----- 조립 -----

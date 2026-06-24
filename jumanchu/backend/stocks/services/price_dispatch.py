@@ -36,6 +36,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+import requests
 from django.core.cache import cache
 from django.utils import timezone
 
@@ -247,6 +248,52 @@ def fetch_orderbook(stock: Stock) -> dict:
 def get_orderbook_ttl(stock: Stock) -> int:
     """호가 캐시 TTL: 장중 1s / 장외 30s (현재가 3s/60s보다 짧게 — 호가는 체결마다 변동)."""
     return 1 if _is_market_open(stock.market) else 30
+
+
+# ----- 체결강도(거래비율, volume power) — 인기 랭킹 컬럼용 -----
+
+VOLPOWER_TTL = 60  # 체결강도 캐시 TTL(초). 워밍 배치 주기와 맞춤.
+
+
+def volpower_key(market: str, code: str) -> str:
+    return f"stock:volpower:{market}:{code}"
+
+
+def fetch_volume_power(market: str, code: str) -> Optional[dict]:
+    """체결강도(매수/매도 체결 비율). 실패·데이터 없음이면 None(랭킹 안 죽임).
+
+    KR: 체결 API(FHKST01010300) 최근 틱 tday_rltv(=누적 매수체결/매도체결 ×100).
+    US: 호가 API(HHDFS76200100) output1 bvol/avol(매수/매도 체결량) → 직접 계산.
+    반환: {volume_power(체결강도), buy_ratio(매수%), sell_ratio(매도%)}.
+    """
+    client = get_kis_client()
+    try:
+        if market in DOMESTIC_MARKETS:
+            rows = client.get_domestic_ccnl(code).get("output") or []
+            if not rows:
+                return None
+            raw = rows[0].get("tday_rltv")
+            r = float(raw) if raw not in (None, "") else None
+            if r is None or r < 0:
+                return None
+            buy = r / (r + 100) * 100  # 체결강도 r=매수/매도×100 → 매수비율=r/(r+100)
+            return {"volume_power": round(r, 2),
+                    "buy_ratio": round(buy, 1), "sell_ratio": round(100 - buy, 1)}
+        if market in US_MARKETS:
+            excd = MARKET_TO_EXCD[market]
+            o1 = client.get_overseas_orderbook(excd, code).get("output1", {})
+            bvol = float(o1.get("bvol") or 0)
+            avol = float(o1.get("avol") or 0)
+            if bvol + avol <= 0:
+                return None  # 장외/데이터 없음
+            buy = bvol / (bvol + avol) * 100
+            vp = bvol / avol * 100 if avol > 0 else 999.99
+            return {"volume_power": round(vp, 2),
+                    "buy_ratio": round(buy, 1), "sell_ratio": round(100 - buy, 1)}
+    except (requests.HTTPError, requests.Timeout, RuntimeError, KeyError,
+            ValueError, InvalidOperation):
+        return None
+    return None
 
 
 # ----- 분봉 (chart API용) -----

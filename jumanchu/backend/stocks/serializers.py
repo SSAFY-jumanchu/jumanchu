@@ -188,6 +188,10 @@ class PopularStockSerializer(serializers.Serializer):
     trading_value = serializers.DecimalField(max_digits=24, decimal_places=4, allow_null=True)       # 원본 통화
     trading_value_krw = serializers.DecimalField(max_digits=24, decimal_places=4, allow_null=True)   # 정렬용 KRW 환산
     volume = serializers.IntegerField(allow_null=True)
+    # 거래비율(체결강도) — 워밍 캐시. 워밍 전/실패면 null
+    volume_power = serializers.FloatField(allow_null=True, required=False)   # 체결강도(매수/매도×100)
+    buy_ratio = serializers.FloatField(allow_null=True, required=False)      # 매수 체결 %
+    sell_ratio = serializers.FloatField(allow_null=True, required=False)     # 매도 체결 %
 
 
 class PopularRankingResponseSerializer(serializers.Serializer):

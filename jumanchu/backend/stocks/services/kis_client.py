@@ -183,6 +183,23 @@ class KISClient:
             },
         )
 
+    def get_domestic_ccnl(self, stock_code: str) -> dict[str, Any]:
+        """국내주식 현재가 체결 (FHKST01010300). 최근 30틱.
+
+        output(list) 각 틱 활용 필드:
+          stck_cntg_hour  체결시각,  stck_prpr  체결가,  cntg_vol  체결량
+          tday_rltv       당일 체결강도(=누적 매수체결량/매도체결량×100, >100 매수우위)
+        → 체결강도(거래비율)는 output[0](최근 틱)의 tday_rltv 사용.
+        """
+        return self._get(
+            path="/uapi/domestic-stock/v1/quotations/inquire-ccnl",
+            tr_id="FHKST01010300",
+            params={
+                "FID_COND_MRKT_DIV_CODE": "J",
+                "FID_INPUT_ISCD": stock_code,
+            },
+        )
+
     def get_overseas_price_detail(self, excd: str, symbol: str) -> dict[str, Any]:
         """해외주식 현재가 상세 (HHDFS76200200). 모의 환경 OK.
 
