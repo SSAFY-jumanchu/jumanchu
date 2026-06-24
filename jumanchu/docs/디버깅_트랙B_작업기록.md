@@ -9,19 +9,39 @@
 
 > 아래는 **BE 선행이 끝나면 FE가 이어서 작업**할 항목. 트랙 A 해당 작업이 머지되면 이 파일로 돌아와 연결한다.
 > 현재는 모두 보류(이번 PR 범위 밖). API 함수 다수는 이미 존재(데드 export) — **연결만** 하면 되는 경우가 많음.
+> 앵커는 2026-06-24 현재 코드 기준 재검증(아래 §교차검증 참조).
 
-| ☐ | 항목 | 파일 | BE 선행(트랙 A) | FE가 할 일 |
-|---|---|---|---|---|
-| ☐ | 호가 실데이터 | StockDetail | orderbook 구현(현 501 스텁) or 제거 결정 | 구현 시 `fetchStockOrderbook`로 `asks`/`bids` 교체(현재 하드코딩) + 현재가/등락 바인딩. 제거 결정 시 호가 패널 삭제 |
-| ☐ | 매수 후 매매일지 자동연동 | StockDetail | order_id 핸드셰이크(이미 지원됨) | `submitOrder` 성공 후 생성된 `order_id`로 매매일지 작성 유도(라우팅 또는 토스트) |
-| ☐ | 관심종목 추가 버튼 | StockDetail | watchlist 모델+등록/조회 API 신설 | `watch-toggle-btn`에 `@click` 배선 + `is_in_watchlist` 상태 토글(현재 死버튼) |
-| ☐ | 매매일지·장투점수 히스토리 | Portfolio | diary/score-history 연동 API | `loadPortfolio`에서 `journal`/`history` 실데이터 채움(현재 빈 배열+빈 상태 UI만 처리됨) |
-| ☐ | 목표/손절 % 저장 | TradingDiary | %↔절대가 단위 정의 합의 | 합의된 단위로 `createDiary`에 `target_price`/`stop_loss_price` 전송(현재 메모만 전송) |
-| ☐ | 투자성향 재검사 버튼 | MyPage | 재제출 409 완화 정책 | `retest-btn`에 `@click`으로 `/onboarding` 라우팅(현재 死버튼). 409 정책 확정 후 |
+| ☐ | 항목 | 파일:현재앵커 | 현재 상태(死) | BE 선행(트랙 A) | 머지 후 FE가 할 일 |
+|---|---|---|---|---|---|
+| ☐ | 호가 실데이터 | StockDetail:163·174 (`asks`/`bids` ref 하드코딩), 템플릿 725~772 | 하드코딩 5호가 + BE orderbook **501 스텁** | orderbook 구현 or **제거 결정**(B와 합의) | 구현 시 `fetchStockOrderbook`로 `asks`/`bids` 교체 + 현재가/등락 바인딩. 제거 결정 시 호가 패널(725~772)·`asks`/`bids`/`maxAskQty`/`maxBidQty` 삭제 |
+| ☐ | 매수 후 매매일지 자동연동 | StockDetail:286 `submitOrder`, 버튼 1148 | 주문만 생성, 일지 트리거 없음 | order_id 핸드셰이크(**이미 지원됨**) | `submitOrder` 성공 응답 `order_id`로 `/trading-diary` 라우팅 또는 토스트 유도. (TradingDiary는 이미 미작성 주문을 `pendingTrades`로 노출하므로 라우팅만으로 연결됨) |
+| ☐ | 관심종목 추가 버튼 | StockDetail:548 `watch-toggle-btn`(`@click` 없음) | 死버튼, `is_in_watchlist` 항상 False | watchlist 모델+등록/조회 API 신설(P0·범위큼) | `watch-toggle-btn`에 `@click` 배선 + `is_in_watchlist` 토글·별표(☆/★) 상태 |
+| ☐ | 매매일지·장투점수 히스토리 | Portfolio:124~125 (`journal:[]`/`history:[]` 고정), 템플릿 232~254 | 항상 빈 배열(빈 상태 UI만 처리됨) | diary/score-history 종목별 조회 API | 매핑에서 `journal`/`history` 실데이터 채움 → 빈 상태 자동 해제 |
+| ☐ | 목표/손절 % 저장 | TradingDiary:124 (`createDiary` memo만 전송) | %↔절대가 변환불가로 미전송 | %↔절대가 **단위 정의 합의** | 합의된 단위로 `createDiary`에 `target_price`/`stop_loss_price` 추가 전송 |
+| ☐ | 실현수익 actual 연동 | TradingDiary:40 (`actual:'—'` 고정) | 복기 실제수익 항상 '—' | Order `realized_pnl`을 diary 응답에 노출 | `mapDiary`에서 `actual`을 실현손익으로 채움(현재 '—' 하드코딩) |
+| ☐ | 투자성향 재검사 버튼 | MyPage:401 `retest-btn`(`@click` 없음) | 死버튼 | 재제출 **409 완화 정책** | `retest-btn`에 `@click`으로 `/onboarding` 라우팅(409 정책 확정 후) |
 
-### 같은 패턴(목업 fallback) — §7 미포함이나 후속 정리 권장
-- MyPage: 계좌요약(balance/판매수익/배당/이자)·보유현황·월별수익률·활동내역·커뮤니티 통계 여전히 정적/목업.
-- StockDetail: '수익성' 막대차트(`profitability`) 삼성 하드코딩(BE `summaries[]`로 연동 가능).
+---
+
+## 교차검증 결과 (2026-06-24)
+
+> 작업기록의 '✅ 완료' 항목을 실제 커밋 코드(`ab2d861` 기준, 5개 `.vue`)와 줄 단위 대조.
+
+**§7 트랙 B 체크리스트 항목(의존 `—`) — 전부 코드 반영 확인 ✅**
+
+| 파일 | 검증 포인트(실코드 앵커) |
+|---|---|
+| TradingDiary | `entries=ref([])`(25)·`fetchOrders` 연동(73)·`pending.code`/`order_id` 전송(119~120)·빈/오류 상태(112·171) |
+| StockDetail | `stockInfo=ref({...빈값})`(318)·종토방 `communityPosts=ref([])`+`fetchStockPosts`+`author_nickname`(208·495·499)·`fetchStockNews`(384)·`peers=ref([])`/`targetPrice=ref(null)`(377~378)·`curSym`(97)·`maxVolume`(152)·5분봉 라벨(433)·매도수량 `loadHolding`(212·309) |
+| Holdings | `loadError` 배너(16·158)·`current_value` 합산(41·100)·바로가기 3개(내계좌/주문내역/매매일지, 188~196)·뉴스 `<a>` 링크화(298·415)·`hv-detail-actions`/`communityPost`/`*1380` 제거 확인 |
+| Portfolio | `hasReport`(110)·`total ?? null`(116)·`g-none`(42·311)·'리포트 준비 중'(206)·`holdings=ref([])`(15)·`loadError`(12·151) |
+| MyPage | address 제거(9)·`signedFmt`(88)·`trades=ref([])`/`tradesError`(45~46)·`realizedPnl`(64)·`birth_year` 편집(108·171)·투자성향 점수바 제거·`profileError`(93·390) |
+
+**⚠ 작업기록에 미기재된 잔여 하드코딩(§7 트랙 B 범위 밖 — 후속 정리 후보)**
+- **StockDetail 커뮤니티 '피드' 섹션**: `communityFeed` 목업 7건(399~407, 삼전/HBM 등)·`popularPosts` 하드코딩(414~418)·`addPost`는 로컬 `unshift`만(408~412, `createPost` 미연동). ※수정된 '종토방 탭'(`communityPosts`)과 **별개 UI**. §2-2/§7 미포함이라 미수정이나, 같은 목업 fallback 클래스라 기록 보강 차원에서 명시.
+- **StockDetail 재무지표 카드**: `valuation`/`earningsMetrics`/`dividendMetrics`/`financials` ref 정적값(322~341, PER 14.2배 등). 트랙 C(Watchlist `summaries` 소비)와 같은 데이터 소스 과제.
+- **StockDetail '수익성' 막대차트**: `profitability`/`profitDesc` 삼성 하드코딩(343~351). (작업기록 기존 명시 — BE `summaries[]`로 연동 가능)
+- **MyPage**: 계좌요약(balance/판매수익/배당/이자)·보유현황·월별수익률·활동내역·커뮤니티 통계 여전히 정적/목업.
 
 ---
 
