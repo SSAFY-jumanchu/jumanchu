@@ -83,6 +83,7 @@ class OrderBookSerializer(serializers.Serializer):
     bids = OrderBookEntrySerializer(many=True)
     total_ask_quantity = serializers.IntegerField()
     total_bid_quantity = serializers.IntegerField()
+    is_market_open = serializers.BooleanField()  # false + 빈 배열 = 장 마감, true + 빈 배열 = 호가 없음
     fetched_at = serializers.DateTimeField()
 
 
@@ -174,6 +175,29 @@ class MarketSummaryResponseSerializer(serializers.Serializer):
     indices = IndexSummarySerializer(many=True)
     kr = MarketRankingsSerializer()
     us = MarketRankingsSerializer()
+    fetched_at = serializers.DateTimeField()
+
+
+class PopularStockSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    name = serializers.CharField()
+    market = serializers.CharField()
+    current = serializers.DecimalField(max_digits=18, decimal_places=4)
+    change = serializers.DecimalField(max_digits=18, decimal_places=4)
+    change_rate = serializers.FloatField()
+    trading_value = serializers.DecimalField(max_digits=24, decimal_places=4, allow_null=True)       # 원본 통화
+    trading_value_krw = serializers.DecimalField(max_digits=24, decimal_places=4, allow_null=True)   # 정렬용 KRW 환산
+    volume = serializers.IntegerField(allow_null=True)
+    # 거래비율(체결강도) — 워밍 캐시. 워밍 전/실패면 null
+    volume_power = serializers.FloatField(allow_null=True, required=False)   # 체결강도(매수/매도×100)
+    buy_ratio = serializers.FloatField(allow_null=True, required=False)      # 매수 체결 %
+    sell_ratio = serializers.FloatField(allow_null=True, required=False)     # 매도 체결 %
+
+
+class PopularRankingResponseSerializer(serializers.Serializer):
+    items = PopularStockSerializer(many=True)
+    market = serializers.ChoiceField(choices=['all', 'domestic', 'overseas'])
+    sort = serializers.ChoiceField(choices=['value', 'volume', 'up', 'down'])
     fetched_at = serializers.DateTimeField()
 
 

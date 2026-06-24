@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from decimal import InvalidOperation
 
@@ -41,6 +42,21 @@ def _safe_price(stock):
     except (requests.HTTPError, requests.Timeout, RuntimeError, KeyError,
             ValueError, InvalidOperation):
         return None, None
+
+
+def _safe_quote(stock) -> dict:
+    """현재가/등락률/거래대금 — 랭킹·리스트용. KIS 실패 시 전부 None(브라우징 막지 않음)."""
+    try:
+        p = fetch_price(stock)
+        tv = p.get("trading_value")
+        return {
+            "current_price": float(p["current"]),
+            "change_rate": p["change_rate"],
+            "trading_value": float(tv) if tv is not None else None,
+        }
+    except (requests.HTTPError, requests.Timeout, RuntimeError, KeyError,
+            ValueError, InvalidOperation):
+        return {"current_price": None, "change_rate": None, "trading_value": None}
 
 
 def _item_dict(liked: UserLikedStock) -> dict:
@@ -194,7 +210,9 @@ def longterm_ranking(user, limit: int | None = None, offset: int = 0) -> list:
 
     종목 소계(LongTermScore.total_score, 70%) + 개인 궁합(compute_match_score, 30%)을
     longterm_total로 결합해 내림차순 정렬. LLM 호출 없음(숫자·등급만).
-    → [{rank, stock_code, stock_name, market, sector, longterm_total, subtotal, userfit, financial, growth}]
+    → [{rank, stock_code, stock_name, market, sector, longterm_total, subtotal, userfit,
+       financial, growth, current_price, change_rate, trading_value}]
+    가격 3필드(current_price/change_rate/trading_value)는 반환 페이지만 종목별 KIS 조회(watchlist와 동일 패턴).
     """
     profile = getattr(user, "investment_profile", None)
     if profile is None or profile.profiled_at is None:
@@ -229,6 +247,9 @@ def longterm_ranking(user, limit: int | None = None, offset: int = 0) -> list:
     scored.sort(key=lambda t: t[0], reverse=True)
 
     page = scored[offset: offset + limit if limit else None]
+    # 페이지 종목 시세를 제한 병렬로 조회 — 순차 N콜 지연을 줄이되 동시성 8로 rate-limit 완화.
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        quotes = list(ex.map(_safe_quote, [t[5] for t in page]))
     return [
         {
             "rank": offset + i,
@@ -239,6 +260,7 @@ def longterm_ranking(user, limit: int | None = None, offset: int = 0) -> list:
             "userfit": round(userfit, 1),         # 궁합 30% (개인)
             "financial": float(fin) if fin is not None else None,
             "growth": float(grw) if grw is not None else None,
+            **quotes[i - 1],                      # current_price / change_rate / trading_value (KIS, 병렬)
         }
         for i, (total, userfit, subtotal, fin, grw, stock) in enumerate(page, start=1)
     ]

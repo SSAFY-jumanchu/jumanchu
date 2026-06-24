@@ -16,10 +16,13 @@ from datetime import timedelta
 from decimal import Decimal
 
 import requests
+from django.core.cache import cache
 from django.utils import timezone
 
 from stocks.models import Stock
-from stocks.services.price_dispatch import get_kis_client
+from stocks.services.price_dispatch import (
+    VOLPOWER_TTL, fetch_volume_power, get_kis_client, volpower_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -100,13 +103,18 @@ def get_indices() -> list[dict]:
 
 # ----- 랭킹 매퍼 (KIS 순위 응답 → StockSummary) -----
 def _map_kr_rank(row: dict) -> dict:
-    """국내 등락률/거래량 순위 행. 등락률은 코드 필드명이 둘(fluctuation/volume) 다름."""
+    """국내 등락률/거래량 순위 행. 등락률은 코드 필드명이 둘(fluctuation/volume) 다름.
+    거래대금(acml_tr_pbmn, 원)·거래량(acml_vol)은 거래량순위 응답에만 있어 .get으로 방어."""
+    tr_pbmn = row.get("acml_tr_pbmn")
+    vol = row.get("acml_vol")
     return {
         "code": row.get("stck_shrn_iscd") or row.get("mksc_shrn_iscd") or "",
         "name": row.get("hts_kor_isnm", ""),
         "current": Decimal(row["stck_prpr"]),
         "change": Decimal(row["prdy_vrss"]),
         "change_rate": float(row["prdy_ctrt"]),
+        "trading_value": Decimal(tr_pbmn) if tr_pbmn not in (None, "") else None,
+        "volume": int(vol) if vol not in (None, "") else None,
     }
 
 
@@ -115,12 +123,16 @@ def _map_us_rank(row: dict) -> dict:
     change = Decimal(row["diff"])
     if row.get("sign") in ("4", "5"):  # 4 하한, 5 하락
         change = -change
+    tamt = row.get("tamt")
+    tvol = row.get("tvol")
     return {
         "code": row.get("symb", ""),
         "name": row.get("name") or row.get("ename", ""),
         "current": Decimal(row["last"]),
         "change": change,
         "change_rate": float(row["rate"]),
+        "trading_value": Decimal(tamt) if tamt not in (None, "") else None,  # USD
+        "volume": int(tvol) if tvol not in (None, "") else None,
     }
 
 
@@ -168,6 +180,92 @@ def _us_rankings() -> dict:
         "top_losers": sorted(pool, key=lambda r: r["change_rate"])[:_RANK_LIMIT],
         "most_active": pool[:_RANK_LIMIT],
     }
+
+
+# ----- 인기 종목 랭킹 (StocksView 인기 탭: 전체/국내/해외 × 거래대금/거래량/급상승/급하락) -----
+USD_KRW_RATE = Decimal("1500")  # 전체 탭 거래대금 정렬용 환율(USD→KRW). TODO: 라이브 환율로 교체
+
+_POPULAR_SORT = {
+    "value":  (lambda x: x["trading_value_krw"] or Decimal("0"), True),   # 거래대금 ↓
+    "volume": (lambda x: x["volume"] or 0, True),                          # 거래량 ↓
+    "up":     (lambda x: x["change_rate"], True),                          # 급상승 ↓
+    "down":   (lambda x: x["change_rate"], False),                         # 급하락 ↑
+}
+
+
+def _popular_pool(markets: list[str], raw_rows: list, mapper) -> list[dict]:
+    """KIS 거래량순위 행 → 우리 활성 DB 종목만 + 종목별 market 태깅 + 거래대금 KRW 환산."""
+    code_to_market = dict(
+        Stock.objects.filter(market__in=markets, is_active=True).values_list("code", "market")
+    )
+    out = []
+    for row in raw_rows:
+        m = mapper(row)
+        mk = code_to_market.get(m["code"])
+        if mk is None:
+            continue  # 우리 DB 비활성/미수록 종목 제외(클릭 불가 방지)
+        m["market"] = mk
+        tv = m.get("trading_value")
+        m["trading_value_krw"] = tv * USD_KRW_RATE if (tv is not None and mk in _US_MARKETS) else tv
+        out.append(m)
+    return out
+
+
+def popular_ranking(market: str = "all", sort: str = "value", size: int = 30) -> list[dict]:
+    """인기 종목 랭킹. 거래량순위 TR(거래대금·거래량·등락률·현재가 포함)을 시장별로 받아
+    전체(all)는 합쳐 재정렬한다. 거래대금 정렬은 USD→KRW 환산해 통화를 통일.
+    급상승/급하락은 '거래대금 상위 풀 내'에서 등락률 정렬(=활발히 거래되는 종목 중 등락 큰 순)."""
+    c = get_kis_client()
+    items: list[dict] = []
+    if market in ("all", "domestic"):
+        rows = _retry(c.get_domestic_volume_rank).get("output", [])
+        items += _popular_pool(_KR_MARKETS, rows, _map_kr_rank)
+    if market in ("all", "overseas"):
+        rows = _retry(lambda: c.get_overseas_volume_rank(_US_EXCD)).get("output2", [])
+        items += _popular_pool(_US_MARKETS, rows, _map_us_rank)
+    key, reverse = _POPULAR_SORT.get(sort, _POPULAR_SORT["value"])
+    items.sort(key=key, reverse=reverse)
+    return _attach_volume_power(items[:size])
+
+
+# ----- 체결강도(거래비율) 부착 — 워밍 캐시 우선 + 미스 즉석 채움 -----
+_VOLPOWER_FILL_LIMIT = 8  # 캐시 미스(새 진입 종목) 중 요청 경로에서 즉석 채울 최대 개수
+
+
+def popular_universe(size: int = 120) -> list[tuple[str, str]]:
+    """체결강도 워밍 대상 — 인기 풀(거래량 순위 KR+US 활성종목)의 (market, code) 목록.
+    표시(≤50)보다 넓게 워밍해 랭킹 드리프트(새 진입)를 미리 덮는다."""
+    c = get_kis_client()
+    items: list[dict] = []
+    items += _popular_pool(_KR_MARKETS, _retry(c.get_domestic_volume_rank).get("output", []), _map_kr_rank)
+    items += _popular_pool(
+        _US_MARKETS, _retry(lambda: c.get_overseas_volume_rank(_US_EXCD)).get("output2", []), _map_us_rank)
+    items.sort(key=lambda x: (x.get("volume") or 0), reverse=True)
+    return [(it["market"], it["code"]) for it in items[:size]]
+
+
+def _attach_volume_power(items: list[dict]) -> list[dict]:
+    """각 행에 volume_power/buy_ratio/sell_ratio 부착.
+    워밍 캐시(stock:volpower:*) 우선, 캐시에 없는 행은 상위 N개만 즉석 호출 후 적재(드리프트 대응)."""
+    if not items:
+        return items
+    keys = [volpower_key(it["market"], it["code"]) for it in items]
+    cached = cache.get_many(keys)
+    filled = 0
+    for it, k in zip(items, keys):
+        if k in cached or filled >= _VOLPOWER_FILL_LIMIT:
+            continue
+        filled += 1
+        vp = fetch_volume_power(it["market"], it["code"])
+        if vp is not None:
+            cache.set(k, vp, timeout=VOLPOWER_TTL)
+            cached[k] = vp
+    for it, k in zip(items, keys):
+        vp = cached.get(k)
+        it["volume_power"] = vp["volume_power"] if vp else None
+        it["buy_ratio"] = vp["buy_ratio"] if vp else None
+        it["sell_ratio"] = vp["sell_ratio"] if vp else None
+    return items
 
 
 # ----- 조립 -----
