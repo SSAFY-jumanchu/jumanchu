@@ -271,7 +271,9 @@ def get_orderbook_ttl(stock: Stock) -> int:
 
 # ----- 체결강도(거래비율, volume power) — 인기 랭킹 컬럼용 -----
 
-VOLPOWER_TTL = 60  # 체결강도 캐시 TTL(초). 워밍 배치 주기와 맞춤.
+VOLPOWER_TTL = 120  # 체결강도 캐시 TTL(초). 워밍 1주기(~20s)보다 넉넉히 — 사이클 사이 만료 방지.
+# 체결강도 없음(US 장마감 등) 음성 캐시값 — 요청 경로가 매번 라이브 재조회하지 않게.
+VOLPOWER_EMPTY = {"volume_power": None, "buy_ratio": None, "sell_ratio": None}
 
 
 def volpower_key(market: str, code: str) -> str:
@@ -299,6 +301,8 @@ def fetch_volume_power(market: str, code: str) -> Optional[dict]:
             return {"volume_power": round(r, 2),
                     "buy_ratio": round(buy, 1), "sell_ratio": round(100 - buy, 1)}
         if market in US_MARKETS:
+            if not _is_market_open(market):
+                return None  # 장마감엔 호가 체결량 0 → 체결강도 없음. 불필요한 KIS 호출 skip.
             excd = MARKET_TO_EXCD[market]
             o1 = client.get_overseas_orderbook(excd, code).get("output1", {})
             bvol = float(o1.get("bvol") or 0)
@@ -313,6 +317,31 @@ def fetch_volume_power(market: str, code: str) -> Optional[dict]:
             ValueError, InvalidOperation):
         return None
     return None
+
+
+# ----- 랭킹 전용 시세 캐시 (인기 랭킹 시총상위100용) -----
+# fetch_price의 stock:price:raw는 장중 3s라 워밍에 안 맞음 → 랭킹은 60s 캐시로 분리(시세 약간 staleness 허용).
+RANKPRICE_TTL = 120  # 워밍 1주기(~20s)보다 넉넉히 — 사이클 사이 만료 방지
+
+
+def rankprice_key(market: str, code: str) -> str:
+    return f"stock:rankprice:{market}:{code}"
+
+
+def fetch_rank_price(stock: Stock) -> Optional[dict]:
+    """랭킹용 슬림 시세(current/change/change_rate/trading_value/volume)를 60s 캐시에 적재.
+    워밍 배치·요청 경로 공용. fetch_price(3s 캐시) 재사용 → KIS 중복 호출 dedup. 실패면 None."""
+    try:
+        p = fetch_price(stock)
+    except (requests.HTTPError, requests.Timeout, RuntimeError, KeyError,
+            ValueError, InvalidOperation):
+        return None
+    slim = {
+        "current": p["current"], "change": p["change"], "change_rate": p["change_rate"],
+        "trading_value": p["trading_value"], "volume": p["volume"],
+    }
+    cache.set(rankprice_key(stock.market, stock.code), slim, timeout=RANKPRICE_TTL)
+    return slim
 
 
 # ----- 분봉 (chart API용) -----

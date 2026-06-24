@@ -160,6 +160,9 @@ DATABASES = {
         'HOST': os.environ.get('DB_HOST', 'localhost'),
         'PORT': os.environ.get('DB_PORT', '5432'),
         'OPTIONS': {'sslmode': os.environ.get('DB_SSLMODE', 'prefer')},  # Neon=require / 로컬=prefer
+        # 연결 재사용: Neon 원격 연결 수립이 요청당 ~0.5s+ → 매 요청 새로 안 맺게(없으면 인기랭킹이 2s대).
+        'CONN_MAX_AGE': 60,
+        'CONN_HEALTH_CHECKS': True,   # 재사용 전 생존 확인 — Neon이 유휴 연결 닫아도 안전(stale 방지)
     }
 }
 
