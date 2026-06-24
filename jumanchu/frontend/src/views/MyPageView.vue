@@ -2,7 +2,7 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { me as fetchMe, updateMe } from '../api/auth'
-import { fetchPortfolioSummary, fetchOrders, fetchHoldings } from '../api/portfolio'
+import { fetchPortfolioSummary, fetchOrders, fetchHoldings, fetchMilestones } from '../api/portfolio'
 import { fetchPosts, fetchFollowers, fetchFollowing } from '../api/community'
 import { errMsg, retry } from '../api/client'
 
@@ -27,12 +27,16 @@ const avatarChar = computed(() => (user.nickname || '?').slice(0, 1))
 // 받은 좋아요 — 내 글들의 like_count 합(하드코딩 294 제거)
 const likesReceived = computed(() => myPosts.value.reduce((a, p) => a + (p.likes || 0), 0))
 
-// 프로필 헤더 아이콘 (와이어프레임 slide 9/10/11 공통 헤더)
-const headerBadges = [
-  { id: 1, icon: '🌱', name: '첫 만남' },
-  { id: 2, icon: '📈', name: '수익왕' },
-  { id: 3, icon: '🔥', name: '연속 투자' },
-]
+// 현재 자산 마일스톤 — 달성한 목표 뱃지 (GET /portfolio/milestones/, 하드코딩 아이콘 제거)
+const milestones = ref([])
+async function loadMilestones() {
+  try {
+    const d = await fetchMilestones()
+    milestones.value = (d.achieved || []).map((g) => ({ icon: g.icon, name: g.name }))
+  } catch {
+    // 실패 → 빈 목록
+  }
+}
 
 // 활동 내역: 본인이 작성한 글(GET /posts/?mine=true) — 하드코딩 목업 제거.
 const CAT_LABEL = { QUESTION: '질문', REVIEW: '후기', ANALYSIS: '분석', SHARE: '공유' }
@@ -95,6 +99,11 @@ const tabs = [
   { key: 'profile', label: '프로필' },
   { key: 'activity',label: '활동 내역' },
 ]
+
+// 활동 내역 글 제목 클릭 → 커뮤니티의 해당 글로 이동
+function goPost(id) {
+  router.push({ path: '/community', query: { post: id } })
+}
 
 function fmt(n) {
   return n.toLocaleString('ko-KR')
@@ -226,6 +235,7 @@ onMounted(() => {
   loadMe()
   loadOrders()
   loadPortfolio()
+  loadMilestones()
 })
 </script>
 
@@ -244,8 +254,8 @@ onMounted(() => {
           <span><strong>{{ user.following }}</strong> 팔로잉</span>
         </div>
       </div>
-      <div class="ph-badges-preview">
-        <span v-for="b in headerBadges" :key="b.id" class="badge-chip" :title="b.name">{{ b.icon }}</span>
+      <div v-if="milestones.length" class="ph-badges-preview" aria-label="달성 자산 마일스톤">
+        <span v-for="(b, i) in milestones.slice(0, 6)" :key="i" class="badge-chip" :title="b.name">{{ b.icon }}</span>
       </div>
       <div class="ph-actions">
         <button class="ph-btn accent" @click="isEditingInfo = true; activeSection = 'profile'">프로필 편집</button>
@@ -287,11 +297,6 @@ onMounted(() => {
               <div><dt>예수금</dt><dd>{{ fmt(account.balance) }}원</dd></div>
               <div><dt>주식 평가액</dt><dd>{{ fmt(account.totalValue) }}원</dd></div>
             </dl>
-            <div class="acc-actions">
-              <button class="acc-btn accent">채우기</button>
-              <button class="acc-btn">보내기</button>
-              <button class="acc-btn">환전</button>
-            </div>
           </div>
 
           <!-- 총손익: 매수금액 → 평가금액 -->
@@ -491,7 +496,7 @@ onMounted(() => {
                 <div v-for="post in myPosts" :key="post.id" class="post-item">
                   <div class="post-item-left">
                     <span class="post-cat">{{ post.category }}</span>
-                    <span class="post-title">{{ post.title }}</span>
+                    <span class="post-title post-title-link" @click="goPost(post.id)" :title="post.title">{{ post.title }}</span>
                   </div>
                   <div class="post-item-right">
                     <span class="post-meta">♥ {{ post.likes }}</span>
@@ -764,6 +769,8 @@ onMounted(() => {
   white-space: nowrap; flex-shrink: 0;
 }
 .post-title { font-size: 13px; color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.post-title-link { cursor: pointer; transition: color 0.14s; }
+.post-title-link:hover { color: var(--accent); text-decoration: underline; }
 .post-item-right { display: flex; gap: 10px; flex-shrink: 0; }
 .post-meta { font-size: 12px; color: var(--muted); }
 .post-time { font-size: 11px; }
@@ -850,22 +857,6 @@ onMounted(() => {
   margin-bottom: 14px;
 }
 .acc-unit { font-size: 16px; font-weight: 700; margin-left: 2px; }
-
-.acc-actions { display: flex; gap: 8px; margin-bottom: 16px; }
-.acc-btn {
-  height: 34px; padding: 0 14px; border-radius: 8px;
-  border: 1px solid var(--glass-border);
-  background: var(--surface-soft);
-  font-size: 13px; font-weight: 700; color: var(--muted);
-  cursor: pointer; transition: all 0.15s;
-}
-.acc-btn:hover { background: var(--glass-strong); color: var(--ink); }
-.acc-btn.accent {
-  background: rgba(var(--accent-rgb),0.1);
-  border-color: rgba(var(--accent-rgb),0.28);
-  color: var(--accent);
-}
-.acc-btn.accent:hover { background: rgba(var(--accent-rgb),0.18); }
 
 .acc-profit-num { font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; margin-bottom: 4px; }
 .acc-profit-pct { font-size: 14px; font-weight: 700; margin-bottom: 8px; }

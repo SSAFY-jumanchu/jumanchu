@@ -1,11 +1,11 @@
 <script setup>
-import { ref, computed, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, reactive, onMounted, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useFavoritesStore } from '../stores/favorites'
 import { useRecentStocksStore } from '../stores/recentStocks'
 import {
-  fetchPosts, createPost, updatePost, deletePost, togglePostLike,
+  fetchPosts, fetchPost, createPost, updatePost, deletePost, togglePostLike,
   fetchComments, createComment, toggleCommentLike as apiToggleCommentLike,
   followUser, unfollowUser, fetchFollowing,
 } from '../api/community'
@@ -13,6 +13,7 @@ import { fetchStocks, fetchPopularRanking } from '../api/stocks'
 import { fetchHoldings } from '../api/portfolio'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const favStore = useFavoritesStore()
 const recentStore = useRecentStocksStore()
@@ -434,12 +435,33 @@ async function loadFollowing() {
     // 무시
   }
 }
-onMounted(() => {
-  loadPosts()
+// ?post=<id> 로 들어오면 해당 글로 이동(피드에 없으면 단건 조회해 병합) + 스크롤·하이라이트
+async function focusPostFromQuery() {
+  const id = Number(route.query.post)
+  if (!id) return
+  if (!posts.value.some((p) => p.id === id)) {
+    try {
+      const p = await fetchPost(id)
+      mergePosts([p])
+    } catch {
+      return
+    }
+  }
+  await nextTick()
+  const el = document.getElementById('post-' + id)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.classList.add('post-flash')
+  setTimeout(() => el.classList.remove('post-flash'), 1600)
+}
+
+onMounted(async () => {
+  await loadPosts()
   loadFollowing()
   loadHoldingCodes()
   loadPopularPosts()
   loadPopularStockCommunities()
+  focusPostFromQuery()
 })
 </script>
 
@@ -555,6 +577,7 @@ onMounted(() => {
         <article
           v-for="post in filteredPosts"
           :key="post.id"
+          :id="'post-' + post.id"
           class="post-card panel"
         >
           <!-- 포스트 헤더 -->
@@ -645,7 +668,6 @@ onMounted(() => {
                 <span class="reaction-count">{{ post.comments }}</span>
               </button>
             </div>
-            <button class="bookmark-btn">🔖</button>
           </div>
 
           <!-- ===== 댓글 섹션 ===== -->
@@ -1087,6 +1109,13 @@ onMounted(() => {
 /* ===== 포스트 카드 ===== */
 .post-card { padding: 18px 20px; }
 
+/* 활동 내역 등에서 특정 글로 이동했을 때 잠깐 강조 */
+.post-card.post-flash { animation: postFlash 1.6s ease; }
+@keyframes postFlash {
+  0%, 100% { box-shadow: var(--glass-shadow); }
+  15% { box-shadow: 0 0 0 2px var(--accent), 0 8px 24px rgba(var(--accent-rgb), 0.3); }
+}
+
 /* 포스트 헤더 */
 .post-header {
   display: flex;
@@ -1300,16 +1329,6 @@ onMounted(() => {
 
 .reaction-count { font-size: 13px; }
 
-.bookmark-btn {
-  width: 32px; height: 32px;
-  border: 0; background: transparent;
-  color: var(--faint); font-size: 16px;
-  cursor: pointer; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s, color 0.15s;
-}
-
-.bookmark-btn:hover { background: var(--surface-soft); color: var(--ink); }
 
 /* ===== 댓글 섹션 ===== */
 .comments-section {
