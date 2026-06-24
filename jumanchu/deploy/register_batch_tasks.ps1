@@ -66,9 +66,11 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 # manage.py 명령 1개를 powershell 액션으로 (cwd=backend, 전 스트림을 로그에 append)
 function New-ManageAction {
     param([string]$ManageArgs, [string]$LogName)
-    $inner = "Set-Location -LiteralPath '$Backend'; & '$Python' manage.py $ManageArgs *>> '$LogDir\$LogName'"
+    # python -u: 출력 버퍼링 끔(무한 루프 워머도 로그에 즉시 찍힘). *>>: 전 스트림 로그 append.
+    $inner = "Set-Location -LiteralPath '$Backend'; & '$Python' -u manage.py $ManageArgs *>> '$LogDir\$LogName'"
+    # -WindowStyle Hidden: 창 안 뜨게(백그라운드 실행).
     return New-ScheduledTaskAction -Execute $PwshExe `
-        -Argument ('-NoProfile -ExecutionPolicy Bypass -Command "' + $inner + '"')
+        -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "' + $inner + '"')
 }
 
 # 현재 사용자 + 로그인 시 실행 + 최고 권한
