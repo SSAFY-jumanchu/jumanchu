@@ -8,7 +8,8 @@ import {
   fetchStockFinancials,
   fetchStockPosts,
 } from '../api/stocks'
-import { createOrder, fetchBalance } from '../api/portfolio'
+import { createOrder, fetchBalance, fetchHoldingDetail } from '../api/portfolio'
+import { fetchStockNews } from '../api/news'
 import { errMsg } from '../api/client'
 
 const router = useRouter()
@@ -66,8 +67,20 @@ async function loadStock(code) {
         volume: Number(p.volume),
       }),
     }
-    // 주문 기본가를 실시간 현재가로 맞춤
-    if (p) orderPrice.value = Number(p.current)
+    // 종목정보 탭 — BE 메타로 채움(없는 필드는 템플릿에서 숨김)
+    stockInfo.value = {
+      ceo: d.ceo_name || '',
+      listedDate: d.listed_at ? String(d.listed_at).slice(0, 10).replace(/-/g, '.') : '',
+      desc: d.description || '',
+      homepage: d.homepage_url || '',
+      employees: d.employee_count ?? null,
+      industry: d.industry || d.sector || '',
+    }
+    // 주문/시뮬 기본가를 실시간 현재가로 맞춤
+    if (p) {
+      orderPrice.value = Number(p.current)
+      addPrice.value = Number(p.current)
+    }
   } catch (e) {
     loadError.value = errMsg(e)
   } finally {
@@ -79,6 +92,23 @@ const change = computed(() => stock.value.price - stock.value.prevClose)
 const changeRate = computed(() =>
   stock.value.prevClose ? (change.value / stock.value.prevClose) * 100 : 0,
 )
+
+// 통화 심볼 (KRW=₩ / USD=$) — 해외 종목 원화 오표기 방지
+const curSym = computed(() => (stock.value.currency === 'USD' ? '$' : '₩'))
+
+// ISO 일시 → 상대시간("3분 전" 등)
+function relTime(iso) {
+  if (!iso) return ''
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return ''
+  const diff = Math.max(0, Date.now() - t)
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return '방금'
+  if (m < 60) return `${m}분 전`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}시간 전`
+  return `${Math.floor(h / 24)}일 전`
+}
 
 // ===== 차트 데이터 (5분봉 9:00~15:30, 78개) =====
 const intradayPrices = ref([
@@ -119,9 +149,10 @@ function buildPath(prices, w, h, padT = 16, padB = 16) {
 }
 
 const chartPath = computed(() => buildPath(intradayPrices.value, 560, 200))
+const maxVolume = computed(() => Math.max(...volumeData.value, 1))
 
 // ===== 차트 기간 탭 =====
-const chartPeriods = ['3분', '일', '주', '월', '년']
+const chartPeriods = ['5분', '일', '주', '월', '년']
 const selectedPeriod = ref('일')
 
 // ===== 상단 탭 =====
@@ -173,22 +204,32 @@ const trades = [
   { price: 315500, qty: 8, rate: +1.94, time: '15:25:05', side: 'down' },
 ]
 
-// ===== 종토방 커뮤니티 (초기값 목업 — /posts/ 응답으로 교체) =====
-const communityPosts = ref([
-  { user: '장기투자자', badge: null, time: '3분', content: '오늘 +2.42% 상승이네요. 외국인이 사고 있어요!', likes: 12 },
-  { user: '주린이123', badge: null, time: '15분', content: '반도체 업황 개선되면 삼성이 제일 먼저 올라가겠죠?', likes: 8 },
-  { user: '전업투자자', badge: '고수', time: '28분', content: 'HBM 수주 기대감이 주가에 반영되고 있는 것 같습니다.', likes: 34 },
-  { user: '스마트투자', badge: null, time: '42분', content: 'PER 14배면 저평가 구간이에요. 장기보유 전략이 좋을 것 같아요.', likes: 21 },
-  { user: '배당킹', badge: '장기', time: '1시간', content: '배당 수익률도 좋고 지금 단가 낮을 때 매수 적기인 것 같습니다.', likes: 18 },
-  { user: '반도체직업인', badge: null, time: '2시간', content: 'AI 서버 수요 폭발로 DRAM 업황은 계속 좋을 전망입니다.', likes: 45 },
-])
+// ===== 종토방 커뮤니티 (BE /posts/ 응답으로 채움 — 목업 fallback 제거) =====
+const communityPosts = ref([])
 
-// ===== 물타기(평단) 시뮬레이션 =====
+// ===== 보유 현황 (시뮬 프리필 · 매도 최대수량 산출용) =====
+const holding = ref(null) // { quantity, average_price } | null
+async function loadHolding(code) {
+  try {
+    const { holding: h } = await fetchHoldingDetail(code)
+    if (h && Number(h.quantity) > 0) {
+      holding.value = h
+      holdQty.value = Number(h.quantity)
+      holdAvg.value = Math.round(Number(h.average_price))
+    } else {
+      holding.value = null
+    }
+  } catch {
+    holding.value = null // 미보유/비로그인 → 0으로
+  }
+}
+
+// ===== 물타기(평단) 시뮬레이션 (보유 연동) =====
 const avgSide = ref('BUY') // BUY=매수 물타기, SELL=매도
-const holdQty = ref(20)
-const holdAvg = ref(310500)
-const addPrice = ref(317000)
-const addQty = ref(10)
+const holdQty = ref(0)
+const holdAvg = ref(0)
+const addPrice = ref(0)
+const addQty = ref(0)
 
 const simResult = computed(() => {
   const hQty = Math.max(0, holdQty.value || 0)
@@ -221,7 +262,14 @@ const ordering = ref(false)
 const orderMsg = ref(null) // { ok: boolean, text: string }
 
 function setQtyPct(pct) {
-  orderQty.value = Math.floor((balance.value * pct) / orderPrice.value)
+  if (orderSide.value === 'SELL') {
+    // 매도: 보유 수량 기준
+    const owned = holding.value ? Number(holding.value.quantity) : 0
+    orderQty.value = Math.floor(owned * pct)
+  } else {
+    // 매수: 잔고 기준
+    orderQty.value = orderPrice.value ? Math.floor((balance.value * pct) / orderPrice.value) : 0
+  }
 }
 
 // 가상계좌 잔고 로드 (GET /portfolio/balance/)
@@ -255,9 +303,10 @@ async function submitOrder() {
     balance.value = Number(res.balance_after)
     orderMsg.value = {
       ok: true,
-      text: `${orderSide.value === 'BUY' ? '매수' : '매도'} 체결 완료 (잔고 ₩${fmt(balance.value)})`,
+      text: `${orderSide.value === 'BUY' ? '매수' : '매도'} 체결 완료 (잔고 ${curSym.value}${fmt(balance.value)})`,
     }
     orderQty.value = 0
+    loadHolding(stock.value.code) // 체결 후 보유/시뮬 갱신
   } catch (e) {
     orderMsg.value = { ok: false, text: errMsg(e) }
   } finally {
@@ -265,20 +314,10 @@ async function submitOrder() {
   }
 }
 
-// ===== 종목정보 탭 데이터 =====
-const stockInfo = {
-  fullName: 'SAMSUNG ELECTRONICS CO LTD',
-  ceo: '한종희',
-  listedDate: '1975년 6월 11일',
-  founded: '1969년 설립',
-  shares: '5,969,782,550주',
-  sharesAsOf: '26년 6월 14일 기준',
-  realValue: '198조 4,500억원',
-  desc: '메모리·시스템 반도체, 스마트폰, 가전, 디스플레이를 설계·제조하는 글로벌 종합 전자 기업',
-  bizIcon: '💻',
-  bizName: '반도체 · 전자',
-  bizRank: '국내 시가총액 1위',
-}
+// ===== 종목정보 탭 데이터 (BE detail로 채움 — 하드코딩 제거) =====
+const stockInfo = ref({
+  ceo: '', listedDate: '', desc: '', homepage: '', employees: null, industry: '',
+})
 
 const valuation = ref([
   { k: 'PER', v: '14.2배' },
@@ -334,36 +373,25 @@ const profChart = computed(() => {
   return { bars, linePath }
 })
 
-const peers = [
-  { rank: 1, name: 'TSMC', per: '28.4배', cap: '1,120조', price: '180,000원' },
-  { rank: 2, name: 'NVIDIA', per: '52.1배', cap: '3,200조', price: '1,285,000원' },
-  { rank: 3, name: 'SK하이닉스', per: '12.8배', cap: '145조', price: '189,300원' },
-  { rank: 4, name: '마이크론', per: '15.6배', cap: '180조', price: '120,000원' },
-  { rank: '-', name: '산업 중앙값', per: '18.2배', cap: '-', price: '-', median: true },
-  { rank: 5, name: '삼성전자', per: '14.2배', cap: '237.1조', price: '317,000원', isMe: true },
-]
+// 동종업계 순위·예상 목표주가는 BE 데이터 소스 없음 → 비우고 템플릿에서 숨김(하드코딩 제거)
+const peers = ref([])
+const targetPrice = ref(null)
 
-const targetPrice = {
-  desc: '애널리스트들이 1년 후 삼성전자의 목표 주가가 388,000원으로 지금보다 +22.4% 상승할 것으로 예상했어요.',
-  high: { price: 420000, pct: 32.5 },
-  avg: { price: 388000, pct: 22.4 },
-  low: { price: 345000, pct: 8.8 },
+// ===== 뉴스 탭 (BE /news/stocks/{code}/ 연동 — 목업 제거) =====
+const stockNews = ref([])
+async function loadNews(code) {
+  try {
+    const { items = [] } = await fetchStockNews(code)
+    stockNews.value = items.map((n) => ({
+      title: n.title,
+      source: n.source || '',
+      url: n.url || '',
+      time: relTime(n.published_at),
+    }))
+  } catch {
+    stockNews.value = []
+  }
 }
-
-// ===== 뉴스 탭 =====
-const stockNews = [
-  { ticker: 'SK하이닉스', title: 'SK하이닉스, HBM3E 양산 확대...AI 수요 견조', source: '이데일리', time: '30분 전', category: '뉴스' },
-  { ticker: '삼성전자', title: '삼성전자, 파운드리 수주 회복세...2분기 기대감', source: '전자신문', time: '1시간 전', category: '뉴스' },
-  { ticker: 'NVDA', title: 'NVIDIA 실적 서프라이즈...관련 국내주 수혜', source: 'Bloomberg', time: '2시간 전', category: '뉴스' },
-  { ticker: 'AAPL', title: '애플 WWDC AI 기능 대거 공개 예정', source: '디지털데일리', time: '3시간 전', category: '뉴스' },
-  { ticker: '삼성전자', title: '삼성전자, 26년 1분기 영업이익 컨센서스 상회', source: '한국경제', time: '5시간 전', category: '공시' },
-  { ticker: '삼성전자', title: '외국인 5거래일 연속 순매수...반도체 대형주 집중', source: '연합뉴스', time: '6시간 전', category: '뉴스' },
-  { ticker: '삼성전자', title: '삼성전자 분기 배당 1,444원 결정 공시', source: '전자공시', time: '1일 전', category: '공시' },
-]
-const newsFilter = ref('전체')
-const newsFiltered = computed(() =>
-  newsFilter.value === '전체' ? stockNews : stockNews.filter(n => n.category === newsFilter.value),
-)
 
 // ===== 커뮤니티 탭 (피드) =====
 const communitySort = ref('인기순')
@@ -402,7 +430,7 @@ const pct = (v, digits = 1) => (v == null ? null : (v * 100).toFixed(digits) + '
 
 // 기간 탭 → period/interval. 일·주·월·년봉은 DB(StockPrice), 3분봉은 KIS 라이브.
 const CHART_PARAM = {
-  '3분': { period: '1d', interval: '5m' },
+  '5분': { period: '1d', interval: '5m' },
   '일': { period: '1y', interval: '1d' },
   '주': { period: '5y', interval: '1w' },
   '월': { period: '5y', interval: '1mo' },
@@ -465,18 +493,17 @@ async function loadFinancials(code) {
 async function loadCommunity(code) {
   try {
     const { items = [] } = await fetchStockPosts(code)
-    // 글이 있을 때만 교체 (없으면 종토방 미리보기 목업 유지)
-    if (items.length) {
-      communityPosts.value = items.map((p) => ({
-        user: p.author?.nickname ?? '익명',
-        badge: null,
-        time: p.created_at,
-        content: p.content,
-        likes: p.like_count ?? 0,
-      }))
-    }
+    // 항상 실데이터로 교체(0건이면 빈 목록 — 가짜 노출 방지). 글 본문은 미제공이라 title 사용.
+    communityPosts.value = items.map((p) => ({
+      id: p.id,
+      user: p.author_nickname || '익명',
+      badge: null,
+      time: relTime(p.created_at),
+      content: p.title,
+      likes: p.like_count ?? 0,
+    }))
   } catch {
-    // 무시 — 목업 유지
+    communityPosts.value = []
   }
 }
 
@@ -489,6 +516,8 @@ onMounted(async () => {
   loadChart(code, selectedPeriod.value)
   loadFinancials(code)
   loadCommunity(code)
+  loadNews(code)
+  loadHolding(code)
   loadBalance()
 })
 </script>
@@ -519,23 +548,23 @@ onMounted(async () => {
             <button class="watch-toggle-btn">☆ 관심종목 추가</button>
           </div>
           <div class="sd-price-row">
-            <strong class="sd-price">₩{{ fmt(stock.price) }}</strong>
+            <strong class="sd-price">{{ curSym }}{{ fmt(stock.price) }}</strong>
             <span class="sd-change" :class="change >= 0 ? 'is-up' : 'is-down'">
-              {{ change >= 0 ? '+' : '-' }}₩{{ fmt(Math.abs(change)) }} ({{ change >= 0 ? '+' : '' }}{{ changeRate.toFixed(2) }}%)
+              {{ change >= 0 ? '+' : '-' }}{{ curSym }}{{ fmt(Math.abs(change)) }} ({{ change >= 0 ? '+' : '' }}{{ changeRate.toFixed(2) }}%)
             </span>
           </div>
         </div>
 
         <!-- 우: 키 메트릭 -->
         <div class="sd-key-metrics">
-          <div class="metric"><span>시가</span><strong>₩{{ fmt(stock.open) }}</strong></div>
-          <div class="metric"><span>고가</span><strong class="is-up">₩{{ fmt(stock.high) }}</strong></div>
-          <div class="metric"><span>저가</span><strong class="is-down">₩{{ fmt(stock.low) }}</strong></div>
+          <div class="metric"><span>시가</span><strong>{{ curSym }}{{ fmt(stock.open) }}</strong></div>
+          <div class="metric"><span>고가</span><strong class="is-up">{{ curSym }}{{ fmt(stock.high) }}</strong></div>
+          <div class="metric"><span>저가</span><strong class="is-down">{{ curSym }}{{ fmt(stock.low) }}</strong></div>
           <div class="metric"><span>거래량</span><strong>{{ fmtCompact(stock.volume) }}</strong></div>
           <div class="metric"><span>PER</span><strong>{{ stock.per }}</strong></div>
           <div class="metric"><span>시가총액</span><strong>{{ stock.marketCap }}</strong></div>
-          <div class="metric"><span>52주 최고</span><strong>₩{{ fmt(stock.high52w) }}</strong></div>
-          <div class="metric"><span>52주 최저</span><strong>₩{{ fmt(stock.low52w) }}</strong></div>
+          <div class="metric"><span>52주 최고</span><strong>{{ curSym }}{{ fmt(stock.high52w) }}</strong></div>
+          <div class="metric"><span>52주 최저</span><strong>{{ curSym }}{{ fmt(stock.low52w) }}</strong></div>
         </div>
       </div>
 
@@ -609,7 +638,7 @@ onMounted(async () => {
               </svg>
 
               <!-- 현재가 라벨 -->
-              <div class="current-price-label">₩317,000</div>
+              <div class="current-price-label">{{ curSym }}{{ fmt(stock.price) }}</div>
             </div>
           </div>
 
@@ -627,7 +656,7 @@ onMounted(async () => {
 
           <!-- 거래량 차트 -->
           <div class="volume-label-row">
-            <span class="eyebrow">거래량 (2억)</span>
+            <span class="eyebrow">거래량</span>
           </div>
           <div class="volume-chart-wrap">
             <svg viewBox="0 0 560 70" preserveAspectRatio="none" class="volume-svg">
@@ -636,8 +665,8 @@ onMounted(async () => {
                 :key="i"
                 :x="(i / volumeData.length) * 560"
                 :width="(560 / volumeData.length) - 1"
-                :y="70 - (v / 100) * 68"
-                :height="(v / 100) * 68"
+                :y="70 - (v / maxVolume) * 68"
+                :height="(v / maxVolume) * 68"
                 :fill="intradayPrices[i] >= (intradayPrices[i-1] ?? intradayPrices[i]) ? 'rgba(var(--accent-rgb),0.5)' : 'rgba(255,59,92,0.45)'"
               />
             </svg>
@@ -660,18 +689,19 @@ onMounted(async () => {
           </div>
 
           <div class="community-list">
-            <div v-for="(post, i) in communityPosts" :key="i" class="community-post">
+            <div v-for="post in communityPosts" :key="post.id" class="community-post">
               <div class="post-head">
                 <div class="post-author-row">
                   <div class="post-avatar">{{ post.user.slice(0, 1) }}</div>
                   <strong class="post-user">{{ post.user }}</strong>
                   <span v-if="post.badge" class="post-badge">{{ post.badge }}</span>
-                  <span class="post-time">{{ post.time }} 전</span>
+                  <span class="post-time">{{ post.time }}</span>
                 </div>
                 <span class="post-likes">♡ {{ post.likes }}</span>
               </div>
               <p class="post-content">{{ post.content }}</p>
             </div>
+            <p v-if="!communityPosts.length" class="community-empty">아직 종목토론방 글이 없어요.</p>
           </div>
         </div>
       </div>
@@ -786,27 +816,32 @@ onMounted(async () => {
               <h3 class="info-name">{{ stock.name }}<span class="info-name-sub">{{ stock.market }} · {{ stock.code }}</span></h3>
               <p class="info-source">출처: 연합인포맥스 및 기업 IR자료</p>
             </div>
-            <button class="info-home-link" type="button">↗ 홈페이지</button>
+            <a
+              v-if="stockInfo.homepage"
+              class="info-home-link"
+              :href="stockInfo.homepage"
+              target="_blank"
+              rel="noopener"
+            >↗ 홈페이지</a>
           </div>
-          <p class="info-desc">{{ stockInfo.desc }}</p>
+          <p v-if="stockInfo.desc" class="info-desc">{{ stockInfo.desc }}</p>
           <div class="info-facts">
-            <div class="fact"><dt>시가총액</dt><dd>{{ stock.marketCap }}원</dd></div>
-            <div class="fact"><dt>실제 기업 가치</dt><dd>{{ stockInfo.realValue }}</dd></div>
-            <div class="fact"><dt>기업명</dt><dd>{{ stockInfo.fullName }}</dd></div>
-            <div class="fact"><dt>대표이사</dt><dd>{{ stockInfo.ceo }}</dd></div>
-            <div class="fact"><dt>상장일</dt><dd>{{ stockInfo.listedDate }} <small>{{ stockInfo.founded }}</small></dd></div>
-            <div class="fact"><dt>발행주식수</dt><dd>{{ stockInfo.shares }} <small>{{ stockInfo.sharesAsOf }}</small></dd></div>
+            <div v-if="stock.marketCap" class="fact"><dt>시가총액</dt><dd>{{ stock.marketCap }}</dd></div>
+            <div v-if="stockInfo.industry" class="fact"><dt>산업</dt><dd>{{ stockInfo.industry }}</dd></div>
+            <div v-if="stockInfo.ceo" class="fact"><dt>대표이사</dt><dd>{{ stockInfo.ceo }}</dd></div>
+            <div v-if="stockInfo.listedDate" class="fact"><dt>상장일</dt><dd>{{ stockInfo.listedDate }}</dd></div>
+            <div v-if="stockInfo.employees != null" class="fact"><dt>임직원수</dt><dd>{{ fmt(stockInfo.employees) }}명</dd></div>
           </div>
         </div>
 
         <!-- 주요 사업 -->
-        <div class="panel info-block">
+        <div class="panel info-block" v-if="stockInfo.industry">
           <h3 class="info-section-title">주요 사업</h3>
           <div class="biz-row">
-            <div class="biz-icon">{{ stockInfo.bizIcon }}</div>
+            <div class="biz-icon">🏢</div>
             <div class="biz-info">
-              <strong class="biz-name">{{ stockInfo.bizName }}</strong>
-              <span class="biz-rank">{{ stockInfo.bizRank }}</span>
+              <strong class="biz-name">{{ stockInfo.industry }}</strong>
+              <span class="biz-rank">{{ stock.market }} · {{ stock.sector }}</span>
             </div>
           </div>
         </div>
@@ -867,8 +902,8 @@ onMounted(async () => {
         </div>
 
         <!-- 동종 업계 순위 -->
-        <div class="panel info-block">
-          <h3 class="info-section-title">동종 업계 순위 <span class="info-section-sub">반도체</span></h3>
+        <div class="panel info-block" v-if="peers.length">
+          <h3 class="info-section-title">동종 업계 순위 <span class="info-section-sub">{{ stockInfo.industry }}</span></h3>
           <p class="info-section-desc">PER이 낮을수록 같은 이익 대비 저평가 구간일 수 있어요.</p>
           <table class="peer-table">
             <thead>
@@ -887,7 +922,7 @@ onMounted(async () => {
         </div>
 
         <!-- 예상 목표 주가 -->
-        <div class="panel info-block">
+        <div class="panel info-block" v-if="targetPrice">
           <h3 class="info-section-title">예상 목표 주가</h3>
           <p class="info-section-desc">{{ targetPrice.desc }}</p>
           <div class="target-list">
@@ -907,7 +942,7 @@ onMounted(async () => {
               <span class="target-pct">+{{ targetPrice.low.pct }}%</span>
             </div>
           </div>
-          <div class="target-current">현재가 <strong>₩{{ fmt(stock.price) }}</strong></div>
+          <div class="target-current">현재가 <strong>{{ curSym }}{{ fmt(stock.price) }}</strong></div>
         </div>
 
       </div>
@@ -916,26 +951,25 @@ onMounted(async () => {
       <div v-else-if="selectedTab === '뉴스'" class="sd-col-info">
         <div class="panel info-block">
           <div class="news-head">
-            <h3 class="info-section-title" style="margin:0">{{ stock.name }} 뉴스 · 공시</h3>
-            <div class="news-filter">
-              <button
-                v-for="f in ['전체', '뉴스', '공시']"
-                :key="f"
-                :class="{ 'is-active': newsFilter === f }"
-                @click="newsFilter = f"
-              >{{ f }}</button>
-            </div>
+            <h3 class="info-section-title" style="margin:0">{{ stock.name }} 뉴스</h3>
           </div>
           <div class="news-list">
-            <article v-for="(n, i) in newsFiltered" :key="i" class="news-row">
+            <a
+              v-for="(n, i) in stockNews"
+              :key="i"
+              class="news-row"
+              :href="n.url || undefined"
+              target="_blank"
+              rel="noopener"
+            >
               <div class="news-row-meta">
-                <span class="news-chip">{{ n.ticker }}</span>
-                <span class="news-cat" :class="{ 'is-disclosure': n.category === '공시' }">{{ n.category }}</span>
+                <span class="news-chip">{{ stock.name }}</span>
                 <span class="news-time">{{ n.time }}</span>
               </div>
               <h4 class="news-row-title">{{ n.title }}</h4>
               <span class="news-row-source">{{ n.source }}</span>
-            </article>
+            </a>
+            <p v-if="!stockNews.length" class="news-empty">관련 뉴스가 아직 없어요.</p>
           </div>
         </div>
       </div>
@@ -1010,7 +1044,7 @@ onMounted(async () => {
               <strong class="comm-stock-name">{{ stock.name }}</strong>
               <span class="comm-stock-code">{{ stock.code }} · {{ stock.market }}</span>
             </div>
-            <div class="comm-stock-price">₩{{ fmt(stock.price) }}</div>
+            <div class="comm-stock-price">{{ curSym }}{{ fmt(stock.price) }}</div>
             <div class="comm-stock-change" :class="change >= 0 ? 'is-up' : 'is-down'">
               ▲ {{ fmt(Math.abs(change)) }} ({{ change >= 0 ? '+' : '' }}{{ changeRate.toFixed(2) }}%)
             </div>
@@ -1102,7 +1136,7 @@ onMounted(async () => {
           <dl class="order-summary">
             <div>
               <dt>총 주문 금액</dt>
-              <dd>{{ orderTotal > 0 ? '₩' + fmt(orderTotal) : '주문 가능 금액 입력' }}</dd>
+              <dd>{{ orderTotal > 0 ? curSym + fmt(orderTotal) : '주문 가능 금액 입력' }}</dd>
             </div>
           </dl>
 
@@ -1157,9 +1191,9 @@ onMounted(async () => {
           <div class="sim-result">
             <div class="sim-result-main">
               <span>{{ avgSide === 'BUY' ? '예상 평단가' : '실현 손익' }}</span>
-              <strong v-if="avgSide === 'BUY'">₩{{ fmt(Math.round(simResult.newAvg)) }}</strong>
+              <strong v-if="avgSide === 'BUY'">{{ curSym }}{{ fmt(Math.round(simResult.newAvg)) }}</strong>
               <strong v-else :class="simResult.realized >= 0 ? 'is-up' : 'is-down'">
-                {{ simResult.realized >= 0 ? '+' : '-' }}₩{{ fmt(Math.abs(Math.round(simResult.realized))) }}
+                {{ simResult.realized >= 0 ? '+' : '-' }}{{ curSym }}{{ fmt(Math.abs(Math.round(simResult.realized))) }}
               </strong>
             </div>
             <dl class="sim-sub">
@@ -1170,13 +1204,13 @@ onMounted(async () => {
               <div v-if="avgSide === 'BUY'">
                 <dt>현재가 대비 평가손익</dt>
                 <dd :class="simResult.pnl >= 0 ? 'is-up' : 'is-down'">
-                  {{ simResult.pnl >= 0 ? '+' : '-' }}₩{{ fmt(Math.abs(Math.round(simResult.pnl))) }}
+                  {{ simResult.pnl >= 0 ? '+' : '-' }}{{ curSym }}{{ fmt(Math.abs(Math.round(simResult.pnl))) }}
                   ({{ simResult.pnlPct >= 0 ? '+' : '' }}{{ simResult.pnlPct.toFixed(2) }}%)
                 </dd>
               </div>
               <div v-else>
                 <dt>잔여 평단가</dt>
-                <dd>₩{{ fmt(Math.round(simResult.newAvg)) }}</dd>
+                <dd>{{ curSym }}{{ fmt(Math.round(simResult.newAvg)) }}</dd>
               </div>
             </dl>
           </div>
@@ -1961,6 +1995,7 @@ onMounted(async () => {
   flex-shrink: 0; padding: 6px 12px; border-radius: 999px;
   border: 1px solid var(--glass-border); background: var(--surface-soft);
   color: var(--muted); font-size: 12px; font-weight: 900; cursor: pointer;
+  text-decoration: none; display: inline-block;
   transition: background 0.16s, color 0.16s;
 }
 .info-home-link:hover { background: var(--glass-strong); color: var(--ink); }
@@ -2058,21 +2093,13 @@ onMounted(async () => {
 
 /* ===== 뉴스 탭 ===== */
 .news-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.news-filter { display: flex; gap: 4px; }
-.news-filter button {
-  padding: 5px 12px; border-radius: 999px; border: 1px solid var(--glass-border);
-  background: var(--glass-subtle); color: var(--muted); font-size: 12px; font-weight: 900; cursor: pointer;
-  transition: background 0.16s, color 0.16s;
-}
-.news-filter button.is-active { background: rgba(var(--accent-rgb),0.1); border-color: rgba(var(--accent-rgb),0.28); color: var(--accent); }
 .news-list { display: flex; flex-direction: column; }
-.news-row { padding: 16px 6px; border-bottom: 1px solid var(--faint); cursor: pointer; transition: background 0.14s; }
+.news-row { display: block; text-decoration: none; color: inherit; padding: 16px 6px; border-bottom: 1px solid var(--faint); cursor: pointer; transition: background 0.14s; }
 .news-row:last-child { border-bottom: 0; }
+.news-empty, .community-empty { padding: 28px 6px; text-align: center; font-size: 13px; font-weight: 700; color: var(--faint); }
 .news-row:hover { background: var(--surface-soft); border-radius: var(--radius); }
 .news-row-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
 .news-chip { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 900; background: rgba(var(--purple-rgb),0.1); color: var(--purple); border: 1px solid rgba(var(--purple-rgb),0.2); }
-.news-cat { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 900; background: rgba(var(--accent-rgb),0.1); color: var(--accent); }
-.news-cat.is-disclosure { background: rgba(16,185,129,0.12); color: #059669; }
 .news-time { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--faint); }
 .news-row-title { font-size: 15px; font-weight: 800; color: var(--ink); margin: 0 0 5px; line-height: 1.45; word-break: keep-all; }
 .news-row-source { font-size: 12px; font-weight: 700; color: var(--faint); }
