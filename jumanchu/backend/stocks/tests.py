@@ -178,6 +178,58 @@ class StockPriceTests(APITestCase):
         self.assertEqual(res.json().get('code'), 'EXTERNAL_API_ERROR')
 
 
+class StockOrderBookTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.kr = Stock.objects.create(code='005930', market='KOSPI',
+                                       name='삼성전자', currency='KRW')
+
+    def setUp(self):
+        cache.clear()
+
+    @staticmethod
+    def _ob(code):
+        return {
+            'stock_code': code,
+            'asks': [{'price': Decimal('334000'), 'quantity': 9911},
+                     {'price': Decimal('334500'), 'quantity': 33396}],
+            'bids': [{'price': Decimal('333500'), 'quantity': 17159}],
+            'total_ask_quantity': 166817,
+            'total_bid_quantity': 218109,
+            'is_market_open': True,
+            'fetched_at': timezone.now(),
+        }
+
+    def test_orderbook_kr(self):
+        with patch('stocks.views.fetch_orderbook', return_value=self._ob('005930')) as m:
+            res = self.client.get(reverse('stock-orderbook', kwargs={'code': '005930'}))
+        self.assertEqual(res.status_code, 200)
+        ob = res.json()['orderbook']
+        self.assertEqual(ob['stock_code'], '005930')
+        self.assertEqual(len(ob['asks']), 2)
+        self.assertEqual(float(ob['asks'][0]['price']), 334000.0)
+        self.assertEqual(ob['asks'][0]['quantity'], 9911)
+        self.assertEqual(ob['total_bid_quantity'], 218109)
+        self.assertTrue(ob['is_market_open'])
+        self.assertEqual(m.call_count, 1)
+
+    def test_orderbook_cache_hit(self):
+        with patch('stocks.views.fetch_orderbook', return_value=self._ob('005930')) as m:
+            self.client.get(reverse('stock-orderbook', kwargs={'code': '005930'}))
+            self.client.get(reverse('stock-orderbook', kwargs={'code': '005930'}))
+        self.assertEqual(m.call_count, 1)  # 2번째는 캐시 hit이라 fetch_orderbook 호출 X
+
+    def test_orderbook_not_found_404(self):
+        res = self.client.get(reverse('stock-orderbook', kwargs={'code': 'ZZZZZZ'}))
+        self.assertEqual(res.status_code, 404)
+
+    def test_orderbook_kis_failure_503(self):
+        with patch('stocks.views.fetch_orderbook', side_effect=RuntimeError('KIS down')):
+            res = self.client.get(reverse('stock-orderbook', kwargs={'code': '005930'}))
+        self.assertEqual(res.status_code, 503)
+        self.assertEqual(res.json().get('code'), 'EXTERNAL_API_ERROR')
+
+
 class MarketHoursTests(APITestCase):
     @classmethod
     def setUpTestData(cls):
