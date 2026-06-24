@@ -155,23 +155,42 @@ def fetch_price(stock: Stock) -> dict:
     return result
 
 
-def _is_market_open(market: str, now: Optional[datetime] = None) -> bool:
-    """평일 + 시간대 판정. 공휴일은 미고려 (followup §3.4 후속).
+# 시장 운영시간 (공휴일 미고려 — followup §3.4 후속). DST는 zoneinfo가 처리.
+_MARKET_HOURS = {
+    "kr": {"tz": _KST, "open": (9, 0), "close": (15, 30), "markets": DOMESTIC_MARKETS},   # KOSPI/KOSDAQ
+    "us": {"tz": _ET, "open": (9, 30), "close": (16, 0), "markets": US_MARKETS},          # NASDAQ/NYSE
+}
 
-    KR (KOSPI/KOSDAQ): KST Mon~Fri 09:00 ≤ t < 15:30
-    US (NASDAQ/NYSE):  ET  Mon~Fri 09:30 ≤ t < 16:00  (DST는 zoneinfo가 처리)
-    """
-    if market in DOMESTIC_MARKETS:
-        tz, open_hm, close_hm = _KST, (9, 0), (15, 30)
-    elif market in US_MARKETS:
-        tz, open_hm, close_hm = _ET, (9, 30), (16, 0)
-    else:
+
+def _region_of(market: str) -> Optional[str]:
+    return "kr" if market in DOMESTIC_MARKETS else "us" if market in US_MARKETS else None
+
+
+def _is_market_open(market: str, now: Optional[datetime] = None) -> bool:
+    """평일 + 시간대 판정. KR 09:00~15:30 KST / US 09:30~16:00 ET. 공휴일 미고려."""
+    region = _region_of(market)
+    if region is None:
         return False
-    local = (now or datetime.now(tz=tz)).astimezone(tz)
+    h = _MARKET_HOURS[region]
+    local = (now or datetime.now(tz=h["tz"])).astimezone(h["tz"])
     if local.weekday() >= 5:  # 토(5)·일(6)
         return False
-    t = (local.hour, local.minute)
-    return open_hm <= t < close_hm
+    return h["open"] <= (local.hour, local.minute) < h["close"]
+
+
+def market_status(now: Optional[datetime] = None) -> dict:
+    """KR·US 시장 개장/마감 상태 + 운영시간. KIS 호출 없는 순수 시간 로직.
+    반환: {kr:{is_open,open_time,close_time,timezone}, us:{...}}."""
+    out = {}
+    for region, h in _MARKET_HOURS.items():
+        rep = next(iter(h["markets"]))  # 지역 대표 시장으로 개장 판정(같은 지역은 동일 시간)
+        out[region] = {
+            "is_open": _is_market_open(rep, now),
+            "open_time": f"{h['open'][0]:02d}:{h['open'][1]:02d}",
+            "close_time": f"{h['close'][0]:02d}:{h['close'][1]:02d}",
+            "timezone": h["tz"].key,
+        }
+    return out
 
 
 def get_cache_ttl(stock: Stock) -> int:

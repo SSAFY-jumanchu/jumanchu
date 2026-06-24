@@ -182,7 +182,9 @@ class PopularStockSerializer(serializers.Serializer):
     code = serializers.CharField()
     name = serializers.CharField()
     market = serializers.CharField()
-    current = serializers.DecimalField(max_digits=18, decimal_places=4)
+    currency = serializers.CharField()                                          # KRW/USD (원본 통화)
+    current = serializers.DecimalField(max_digits=18, decimal_places=4)         # 원본 통화 현재가
+    current_krw = serializers.DecimalField(max_digits=18, decimal_places=4, allow_null=True)  # KRW 환산 현재가
     change = serializers.DecimalField(max_digits=18, decimal_places=4)
     change_rate = serializers.FloatField()
     trading_value = serializers.DecimalField(max_digits=24, decimal_places=4, allow_null=True)       # 원본 통화
@@ -198,6 +200,19 @@ class PopularRankingResponseSerializer(serializers.Serializer):
     items = PopularStockSerializer(many=True)
     market = serializers.ChoiceField(choices=['all', 'domestic', 'overseas'])
     sort = serializers.ChoiceField(choices=['value', 'volume', 'up', 'down'])
+    fetched_at = serializers.DateTimeField()
+
+
+class MarketRegionStatusSerializer(serializers.Serializer):
+    is_open = serializers.BooleanField()
+    open_time = serializers.CharField()    # 개장 HH:MM (현지 시각)
+    close_time = serializers.CharField()   # 마감 HH:MM (현지 시각)
+    timezone = serializers.CharField()
+
+
+class MarketStatusResponseSerializer(serializers.Serializer):
+    kr = MarketRegionStatusSerializer()
+    us = MarketRegionStatusSerializer()
     fetched_at = serializers.DateTimeField()
 
 

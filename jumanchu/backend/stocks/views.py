@@ -18,7 +18,7 @@ from stocks.pagination import paginate
 from stocks.services.market_summary import market_summary, popular_ranking
 from stocks.services.price_dispatch import (
     build_today_candle, fetch_minute_candles, fetch_orderbook, fetch_price,
-    get_cache_ttl, get_orderbook_ttl,
+    get_cache_ttl, get_orderbook_ttl, market_status,
 )
 
 
@@ -498,6 +498,22 @@ class PopularRankingView(APIView):
             'items': items, 'market': market, 'sort': sort, 'fetched_at': timezone.now(),
         }).data
         cache.set(cache_key, body, timeout=5)  # 실시간 지향: 5s TTL (market_summary와 동일)
+        return Response(body)
+
+
+@extend_schema(tags=['Market'])
+class MarketStatusView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        summary='시장 개장/마감 상태 (KR·US)',
+        responses={200: s.MarketStatusResponseSerializer},
+    )
+    def get(self, request):
+        # KIS 호출 없는 순수 시간 로직 → 캐시 불필요
+        body = s.MarketStatusResponseSerializer(
+            {**market_status(), 'fetched_at': timezone.now()}
+        ).data
         return Response(body)
 
 

@@ -261,6 +261,69 @@ class VolumePowerEnrichTests(APITestCase):
                          _VOLPOWER_FILL_LIMIT)
 
 
+class MarketStatusTests(APITestCase):
+    """시장 개장/마감 상태 — KIS 호출 없는 순수 시간 로직."""
+
+    def test_kr_open_us_closed(self):
+        from stocks.services.price_dispatch import market_status
+        # 2024-06-25(화) 10:00 KST → KR 장중 / US는 전일 21:00 ET(마감 후)
+        st = market_status(datetime(2024, 6, 25, 10, 0, tzinfo=ZoneInfo("Asia/Seoul")))
+        self.assertTrue(st["kr"]["is_open"])
+        self.assertFalse(st["us"]["is_open"])
+        self.assertEqual(st["kr"]["open_time"], "09:00")
+        self.assertEqual(st["kr"]["close_time"], "15:30")
+        self.assertEqual(st["us"]["timezone"], "America/New_York")
+
+    def test_us_open(self):
+        from stocks.services.price_dispatch import market_status
+        # 2024-06-25(화) 11:00 ET → US 장중
+        st = market_status(datetime(2024, 6, 25, 11, 0, tzinfo=ZoneInfo("America/New_York")))
+        self.assertTrue(st["us"]["is_open"])
+
+    def test_weekend_closed(self):
+        from stocks.services.price_dispatch import market_status
+        st = market_status(datetime(2024, 6, 22, 12, 0, tzinfo=ZoneInfo("Asia/Seoul")))  # 토요일
+        self.assertFalse(st["kr"]["is_open"])
+
+    def test_status_endpoint(self):
+        res = self.client.get(reverse('markets-status'))
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertIn("is_open", body["kr"])
+        self.assertIn("is_open", body["us"])
+        self.assertEqual(body["kr"]["timezone"], "Asia/Seoul")
+
+
+class PopularCurrencyTests(APITestCase):
+    """인기 랭킹 통화 — 해외는 USD 원본+KRW 환산 둘 다, 국내는 KRW."""
+
+    def test_us_pool_adds_krw_and_currency(self):
+        from stocks.services.market_summary import (
+            _popular_pool, _map_us_rank, _US_MARKETS, USD_KRW_RATE)
+        Stock.objects.create(code="AAPL", market="NASDAQ", name="Apple", currency="USD",
+                             market_cap=3_000_000_000_000, is_active=True)
+        raw = [{"symb": "AAPL", "name": "Apple", "last": "200", "diff": "1",
+                "sign": "2", "rate": "0.5", "tamt": "1000", "tvol": "50"}]
+        row = _popular_pool(list(_US_MARKETS), raw, _map_us_rank)[0]
+        self.assertEqual(row["currency"], "USD")
+        self.assertEqual(row["current"], Decimal("200"))
+        self.assertEqual(row["current_krw"], Decimal("200") * USD_KRW_RATE)
+        self.assertEqual(row["trading_value_krw"], Decimal("1000") * USD_KRW_RATE)
+
+    def test_kr_pool_currency_krw_no_conversion(self):
+        from stocks.services.market_summary import (
+            _popular_pool, _map_kr_rank, _KR_MARKETS)
+        Stock.objects.create(code="005930", market="KOSPI", name="삼성전자", currency="KRW",
+                             market_cap=400_000_000_000_000, is_active=True)
+        raw = [{"mksc_shrn_iscd": "005930", "hts_kor_isnm": "삼성전자",
+                "stck_prpr": "70000", "prdy_vrss": "100", "prdy_vrss_sign": "2",
+                "prdy_ctrt": "0.14", "acml_tr_pbmn": "5000", "acml_vol": "100"}]
+        row = _popular_pool(list(_KR_MARKETS), raw, _map_kr_rank)[0]
+        self.assertEqual(row["currency"], "KRW")
+        self.assertEqual(row["current_krw"], row["current"])        # 환산 없음
+        self.assertEqual(row["trading_value_krw"], row["trading_value"])
+
+
 class MarketHoursTests(APITestCase):
     @classmethod
     def setUpTestData(cls):

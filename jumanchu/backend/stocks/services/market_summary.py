@@ -16,6 +16,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 import requests
+from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
@@ -183,7 +184,7 @@ def _us_rankings() -> dict:
 
 
 # ----- 인기 종목 랭킹 (StocksView 인기 탭: 전체/국내/해외 × 거래대금/거래량/급상승/급하락) -----
-USD_KRW_RATE = Decimal("1500")  # 전체 탭 거래대금 정렬용 환율(USD→KRW). TODO: 라이브 환율로 교체
+USD_KRW_RATE = settings.USD_KRW_RATE  # USD→KRW 환산(전체 탭 정렬·원화 통일). settings 고정값
 
 _POPULAR_SORT = {
     "value":  (lambda x: x["trading_value_krw"] or Decimal("0"), True),   # 거래대금 ↓
@@ -205,8 +206,12 @@ def _popular_pool(markets: list[str], raw_rows: list, mapper) -> list[dict]:
         if mk is None:
             continue  # 우리 DB 비활성/미수록 종목 제외(클릭 불가 방지)
         m["market"] = mk
+        is_us = mk in _US_MARKETS
+        m["currency"] = "USD" if is_us else "KRW"          # 원본 통화(해외 탭 토글 라벨용)
         tv = m.get("trading_value")
-        m["trading_value_krw"] = tv * USD_KRW_RATE if (tv is not None and mk in _US_MARKETS) else tv
+        m["trading_value_krw"] = tv * USD_KRW_RATE if (tv is not None and is_us) else tv
+        cur = m.get("current")                              # 전체/국내 탭 원화 통일용 환산 현재가
+        m["current_krw"] = cur * USD_KRW_RATE if (cur is not None and is_us) else cur
         out.append(m)
     return out
 

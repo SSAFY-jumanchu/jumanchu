@@ -198,3 +198,10 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+
+# 환율 (USD→KRW) — 인기 랭킹 거래대금·현재가 원화 환산용. 고정값(라이브 FX 연동은 후속).
+# 실제 시세와 차이날 수 있으니 필요 시 env USD_KRW_RATE 로 덮어쓰기.
+from decimal import Decimal  # noqa: E402
+
+USD_KRW_RATE = Decimal(os.environ.get('USD_KRW_RATE', '1350'))
