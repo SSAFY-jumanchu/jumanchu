@@ -17,7 +17,8 @@ from stocks.models import EconomicEvent, Stock, StockIndicator, StockPrice
 from stocks.pagination import paginate
 from stocks.services.market_summary import market_summary, popular_ranking
 from stocks.services.price_dispatch import (
-    build_today_candle, fetch_minute_candles, fetch_price, get_cache_ttl,
+    build_today_candle, fetch_minute_candles, fetch_orderbook, fetch_price,
+    get_cache_ttl, get_orderbook_ttl,
 )
 
 
@@ -33,10 +34,6 @@ PERIOD_TO_DAYS = {"1d": 1, "1w": 7, "1m": 30, "3m": 90, "1y": 365, "5y": 1825}
 MINUTE_INTERVALS = {"1m", "5m", "15m", "1h"}
 DAY_INTERVALS = {"1d", "1w", "1mo"}
 _KST = ZoneInfo("Asia/Seoul")
-
-
-def _stub():
-    return Response({'detail': 'Not implemented'}, status=status.HTTP_501_NOT_IMPLEMENTED)
 
 
 def _safe_date(value):
@@ -256,11 +253,32 @@ class StockOrderBookView(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        summary='호가창 (Redis 1초 캐시)',
+        summary='호가창 (KIS 10호가, 장중 1s / 장외 30s 캐시)',
         responses={200: s.OrderBookResponseSerializer},
     )
     def get(self, request, code: str):
-        return _stub()
+        stock = _stock_by_code(code)
+        if not stock:
+            return Response({'detail': '해당 종목을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+        cache_key = f'stock:orderbook:{stock.market}:{stock.code}'
+        ttl = get_orderbook_ttl(stock)
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached, headers={'Cache-Control': f'max-age={ttl}'})
+
+        try:
+            orderbook = fetch_orderbook(stock)
+        except (requests.HTTPError, requests.Timeout, RuntimeError, KeyError,
+                ValueError, InvalidOperation):
+            return Response(
+                {'detail': 'KIS 외부 API 오류', 'code': 'EXTERNAL_API_ERROR'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        body = {'orderbook': s.OrderBookSerializer(orderbook).data}
+        cache.set(cache_key, body, timeout=ttl)
+        return Response(body, headers={'Cache-Control': f'max-age={ttl}'})
 
 
 @extend_schema(tags=['Stock'])

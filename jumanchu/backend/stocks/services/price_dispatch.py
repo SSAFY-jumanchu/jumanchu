@@ -32,10 +32,11 @@ from __future__ import annotations
 
 import time
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from django.core.cache import cache
 from django.utils import timezone
 
 from stocks.models import Stock
@@ -130,15 +131,27 @@ def _map_us_price(raw: dict, stock: Stock) -> dict:
 
 
 def fetch_price(stock: Stock) -> dict:
+    """현재가 dict. KIS 결과를 stock:price:raw:* 키로 캐시(장중 3s/장외 60s).
+
+    랭킹·보유·관심·차트·매매가 모두 이 캐시를 공유 → KIS 호출 dedup + 화면 간 가격 일관성.
+    StockPriceView는 별도 serialized 캐시(stock:price:*)를 유지 — FE 통합 후 중복 정리 예정.
+    """
+    key = f"stock:price:raw:{stock.market}:{stock.code}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
     client = get_kis_client()
     if stock.market in DOMESTIC_MARKETS:
         raw = client.get_current_price(stock.code)["output"]
-        return _map_kr_price(raw, stock)
-    if stock.market in US_MARKETS:
+        result = _map_kr_price(raw, stock)
+    elif stock.market in US_MARKETS:
         excd = MARKET_TO_EXCD[stock.market]
         raw = client.get_overseas_price_detail(excd, stock.code)["output"]
-        return _map_us_price(raw, stock)
-    raise ValueError(f"unsupported market: {stock.market!r}")
+        result = _map_us_price(raw, stock)
+    else:
+        raise ValueError(f"unsupported market: {stock.market!r}")
+    cache.set(key, result, timeout=get_cache_ttl(stock))
+    return result
 
 
 def _is_market_open(market: str, now: Optional[datetime] = None) -> bool:
@@ -162,6 +175,78 @@ def _is_market_open(market: str, now: Optional[datetime] = None) -> bool:
 
 def get_cache_ttl(stock: Stock) -> int:
     return 3 if _is_market_open(stock.market) else 60
+
+
+# ----- 호가창 (orderbook API용) -----
+
+
+def _orderbook_levels(raw: dict, price_fmt: str, qty_fmt: str) -> list[dict]:
+    """raw[price_fmt.format(i)]/[qty_fmt.format(i)] (i=1..10) → [{price, quantity}].
+
+    price>0인 레벨만 1→10(최우선→하위) 순서로. 빈 레벨(0/없음)은 제외 — 10호가
+    미만 종목·장전/장외엔 상위 일부만 채워지거나 전부 0이라 빈 배열이 될 수 있다.
+    """
+    levels: list[dict] = []
+    for i in range(1, 11):
+        p = raw.get(price_fmt.format(i))
+        try:
+            price = Decimal(str(p)) if p not in (None, "") else Decimal("0")
+        except InvalidOperation:
+            continue
+        if price <= 0:
+            continue
+        q = raw.get(qty_fmt.format(i))
+        try:
+            quantity = int(q) if q not in (None, "") else 0
+        except (TypeError, ValueError):
+            quantity = 0
+        levels.append({"price": price, "quantity": quantity})
+    return levels
+
+
+def _map_kr_orderbook(o1: dict, stock: Stock) -> dict:
+    return {
+        "stock_code": stock.code,
+        "asks": _orderbook_levels(o1, "askp{}", "askp_rsqn{}"),
+        "bids": _orderbook_levels(o1, "bidp{}", "bidp_rsqn{}"),
+        "total_ask_quantity": int(o1.get("total_askp_rsqn") or 0),
+        "total_bid_quantity": int(o1.get("total_bidp_rsqn") or 0),
+        "is_market_open": _is_market_open(stock.market),  # 빈 호가가 '장 마감' 때문인지 FE가 구분
+        "fetched_at": timezone.now(),
+    }
+
+
+def _map_us_orderbook(o2: dict, stock: Stock) -> dict:
+    asks = _orderbook_levels(o2, "pask{}", "vask{}")
+    bids = _orderbook_levels(o2, "pbid{}", "vbid{}")
+    return {
+        "stock_code": stock.code,
+        "asks": asks,
+        "bids": bids,
+        # 해외는 총잔량 필드 미제공 → 10호가 잔량 합산
+        "total_ask_quantity": sum(a["quantity"] for a in asks),
+        "total_bid_quantity": sum(b["quantity"] for b in bids),
+        "is_market_open": _is_market_open(stock.market),  # 빈 호가가 '장 마감' 때문인지 FE가 구분
+        "fetched_at": timezone.now(),
+    }
+
+
+def fetch_orderbook(stock: Stock) -> dict:
+    """KR/US 분기 → OrderBookSerializer 입력 dict (매도/매수 10호가 + 총잔량)."""
+    client = get_kis_client()
+    if stock.market in DOMESTIC_MARKETS:
+        raw = client.get_domestic_orderbook(stock.code)["output1"]
+        return _map_kr_orderbook(raw, stock)
+    if stock.market in US_MARKETS:
+        excd = MARKET_TO_EXCD[stock.market]
+        raw = client.get_overseas_orderbook(excd, stock.code)["output2"]
+        return _map_us_orderbook(raw, stock)
+    raise ValueError(f"unsupported market: {stock.market!r}")
+
+
+def get_orderbook_ttl(stock: Stock) -> int:
+    """호가 캐시 TTL: 장중 1s / 장외 30s (현재가 3s/60s보다 짧게 — 호가는 체결마다 변동)."""
+    return 1 if _is_market_open(stock.market) else 30
 
 
 # ----- 분봉 (chart API용) -----

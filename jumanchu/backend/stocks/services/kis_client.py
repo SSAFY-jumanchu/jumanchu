@@ -166,6 +166,23 @@ class KISClient:
             },
         )
 
+    def get_domestic_orderbook(self, stock_code: str) -> dict[str, Any]:
+        """국내주식 호가/예상체결 (FHKST01010200).
+
+        output1 활용 필드:
+          askp1~10 / bidp1~10            매도/매수 호가 1~10단계
+          askp_rsqn1~10 / bidp_rsqn1~10  각 호가 잔량
+          total_askp_rsqn / total_bidp_rsqn  총 매도/매수 잔량
+        """
+        return self._get(
+            path="/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
+            tr_id="FHKST01010200",
+            params={
+                "FID_COND_MRKT_DIV_CODE": "J",
+                "FID_INPUT_ISCD": stock_code,
+            },
+        )
+
     def get_overseas_price_detail(self, excd: str, symbol: str) -> dict[str, Any]:
         """해외주식 현재가 상세 (HHDFS76200200). 모의 환경 OK.
 
@@ -184,6 +201,21 @@ class KISClient:
         return self._get(
             path="/uapi/overseas-price/v1/quotations/price-detail",
             tr_id="HHDFS76200200",
+            params={"AUTH": "", "EXCD": excd, "SYMB": symbol},
+        )
+
+    def get_overseas_orderbook(self, excd: str, symbol: str) -> dict[str, Any]:
+        """해외주식 현재가 10호가 (HHDFS76200100). 실서버 + 해외 실시간 시세 구독 필요.
+
+        excd: NAS/NYS, symbol: ticker (예: AAPL)
+        output2 활용 필드:
+          pask1~10 / pbid1~10   매도/매수 호가 1~10단계
+          vask1~10 / vbid1~10   각 호가 잔량
+        (국내와 달리 총잔량 필드는 미제공 → 호출자가 vask/vbid 합산.)
+        """
+        return self._get(
+            path="/uapi/overseas-price/v1/quotations/inquire-asking-price",
+            tr_id="HHDFS76200100",
             params={"AUTH": "", "EXCD": excd, "SYMB": symbol},
         )
 
