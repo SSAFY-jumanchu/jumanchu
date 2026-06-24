@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>주만추 — 발표</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sun-typeface/SUIT@2/fonts/variable/woff2/SUIT-Variable.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/theme/black.css" id="theme" />
+
+  <style>
+    :root {
+      /* === intro.mp4 에서 추출한 팔레트 === */
+      --bg-0: #070a14;          /* 가장 깊은 배경 */
+      --bg-1: #0a0e1a;          /* 기본 슬라이드 배경 */
+      --bg-2: #121829;          /* 카드 표면 */
+      --magenta: #ff3d8b;       /* 포인트 (마젠타) */
+      --magenta-2: #e0218a;
+      --blue: #4a7dff;          /* 보조 (블루) */
+      --cyan: #5be0ff;          /* 글로우 */
+      --text: #eaf0fb;
+      --dim: #8590a8;
+      --line: rgba(255,255,255,0.08);
+      --grad: linear-gradient(100deg, var(--magenta) 0%, var(--blue) 100%);
+    }
+
+    .reveal {
+      font-family: "SUIT Variable", "Inter", system-ui, sans-serif;
+      color: var(--text);
+      font-size: 30px;
+      letter-spacing: -0.015em;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    /* 영문 라벨류는 Inter 로 또렷하게 */
+    .kicker, #intro .eyebrow, .member .role, #intro .meta, .foot {
+      font-family: "Inter", "SUIT Variable", sans-serif;
+    }
+    .reveal .slides { text-align: left; }
+    /* 슬라이드 자체에는 배경을 깔지 않는다(영상 위 불투명 박스 방지).
+       기본 배경은 덱 전체 레이어에만 적용. */
+    html, body { background: var(--bg-0); }
+    .reveal { background: var(--bg-1); }
+    .reveal .backgrounds { background-color: var(--bg-1); }
+    .reveal .slides section .fragment { transition: all .3s ease; }
+
+    .reveal h1, .reveal h3 { color: #fff; font-weight: 600; text-transform: none; line-height: 1.12; }
+    .reveal h2 { color: #fff; font-weight: 500; text-transform: none; line-height: 1.16; }
+    .reveal b, .reveal strong { font-weight: 600; }
+    .reveal h1 { font-size: 3.4em; letter-spacing: -0.03em; }
+    .reveal h2 { font-size: 1.7em; margin-bottom: .5em; letter-spacing: -0.02em; }
+    .reveal h3 { font-size: 1em; }
+    .reveal p { line-height: 1.5; }
+
+    /* 그라데이션 텍스트 */
+    .grad-text {
+      background: var(--grad);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent; color: transparent;
+    }
+
+    /* 상단 섹션 키커(라벨) */
+    .kicker {
+      display: inline-flex; align-items: center; gap: .5em;
+      font-size: .46em; font-weight: 600; letter-spacing: .18em;
+      color: var(--magenta); text-transform: uppercase;
+      margin-bottom: .9em;
+    }
+    .kicker::before {
+      content: ""; width: 28px; height: 2px;
+      background: var(--grad); border-radius: 2px;
+    }
+
+    /* 페이지 푸터 */
+    .foot {
+      position: absolute; bottom: 26px; left: 60px; right: 60px;
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: .42em; color: var(--dim); letter-spacing: .04em;
+      border-top: 1px solid var(--line); padding-top: 14px;
+    }
+    .foot .brand { color: var(--text); font-weight: 600; }
+    .foot .brand b { color: #fff; }
+
+    /* ============ 1. 인트로 ============ */
+    /* 섹션이 슬라이드 전체 높이를 채우게 → 메타를 슬라이드 하단 모서리에 고정 */
+    #intro { height: 100%; }
+    /* 아주 옅은 전체 비네트(글래스 패널 대비용) */
+    #intro .veil {
+      position: absolute; inset: 0; pointer-events: none;
+      background: linear-gradient(90deg, rgba(7,10,20,.40) 0%, rgba(7,10,20,.12) 42%, rgba(7,10,20,0) 72%);
+    }
+    /* 텍스트를 감싸는 투명 글래스 패널 — 은은하게 빛나게 */
+    #intro .wrap {
+      position: absolute; top: 50%; left: 3%; transform: translateY(-50%);
+      display: inline-block; max-width: 52%;
+      padding: 44px 52px 48px;
+      background: linear-gradient(155deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.03) 100%);
+      -webkit-backdrop-filter: blur(1.5px) saturate(110%);
+      backdrop-filter: blur(1.5px) saturate(110%);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 26px;
+      box-shadow:
+        0 20px 60px rgba(0,0,0,.32),
+        0 0 70px rgba(255,61,139,.13),
+        inset 0 1px 0 rgba(255,255,255,.25);
+    }
+    #intro .eyebrow {
+      font-size: .5em; font-weight: 600; letter-spacing: .42em;
+      color: var(--cyan); text-transform: uppercase; margin-bottom: .7em;
+    }
+    #intro h1 { margin: 0; }
+    /* 모던 글로시 로고타입 — 상단 하이라이트 그라데이션 + 은은한 글로우(음영 최소화) */
+    #intro h1 .ko {
+      display: inline-block;
+      font-weight: 500;
+      font-size: 1.02em;
+      letter-spacing: -0.02em;
+      padding: .02em .04em;
+      color: #fff;
+      text-shadow: 0 2px 10px rgba(0,0,0,.3);
+    }
+    #intro .tagline {
+      font-size: 1.15em; font-weight: 500; color: #fff; margin: .7em 0 .4em;
+      word-break: keep-all;
+    }
+    #intro .vp {
+      font-size: .72em; color: var(--dim); max-width: 20em; line-height: 1.65;
+      word-break: keep-all; text-wrap: balance;
+    }
+    #intro .vp b { color: var(--text); font-weight: 600; }
+    #intro .meta {
+      position: absolute; bottom: 20px; right: 28px;
+      text-align: right; font-size: .44em; color: var(--dim); letter-spacing: .06em;
+    }
+    #intro .meta b { color: var(--text); font-weight: 600; }
+
+    /* ============ 2. 팀 ============ */
+    .lead { font-size: .82em; color: var(--dim); max-width: 26em; line-height: 1.6; word-break: keep-all; text-wrap: pretty; }
+    .lead b { color: var(--text); font-weight: 600; }
+
+    .team { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 1.1em; }
+    /* 정적 글래스 카드 — 은은한 상시 글로우 (움직임 없음) */
+    .member {
+      position: relative; overflow: hidden;
+      background: linear-gradient(180deg, rgba(255,255,255,.11) 0%, rgba(255,255,255,.035) 100%);
+      border: 1px solid rgba(255,120,180,.30); border-radius: 20px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.28), 0 0 22px rgba(255,61,139,.12), inset 0 1px 0 rgba(255,255,255,.22);
+      padding: 30px 26px 28px;
+    }
+    /* 상단 그라데이션 바 */
+    .member::before {
+      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: var(--grad); z-index: 2;
+    }
+    .member > * { position: relative; z-index: 2; }
+    .member .role {
+      display: inline-block; font-size: .42em; font-weight: 600; letter-spacing: .14em;
+      color: var(--magenta); text-transform: uppercase; margin-bottom: .5em;
+    }
+    .member .name { font-size: 1.05em; font-weight: 600; color: #fff; }
+    .member .name small { font-size: .5em; font-weight: 500; color: var(--dim); margin-left: .5em; letter-spacing: .02em; }
+    .member .desc { font-size: .56em; color: var(--dim); line-height: 1.62; margin-top: .9em; }
+    .member .desc b { color: var(--text); font-weight: 600; }
+    .member .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+    .member .tags span {
+      font-size: .42em; color: var(--text); padding: .3em .7em;
+      border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.03);
+    }
+
+    .pipeline {
+      display: flex; align-items: center; gap: .55em; flex-wrap: wrap;
+      margin-top: 1.3em; font-size: .56em; color: var(--dim);
+    }
+    .pipeline .step { color: var(--text); font-weight: 600; }
+    .pipeline .step.end { color: var(--magenta); }
+    .pipeline .sep { color: var(--blue); font-weight: 600; }
+    .pipeline .badge {
+      margin-left: auto; font-size: .92em; color: var(--text);
+      border: 1px solid var(--line); border-radius: 999px; padding: .35em 1em;
+      background: rgba(255,61,139,.08);
+    }
+    .pipeline .badge b { color: var(--magenta); }
+    /* ============ 3. 차별성 (Why 주만추) ============ */
+    #why h2 { max-width: 24em; }
+    #why .lead { margin-bottom: .2em; }
+    .pillars { display: flex; align-items: stretch; gap: 8px; margin-top: 1em; }
+    .pillar {
+      position: relative; overflow: hidden;
+      flex: 1; min-height: 332px; display: flex; flex-direction: column;
+      background: linear-gradient(180deg, rgba(255,255,255,.11) 0%, rgba(255,255,255,.035) 100%);
+      border: 1px solid rgba(255,120,180,.30); border-radius: 20px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.28), 0 0 22px rgba(255,61,139,.12), inset 0 1px 0 rgba(255,255,255,.22);
+      padding: 30px 26px 26px;
+    }
+    /* 박스 사이 옆으로 흐르는 화살표 */
+    .flow-arrow {
+      flex: 0 0 auto; width: 42px; align-self: center;
+      display: flex; align-items: center; justify-content: center; gap: 2px;
+    }
+    .flow-arrow i {
+      width: 11px; height: 11px;
+      border-top: 2.5px solid var(--magenta); border-right: 2.5px solid var(--magenta);
+      transform: rotate(45deg); opacity: .18;
+      animation: chev 1.3s linear infinite;
+    }
+    .flow-arrow i:nth-child(1) { border-color: var(--magenta); animation-delay: 0s; }
+    .flow-arrow i:nth-child(2) { border-color: #b06bff; animation-delay: .16s; }
+    .flow-arrow i:nth-child(3) { border-color: var(--blue);  animation-delay: .32s; }
+    @keyframes chev { 0%, 100% { opacity: .16; } 50% { opacity: 1; } }
+    .pillar::before {
+      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: var(--grad); z-index: 2;
+    }
+    .pillar > * { position: relative; z-index: 2; }
+
+    .pillar .phead { display: flex; align-items: baseline; gap: .55em; margin-bottom: .2em; }
+    .pillar .pnum {
+      font-family: "Inter", sans-serif; font-size: 1.9em; font-weight: 700; line-height: 1;
+      background: var(--grad); -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent; color: transparent;
+    }
+    .pillar .pkey { font-size: .46em; font-weight: 600; letter-spacing: .12em; color: var(--magenta); text-transform: uppercase; }
+    .pillar .ptitle { font-size: .92em; color: #fff; font-weight: 600; margin: .35em 0 .45em; }
+    .pillar .pdesc { font-size: .56em; color: var(--dim); line-height: 1.62; }
+    .pillar .pdesc b { color: var(--text); font-weight: 600; }
+    .pillar .pold {
+      margin-top: auto; padding-top: 15px; border-top: 1px solid var(--line);
+      font-size: .48em; color: #6b7488; display: flex; align-items: center; gap: .5em;
+    }
+    .pillar .pold .x { color: #ff5d7a; font-weight: 800; }
+
+    .why-foot {
+      margin-top: 1.15em; font-size: .82em; color: var(--text); font-weight: 600;
+      display: flex; align-items: center; gap: .6em; word-break: keep-all;
+    }
+    .why-foot::before { content: ""; width: 26px; height: 2px; background: var(--grad); border-radius: 2px; }
+    /* ============ 4. MVP 범위 (What we built) ============ */
+    #mvp { height: 100%; }
+    /* 풀블리드 배경 이미지 (ref/2.jpg) */
+    #mvp .bg-ph {
+      position: absolute; inset: 0; z-index: 0;
+      background: url("assets/mvp-bg.jpg") center/cover no-repeat, var(--bg-0);
+      transform: scaleY(-1);   /* 밝은 웨이브를 상단으로 올림 */
+    }
+    /* 텍스트 가독성용 어두운 베일 */
+    #mvp .veil {
+      position: absolute; inset: 0; z-index: 1; pointer-events: none;
+      background:
+        radial-gradient(85% 75% at 50% 48%, rgba(7,10,20,.45) 0%, rgba(7,10,20,.80) 100%),
+        linear-gradient(180deg, rgba(7,10,20,.55) 0%, rgba(7,10,20,.28) 38%, rgba(7,10,20,.82) 100%);
+    }
+    #mvp .mvp-inner {
+      position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%);
+      z-index: 2; padding: 0 60px;
+    }
+    #mvp h2 { max-width: 22em; }
+    .mvp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-top: 1.2em; }
+    /* 카드 없이 — 기능 사이 얇은 세로 구분선만 */
+    .mvp-card { position: relative; padding: 2px 24px; }
+    .mvp-card + .mvp-card { border-left: 1px solid rgba(255,255,255,.14); }
+    .mvp-card .mtop { display: flex; align-items: baseline; gap: .5em; margin-bottom: .45em; }
+    .mvp-card .mnum {
+      font-family: "Inter", sans-serif; font-size: 1.5em; font-weight: 700; line-height: 1;
+      background: var(--grad); -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent; color: transparent;
+    }
+    .mvp-card .mrole { font-size: .42em; font-weight: 600; letter-spacing: .12em; color: var(--magenta); text-transform: uppercase; }
+    .mvp-card h3 { font-size: .82em; color: #fff; font-weight: 600; margin: 0 0 .45em; word-break: keep-all; }
+    .mvp-card .mdesc { font-size: .52em; color: var(--dim); line-height: 1.58; word-break: keep-all; }
+    .mvp-card .mdesc b { color: var(--text); font-weight: 600; }
+
+    /* ============ 5. 사용자 흐름 (순환 루프) ============ */
+    #flow { height: 100%; }
+    #flow .bg-ph {
+      position: absolute; inset: 0; z-index: 0;
+      background: #05070e url("assets/flow-bg.jpg") center 58% / auto 130% no-repeat;
+    }
+    #flow .veil {
+      position: absolute; inset: 0; z-index: 1; pointer-events: none;
+      background: linear-gradient(180deg, rgba(5,7,14,.60) 0%, rgba(5,7,14,.12) 28%, rgba(5,7,14,.30) 100%);
+    }
+    #flow .flow-inner { position: relative; z-index: 2; }
+    #flow .loop { position: relative; width: 760px; height: 420px; margin: 1.1em auto 0; }
+    #flow .loop-hub {
+      position: absolute; left: 380px; top: 210px; transform: translate(-50%,-50%); z-index: 1;
+      width: 150px; height: 150px; border-radius: 50%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: radial-gradient(circle at 50% 35%, rgba(255,61,139,.20), rgba(255,255,255,.035));
+      border: 1px solid rgba(255,120,180,.38);
+      box-shadow: 0 0 34px rgba(255,61,139,.18), inset 0 1px 0 rgba(255,255,255,.22);
+    }
+    #flow .loop-hub .h-sub { font-size: .44em; color: var(--dim); letter-spacing: .04em; }
+    #flow .loop-hub .h-main { font-size: 1.25em; font-weight: 700; margin-top: .05em; }
+    #flow .lnode { position: absolute; transform: translate(-50%,-50%); z-index: 2; width: 156px; text-align: center; }
+    #flow .lnode .ln-badge {
+      width: 48px; height: 48px; border-radius: 50%; margin: 0 auto .5em;
+      display: flex; align-items: center; justify-content: center;
+      font-family: "Inter", sans-serif; font-weight: 700; font-size: .85em; color: #fff;
+      background: linear-gradient(135deg, rgba(255,61,139,.92), rgba(74,125,255,.92));
+      border: 1px solid rgba(255,255,255,.28);
+      box-shadow: 0 6px 20px rgba(0,0,0,.38), 0 0 16px rgba(255,61,139,.22);
+    }
+    #flow .lnode .ln-t { font-size: .64em; color: #fff; font-weight: 600; }
+    #flow .lnode .ln-d { font-size: .46em; color: var(--dim); margin-top: .25em; }
+    #flow .n1 { left: 380px; top: 45px; }
+    #flow .n2 { left: 669px; top: 159px; }
+    #flow .n3 { left: 559px; top: 343px; }
+    #flow .n4 { left: 201px; top: 343px; }
+    #flow .n5 { left: 91px;  top: 159px; }
+
+    /* ============ 헤드라인 진입 애니메이션 (페이지 들어올 때마다) ============ */
+    @keyframes headIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .reveal section.present .kicker,
+    .reveal section.present #intro .eyebrow,
+    #intro.present .eyebrow {
+      animation: headIn .6s cubic-bezier(.22,.61,.36,1) both;
+    }
+    .reveal section.present h1,
+    .reveal section.present h2 {
+      animation: headIn .72s cubic-bezier(.22,.61,.36,1) .1s both;
+    }
+    /* 헤드라인 다음 보조문구(리드/태그라인)도 살짝 뒤따라 */
+    #intro.present .tagline { animation: headIn .7s cubic-bezier(.22,.61,.36,1) .24s both; }
+    #intro.present .vp      { animation: headIn .7s cubic-bezier(.22,.61,.36,1) .34s both; }
+    .reveal section.present .lead { animation: headIn .7s cubic-bezier(.22,.61,.36,1) .22s both; }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+  <!-- ============ 1. 인트로 ============ -->
+  <section id="intro"
+           data-background-video="assets/intro.mp4"
+           data-background-video-loop
+           data-background-video-muted
+           data-background-size="cover">
+    <div class="veil"></div>
+    <div class="wrap">
+      <div class="eyebrow">SSAFY 광주 1반 6조</div>
+      <h1><span class="ko">주만추</span></h1>
+      <div class="tagline">나와 잘 맞는 투자, 자연스럽게 이어지다.</div>
+      <p class="vp">
+        <b>성향에 맞는 종목</b>을 만나고
+        건강한 <b>장기 투자 관계</b>를 만들어가는 서비스
+      </p>
+    </div>
+    <div class="meta">
+      <div><b>JUMANCHU</b> · Stock with your DNA</div>
+      <div>2026 · 6-week Full-stack Project</div>
+    </div>
+  </section>
+
+  <!-- ============ 2. 팀 / 역할 ============ -->
+  <section id="team">
+    <span class="kicker">Team</span>
+    <h2>경계 없이 설계하고, <span class="grad-text">끝까지 구현합니다.</span></h2>
+    <p class="lead"><b>기획 · 개발 · 알고리즘 · 배포</b>까지<br/>전 과정을 직접 책임지는 <b>풀스택 팀</b>.</p>
+
+    <div class="team">
+      <div class="member">
+        <span class="role">Backend</span>
+        <div class="name">강재민 <small>BE</small></div>
+        <div class="desc">Django 전부 — <b>모델 · 뷰 · URL · 마이그레이션</b>. 외부 API 연동, 추천 함수 REST 노출, CI/CD.</div>
+        <div class="tags"><span>Django</span><span>DRF</span><span>PostgreSQL</span><span>KIS API</span></div>
+      </div>
+      <div class="member">
+        <span class="role">Algorithm · AI</span>
+        <div class="name">정율 <small>Algo · AI</small></div>
+        <div class="desc">추천 도메인 기획 + 순수 Python 알고리즘. <b>Stock DNA</b> 점수와 궁합 매칭, <b>생성형 AI</b> 추천 설명까지.</div>
+        <div class="tags"><span>Python</span><span>Stock DNA</span><span>생성형 AI</span></div>
+      </div>
+      <div class="member">
+        <span class="role">Frontend</span>
+        <div class="name">송호영 <small>FE</small></div>
+        <div class="desc">Vue 3 전부 — <b>화면 · 라우팅 · 상태관리 · API 연동</b>. 온보딩부터 장투케어까지 전 화면.</div>
+        <div class="tags"><span>Vue 3</span><span>Pinia</span><span>vue-router</span><span>Vite</span></div>
+      </div>
+    </div>
+
+    <div class="pipeline">
+      <span class="step">기획</span><span class="sep">→</span>
+      <span class="step">Frontend</span><span class="sep">→</span>
+      <span class="step">Backend</span><span class="sep">→</span>
+      <span class="step">DB</span><span class="sep">→</span>
+      <span class="step end">배포</span>
+    </div>
+  </section>
+
+  <!-- ============ 3. 차별성 (Why 주만추) ============ -->
+  <section id="why">
+    <span class="kicker">Why 주만추</span>
+    <h2>연애도 결국 <span class="grad-text">궁합</span>입니다.<br/>투자도 결국 다르지 않습니다.</h2>
+
+    <div class="pillars">
+      <div class="pillar">
+        <div class="phead"><span class="pnum">01</span><span class="pkey">수집 · Collect</span></div>
+        <h3 class="ptitle">성향을 먼저 수집</h3>
+        <p class="pdesc">투자 경험 · 관심 섹터 · 투자 기간 · 위험 선호를 <b>온보딩</b>으로 받아 개인화의 출발점을 만든다.</p>
+        <div class="pold"><span class="x">✗</span> 기존: 모두에게 똑같은 정보</div>
+      </div>
+      <span class="flow-arrow"><i></i><i></i><i></i></span>
+      <div class="pillar">
+        <div class="phead"><span class="pnum">02</span><span class="pkey">추천 · Match</span></div>
+        <h3 class="ptitle">나와 맞는 종목을</h3>
+        <p class="pdesc">성향과 종목 <b>Stock DNA</b>를 매칭해, <b>“왜 나에게 맞는지”</b> 근거와 함께 추천한다.</p>
+        <div class="pold"><span class="x">✗</span> 기존: 왜 맞는지 설명 없음</div>
+      </div>
+      <span class="flow-arrow"><i></i><i></i><i></i></span>
+      <div class="pillar">
+        <div class="phead"><span class="pnum">03</span><span class="pkey">관리 · Care</span></div>
+        <h3 class="ptitle">추천 이후 장기 관리</h3>
+        <p class="pdesc">관심 · 보유 · 포트폴리오 · 매매일지로 <b>매수 이후의 행동</b>까지 이어서 관리한다.</p>
+        <div class="pold"><span class="x">✗</span> 기존: 사면 끝, 관리 공백</div>
+      </div>
+    </div>
+
+    <p class="why-foot">정보를 <span style="color:#fff">많이</span> 주는 서비스는 많습니다. <span class="grad-text">나에게 맞게</span> 주는 서비스는 없었습니다.</p>
+  </section>
+
+  <!-- ============ 4. MVP 범위 (What we built) ============ -->
+  <section id="mvp">
+    <div class="bg-ph"></div>
+    <div class="veil"></div>
+    <div class="mvp-inner">
+      <span class="kicker">What we built</span>
+      <h2><span class="grad-text">만남부터 관계까지</span>, 투자의 전 과정을 완성했습니다.</h2>
+      <p class="lead">우리는 <b>‘선택’이 아닌 ‘지속’</b>을 만드는 4가지를 구현했습니다.</p>
+
+      <div class="mvp-grid">
+        <div class="mvp-card">
+          <div class="mtop"><span class="mnum">01</span><span class="mrole">Onboarding · Match</span></div>
+          <h3>온보딩 · 궁합추천</h3>
+          <p class="mdesc">성향을 수집해, 나와 맞는 종목을 <b>Stock DNA 근거</b>와 함께 추천한다.</p>
+        </div>
+        <div class="mvp-card">
+          <div class="mtop"><span class="mnum">02</span><span class="mrole">Trade · Community</span></div>
+          <h3>실시간 매매 · 커뮤니티</h3>
+          <p class="mdesc"><b>KIS 실시간 시세·호가</b>로 매매하고, 투자자들과 의견을 나눈다.</p>
+        </div>
+        <div class="mvp-card">
+          <div class="mtop"><span class="mnum">03</span><span class="mrole">Care · Journal</span></div>
+          <h3>장투케어 · 매매일지</h3>
+          <p class="mdesc">관심·보유·포트폴리오로 관리하고, <b>매매일지</b>로 매수·매도 이유를 남긴다.</p>
+        </div>
+        <div class="mvp-card">
+          <div class="mtop"><span class="mnum">04</span><span class="mrole">AI Solution</span></div>
+          <h3>사용자 데이터 기반 AI 솔루션</h3>
+          <p class="mdesc">쌓인 <b>사용자 데이터</b>를 바탕으로 추천 사유 설명·맞춤 인사이트를 제공한다.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. 사용자 흐름 (순환 루프) ============ -->
+  <section id="flow">
+    <div class="bg-ph"></div>
+    <div class="veil"></div>
+    <div class="flow-inner">
+    <span class="kicker">How it works</span>
+    <h2>한 번의 선택이 아니라, <span class="grad-text">쓸수록 깊어지는 관계</span>.</h2>
+    <p class="lead">쌓인 <b>행동 데이터</b>가 다음 추천을 더 정확하게 만듭니다. 멈추지 않는 루프.</p>
+
+    <div class="loop">
+      <div class="loop-hub">
+        <span class="h-sub">선택이 아닌</span>
+        <span class="h-main grad-text">지속</span>
+      </div>
+
+      <div class="lnode n1"><div class="ln-badge">1</div><div class="ln-t">성향 수집</div><div class="ln-d">온보딩</div></div>
+      <div class="lnode n2"><div class="ln-badge">2</div><div class="ln-t">맞춤 추천</div><div class="ln-d">궁합 · Stock DNA</div></div>
+      <div class="lnode n3"><div class="ln-badge">3</div><div class="ln-t">매매 · 기록</div><div class="ln-d">실시간 매매 · 일지</div></div>
+      <div class="lnode n4"><div class="ln-badge">4</div><div class="ln-t">데이터 축적</div><div class="ln-d">행동 누적</div></div>
+      <div class="lnode n5"><div class="ln-badge">5</div><div class="ln-t">추천 개선</div><div class="ln-d">데이터 기반 AI</div></div>
+    </div>
+    </div>
+  </section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/notes/notes.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    controls: true,
+    progress: true,
+    slideNumber: false,
+    transition: 'fade',
+    backgroundTransition: 'fade',
+    width: 1280,
+    height: 720,
+    margin: 0,
+    plugins: [ RevealNotes ]
+  });
+</script>
+</body>
+</html>
