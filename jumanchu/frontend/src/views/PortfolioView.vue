@@ -1,9 +1,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchHoldings } from '../api/portfolio'
+import { fetchHoldings, fetchOrders } from '../api/portfolio'
 import { fetchStockFinancials } from '../api/stocks'
-import { fetchLongtermReport } from '../api/recommend'
+import { fetchLongtermReport, fetchLongtermHistory } from '../api/recommend'
 import { fetchHoldingsNews } from '../api/news'
 import { fetchDiaries } from '../api/diary'
 import { errMsg, retry } from '../api/client'
@@ -79,7 +79,7 @@ async function loadPortfolio() {
       const nz = await fetchHoldingsNews()
       for (const n of nz.items || []) {
         const c = n.stock?.code
-        if (c) (newsByCode[c] ||= []).push({ headline: n.title, source: n.source })
+        if (c) (newsByCode[c] ||= []).push({ headline: n.title, source: n.source, url: n.url })
       }
     } catch {
       // 뉴스 실패 무시
@@ -107,12 +107,31 @@ async function loadPortfolio() {
       // 일지 실패 무시
     }
 
+    // 거래내역(주문)도 한 번 호출해 종목코드별로 그룹핑(최신순)
+    const ordersByCode = {}
+    try {
+      const oz = await fetchOrders({ size: 200 })
+      for (const o of oz.items || []) {
+        const c = o.stock_code
+        if (!c) continue
+        ;(ordersByCode[c] ||= []).push({
+          side: o.side === 'SELL' ? 'sell' : 'buy',
+          date: (o.executed_at || o.created_at || '').slice(0, 10).replace(/-/g, '.'),
+          qty: o.quantity,
+          price: o.price == null ? '' : Number(o.price).toLocaleString('ko-KR'),
+        })
+      }
+    } catch {
+      // 거래내역 실패 무시
+    }
+
     holdings.value = await Promise.all(
       items.map(async (it) => {
         const code = it.stock.code
-        const [report, fin] = await Promise.all([
+        const [report, fin, hist] = await Promise.all([
           fetchLongtermReport(code).catch(() => null),
           fetchStockFinancials(code).catch(() => null),
+          fetchLongtermHistory(code).catch(() => null),
         ])
         const sum = fin?.summaries?.[0] || {}
         const ind = fin?.indicator || {}
@@ -142,10 +161,11 @@ async function loadPortfolio() {
           financial: { score: Math.round(r.financial?.score ?? 0), note: r.financial?.summary ?? '', items: finItems },
           growth: { score: Math.round(r.growth?.score ?? 0), note: r.growth?.summary ?? '', items: growthItems },
           compat: uf
-            ? { score: Math.round(uf.score), note: uf.summary, items: [] }
+            ? { score: Math.round(uf.score), note: uf.summary, items: uf.components || [] }
             : { score: 0, note: '온보딩을 완료하면 궁합 분석을 볼 수 있어요.', items: [] },
           journal: diaryByCode[code] || [],
-          history: [],
+          trades: ordersByCode[code] || [],
+          history: (hist?.items || []).map((h) => ({ month: h.month, score: Math.round(h.score) })),
           news: newsByCode[code] || [],
         }
       }),
@@ -248,19 +268,29 @@ onMounted(loadPortfolio)
           </div>
         </div>
 
-        <!-- 매매일지 + 점수 히스토리 -->
+        <!-- 거래내역 + 매매일기 + 궁합 히스토리 (3분할) -->
         <div class="lt-mid-row">
           <section class="panel lt-card">
-            <p class="lt-card-title">📒 이 종목 매매일지</p>
+            <p class="lt-card-title">🧾 이 종목 거래내역</p>
             <div class="lt-journal-list">
-              <div v-for="(j, i) in s.journal" :key="i" class="lt-journal-item">
-                <div class="lt-j-head">
-                  <span class="lt-j-side" :class="j.side">{{ j.side === 'buy' ? '매수' : '매도' }}</span>
-                  <span class="lt-j-date">{{ j.date }}</span>
-                </div>
-                <p class="lt-j-note">{{ j.note }}</p>
+              <div v-for="(t, i) in s.trades" :key="i" class="lt-row1">
+                <span class="lt-j-side" :class="t.side">{{ t.side === 'buy' ? '매수' : '매도' }}</span>
+                <span class="lt-j-date">{{ t.date }}</span>
+                <span class="lt-row1-note">{{ t.qty }}주 @ {{ t.price }}</span>
               </div>
-              <p v-if="!s.journal.length" class="lt-empty">이 종목으로 작성한 매매일지가 없어요.</p>
+              <p v-if="!s.trades.length" class="lt-empty">이 종목 거래내역이 없어요.</p>
+            </div>
+          </section>
+
+          <section class="panel lt-card">
+            <p class="lt-card-title">📒 이 종목 매매일기</p>
+            <div class="lt-journal-list">
+              <div v-for="(j, i) in s.journal" :key="i" class="lt-row1">
+                <span class="lt-j-side" :class="j.side">{{ j.side === 'buy' ? '매수' : '매도' }}</span>
+                <span class="lt-j-date">{{ j.date }}</span>
+                <span class="lt-row1-note">{{ j.note }}</span>
+              </div>
+              <p v-if="!s.journal.length" class="lt-empty">이 종목으로 작성한 매매일기가 없어요.</p>
             </div>
           </section>
 
@@ -283,10 +313,17 @@ onMounted(loadPortfolio)
         <section class="panel lt-card">
           <p class="lt-card-title">📰 종목 관련 뉴스</p>
           <div class="lt-news-list">
-            <article v-for="(n, i) in s.news" :key="i" class="lt-news-item">
+            <a
+              v-for="(n, i) in s.news"
+              :key="i"
+              class="lt-news-item"
+              :href="n.url || undefined"
+              :target="n.url ? '_blank' : undefined"
+              rel="noopener noreferrer"
+            >
               <strong class="lt-news-headline">{{ n.headline }}</strong>
               <span class="lt-news-source">{{ n.source }}</span>
-            </article>
+            </a>
             <p v-if="!s.news.length" class="lt-empty">관련 뉴스가 아직 없어요.</p>
           </div>
         </section>
@@ -415,22 +452,22 @@ onMounted(loadPortfolio)
 .lt-score-item strong { font-size: 13px; font-weight: 900; color: var(--accent); }
 .lt-score-note { margin: auto 0 0; padding: 12px 14px; border-radius: var(--radius); background: var(--glass-subtle); border: 1px solid var(--glass-border); font-size: 12px; font-weight: 700; color: var(--muted); line-height: 1.55; word-break: keep-all; }
 
-/* 매매일지 + 히스토리 */
-.lt-mid-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+/* 거래내역 + 매매일기 + 궁합 히스토리 (3분할) */
+.lt-mid-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
 .lt-card { padding: 18px 20px; }
 .lt-card-title { font-size: 14px; font-weight: 900; color: var(--ink); margin: 0 0 14px; }
 
-.lt-journal-list { display: flex; flex-direction: column; gap: 12px; }
-.lt-journal-item { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-.lt-journal-item:last-child { padding-bottom: 0; border-bottom: 0; }
-.lt-j-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
-.lt-j-side { padding: 2px 9px; border-radius: 6px; font-size: 11px; font-weight: 900; }
+/* 한 줄 항목 리스트 (거래내역·매매일기) — 높이 제한 + 넘치면 스크롤 */
+.lt-journal-list { display: flex; flex-direction: column; gap: 0; max-height: 168px; overflow-y: auto; }
+.lt-row1 { display: flex; align-items: center; gap: 8px; padding: 7px 2px; border-bottom: 1px solid var(--line); }
+.lt-row1:last-child { border-bottom: 0; }
+.lt-j-side { padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 900; flex-shrink: 0; }
 .lt-j-side.buy { background: rgba(227,52,79,0.12); color: #e3344f; }
 .lt-j-side.sell { background: rgba(43,89,214,0.12); color: #2b59d6; }
-.lt-j-date { font-size: 12px; font-weight: 800; color: var(--muted); }
-.lt-j-note { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.5; word-break: keep-all; }
+.lt-j-date { font-size: 12px; font-weight: 800; color: var(--muted); flex-shrink: 0; }
+.lt-row1-note { flex: 1; min-width: 0; text-align: right; font-size: 12.5px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.lt-history-list { display: flex; flex-direction: column; }
+.lt-history-list { display: flex; flex-direction: column; max-height: 168px; overflow-y: auto; }
 .lt-history-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .lt-history-row:last-child { border-bottom: 0; }
 .lt-h-month { font-size: 13px; font-weight: 700; color: var(--muted); }
@@ -439,8 +476,9 @@ onMounted(loadPortfolio)
 
 /* 뉴스 */
 .lt-news-list { display: flex; flex-direction: column; }
-.lt-news-item { display: flex; align-items: baseline; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.lt-news-item { display: flex; align-items: baseline; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); cursor: pointer; text-decoration: none; color: inherit; transition: opacity 0.15s; }
 .lt-news-item:last-child { border-bottom: 0; }
+.lt-news-item:hover .lt-news-headline { color: var(--accent); }
 .lt-news-headline { font-size: 14px; font-weight: 800; color: var(--ink); line-height: 1.45; word-break: keep-all; }
 .lt-news-source { font-size: 11px; font-weight: 700; color: var(--faint); flex-shrink: 0; }
 
