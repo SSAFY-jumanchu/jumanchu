@@ -177,6 +177,25 @@ class MarketSummaryResponseSerializer(serializers.Serializer):
     fetched_at = serializers.DateTimeField()
 
 
+class PopularStockSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    name = serializers.CharField()
+    market = serializers.CharField()
+    current = serializers.DecimalField(max_digits=18, decimal_places=4)
+    change = serializers.DecimalField(max_digits=18, decimal_places=4)
+    change_rate = serializers.FloatField()
+    trading_value = serializers.DecimalField(max_digits=24, decimal_places=4, allow_null=True)       # 원본 통화
+    trading_value_krw = serializers.DecimalField(max_digits=24, decimal_places=4, allow_null=True)   # 정렬용 KRW 환산
+    volume = serializers.IntegerField(allow_null=True)
+
+
+class PopularRankingResponseSerializer(serializers.Serializer):
+    items = PopularStockSerializer(many=True)
+    market = serializers.ChoiceField(choices=['all', 'domestic', 'overseas'])
+    sort = serializers.ChoiceField(choices=['value', 'volume', 'up', 'down'])
+    fetched_at = serializers.DateTimeField()
+
+
 class EconomicEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = EconomicEvent

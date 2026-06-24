@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 from stocks import serializers as s
 from stocks.models import EconomicEvent, Stock, StockIndicator, StockPrice
 from stocks.pagination import paginate
-from stocks.services.market_summary import market_summary
+from stocks.services.market_summary import market_summary, popular_ranking
 from stocks.services.price_dispatch import (
     build_today_candle, fetch_minute_candles, fetch_price, get_cache_ttl,
 )
@@ -435,6 +435,51 @@ class MarketSummaryView(APIView):
             )
         body = s.MarketSummaryResponseSerializer(data).data
         cache.set('markets:summary', body, timeout=5)  # 실시간 지향: 5s TTL
+        return Response(body)
+
+
+@extend_schema(tags=['Market'])
+class PopularRankingView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        summary='인기 종목 랭킹 (전체/국내/해외 × 거래대금/거래량/급상승/급하락)',
+        parameters=[
+            OpenApiParameter('market', str, required=False, enum=['all', 'domestic', 'overseas']),
+            OpenApiParameter('sort', str, required=False, enum=['value', 'volume', 'up', 'down']),
+            OpenApiParameter('size', int, required=False, description='기본 30, 최대 50'),
+        ],
+        responses={200: s.PopularRankingResponseSerializer},
+    )
+    def get(self, request):
+        p = request.query_params
+        market = p.get('market', 'all')
+        if market not in ('all', 'domestic', 'overseas'):
+            market = 'all'
+        sort = p.get('sort', 'value')
+        if sort not in ('value', 'volume', 'up', 'down'):
+            sort = 'value'
+        try:
+            size = int(p.get('size', 30))
+        except (TypeError, ValueError):
+            size = 30
+        size = max(1, min(size, 50))
+
+        cache_key = f'markets:popular:{market}:{sort}:{size}'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+        try:
+            items = popular_ranking(market, sort, size)
+        except (requests.HTTPError, requests.Timeout, RuntimeError, KeyError) as e:
+            return Response(
+                {'detail': f'시장 데이터 조회 실패: {e}', 'code': 'EXTERNAL_API_ERROR'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        body = s.PopularRankingResponseSerializer({
+            'items': items, 'market': market, 'sort': sort, 'fetched_at': timezone.now(),
+        }).data
+        cache.set(cache_key, body, timeout=5)  # 실시간 지향: 5s TTL (market_summary와 동일)
         return Response(body)
 
 
