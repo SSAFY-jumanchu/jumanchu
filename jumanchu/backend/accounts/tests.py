@@ -56,10 +56,18 @@ class OnboardingTests(APITestCase):
         p = InvestmentProfile.objects.get(user=self.user)
         self.assertEqual(p.investment_style, '신중 탐색형')
 
-    def test_double_onboarding_returns_409(self):
-        self.client.post(self.url, self._payload(), format='json')
-        res = self.client.post(self.url, self._payload(), format='json')
-        self.assertEqual(res.status_code, status.HTTP_409_CONFLICT)
+    def test_reonboarding_allowed_updates_profile(self):
+        # 재검사 허용: 재제출은 409가 아니라 200, 프로필이 새 답안으로 재산출(덮어쓰기)
+        self.client.post(self.url, self._payload(), format='json')  # 1차: 전부 5점 → 성장 동반형
+        res = self.client.post(
+            self.url,
+            self._payload(q1=1, q2=1, q3=1, q4=1, q5=1, q6=1),  # 2차: 전부 1점
+            format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        p = InvestmentProfile.objects.get(user=self.user)
+        self.assertEqual(p.risk_tolerance, 1)               # 5 → 1 로 갱신됨
+        self.assertEqual(p.investment_style, '신중 탐색형')   # 재산출 (5점이면 성장 동반형이었음)
 
     def test_requires_auth(self):
         self.client.force_authenticate(user=None)
