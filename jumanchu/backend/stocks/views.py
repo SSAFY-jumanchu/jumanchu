@@ -3,6 +3,7 @@ from decimal import InvalidOperation
 from zoneinfo import ZoneInfo
 
 import requests
+from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Count, F, Q
 from django.utils import timezone
@@ -18,7 +19,7 @@ from stocks.pagination import paginate
 from stocks.services.market_summary import market_summary, popular_ranking
 from stocks.services.price_dispatch import (
     build_today_candle, fetch_minute_candles, fetch_orderbook, fetch_price,
-    get_cache_ttl, get_orderbook_ttl,
+    get_cache_ttl, get_orderbook_ttl, market_status,
 )
 
 
@@ -465,7 +466,7 @@ class PopularRankingView(APIView):
         parameters=[
             OpenApiParameter('market', str, required=False, enum=['all', 'domestic', 'overseas']),
             OpenApiParameter('sort', str, required=False, enum=['value', 'volume', 'up', 'down']),
-            OpenApiParameter('size', int, required=False, description='기본 30, 최대 50'),
+            OpenApiParameter('size', int, required=False, description='기본 100, 최대 100'),
         ],
         responses={200: s.PopularRankingResponseSerializer},
     )
@@ -478,10 +479,10 @@ class PopularRankingView(APIView):
         if sort not in ('value', 'volume', 'up', 'down'):
             sort = 'value'
         try:
-            size = int(p.get('size', 30))
+            size = int(p.get('size', 100))
         except (TypeError, ValueError):
-            size = 30
-        size = max(1, min(size, 50))
+            size = 100
+        size = max(1, min(size, 100))
 
         cache_key = f'markets:popular:{market}:{sort}:{size}'
         cached = cache.get(cache_key)
@@ -495,9 +496,26 @@ class PopularRankingView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         body = s.PopularRankingResponseSerializer({
-            'items': items, 'market': market, 'sort': sort, 'fetched_at': timezone.now(),
+            'items': items, 'market': market, 'sort': sort,
+            'usd_krw_rate': settings.USD_KRW_RATE, 'fetched_at': timezone.now(),
         }).data
-        cache.set(cache_key, body, timeout=5)  # 실시간 지향: 5s TTL (market_summary와 동일)
+        cache.set(cache_key, body, timeout=15)  # 탭 전환 대부분 캐시히트(데이터는 ~30s 워밍이라 무방)
+        return Response(body)
+
+
+@extend_schema(tags=['Market'])
+class MarketStatusView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        summary='시장 개장/마감 상태 (KR·US)',
+        responses={200: s.MarketStatusResponseSerializer},
+    )
+    def get(self, request):
+        # KIS 호출 없는 순수 시간 로직 → 캐시 불필요
+        body = s.MarketStatusResponseSerializer(
+            {**market_status(), 'fetched_at': timezone.now()}
+        ).data
         return Response(body)
 
 

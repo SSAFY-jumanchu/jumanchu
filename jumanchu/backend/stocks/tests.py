@@ -261,6 +261,105 @@ class VolumePowerEnrichTests(APITestCase):
                          _VOLPOWER_FILL_LIMIT)
 
 
+class MarketStatusTests(APITestCase):
+    """시장 개장/마감 상태 — KIS 호출 없는 순수 시간 로직."""
+
+    def test_kr_open_us_closed(self):
+        from stocks.services.price_dispatch import market_status
+        # 2024-06-25(화) 10:00 KST → KR 장중 / US는 전일 21:00 ET(마감 후)
+        st = market_status(datetime(2024, 6, 25, 10, 0, tzinfo=ZoneInfo("Asia/Seoul")))
+        self.assertTrue(st["kr"]["is_open"])
+        self.assertFalse(st["us"]["is_open"])
+        self.assertEqual(st["kr"]["open_time"], "09:00")
+        self.assertEqual(st["kr"]["close_time"], "15:30")
+        self.assertEqual(st["us"]["timezone"], "America/New_York")
+
+    def test_us_open(self):
+        from stocks.services.price_dispatch import market_status
+        # 2024-06-25(화) 11:00 ET → US 장중
+        st = market_status(datetime(2024, 6, 25, 11, 0, tzinfo=ZoneInfo("America/New_York")))
+        self.assertTrue(st["us"]["is_open"])
+
+    def test_weekend_closed(self):
+        from stocks.services.price_dispatch import market_status
+        st = market_status(datetime(2024, 6, 22, 12, 0, tzinfo=ZoneInfo("Asia/Seoul")))  # 토요일
+        self.assertFalse(st["kr"]["is_open"])
+
+    def test_status_endpoint(self):
+        res = self.client.get(reverse('markets-status'))
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertIn("is_open", body["kr"])
+        self.assertIn("is_open", body["us"])
+        self.assertEqual(body["kr"]["timezone"], "Asia/Seoul")
+
+
+class PopularCurrencyTests(APITestCase):
+    """인기 랭킹 — 시총상위 후보 + 통화(해외 USD원본+KRW환산, 국내 KRW) + 시세캐시."""
+
+    def setUp(self):
+        cache.clear()
+
+    def test_apply_currency_us(self):
+        from stocks.services.market_summary import _apply_currency, USD_KRW_RATE
+        it = {"market": "NASDAQ", "current": Decimal("200"), "trading_value": Decimal("1000")}
+        _apply_currency(it)
+        self.assertEqual(it["currency"], "USD")
+        self.assertEqual(it["current_krw"], Decimal("200") * USD_KRW_RATE)
+        self.assertEqual(it["trading_value_krw"], Decimal("1000") * USD_KRW_RATE)
+
+    def test_apply_currency_kr_no_conversion(self):
+        from stocks.services.market_summary import _apply_currency
+        it = {"market": "KOSPI", "current": Decimal("70000"), "trading_value": Decimal("5000")}
+        _apply_currency(it)
+        self.assertEqual(it["currency"], "KRW")
+        self.assertEqual(it["current_krw"], Decimal("70000"))       # 환산 없음
+        self.assertEqual(it["trading_value_krw"], Decimal("5000"))
+
+    def test_apply_currency_handles_none(self):
+        from stocks.services.market_summary import _apply_currency
+        it = {"market": "NASDAQ", "current": None, "trading_value": None}
+        _apply_currency(it)
+        self.assertIsNone(it["current_krw"])
+        self.assertIsNone(it["trading_value_krw"])
+
+    def test_market_cap_candidates_order(self):
+        from stocks.services.market_summary import _market_cap_candidates
+        for code, cap in [("A", 300), ("B", 100), ("C", 200)]:
+            Stock.objects.create(code=code, market="KOSPI", name=code, currency="KRW",
+                                 market_cap=cap, is_active=True)
+        out = _market_cap_candidates("domestic", 2)
+        self.assertEqual([s.code for s in out], ["A", "C"])         # 시총 내림차순 top2
+
+    def test_popular_ranking_reads_rankprice_cache(self):
+        from stocks.services.market_summary import popular_ranking, USD_KRW_RATE
+        from stocks.services.price_dispatch import rankprice_key
+        Stock.objects.create(code="AAPL", market="NASDAQ", name="Apple", currency="USD",
+                             market_cap=3_000_000_000_000, is_active=True)
+        cache.set(rankprice_key("NASDAQ", "AAPL"),
+                  {"current": Decimal("200"), "change": Decimal("1"), "change_rate": 0.5,
+                   "trading_value": Decimal("1000"), "volume": 50})
+        # 시세 캐시 히트 → fetch_rank_price(KIS) 안 탐, 체결강도는 mock None
+        with patch("stocks.services.market_summary.fetch_volume_power", return_value=None):
+            items = popular_ranking("overseas", "value", 10)
+        self.assertEqual(len(items), 1)
+        it = items[0]
+        self.assertEqual(it["currency"], "USD")
+        self.assertEqual(it["current"], Decimal("200"))
+        self.assertEqual(it["current_krw"], Decimal("200") * USD_KRW_RATE)
+        self.assertIn("sector", it)
+        self.assertIsNone(it["volume_power"])      # 체결강도 캐시 비어있음 → None
+
+    def test_popular_endpoint_shape(self):
+        # 빈 DB → 후보 없음 → KIS 0콜. 응답에 usd_krw_rate·items 형태만 검증.
+        res = self.client.get(reverse('markets-popular'), {'market': 'overseas', 'size': 5})
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertIn('usd_krw_rate', body)
+        self.assertEqual(body['market'], 'overseas')
+        self.assertIsInstance(body['items'], list)
+
+
 class MarketHoursTests(APITestCase):
     @classmethod
     def setUpTestData(cls):

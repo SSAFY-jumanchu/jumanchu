@@ -155,23 +155,42 @@ def fetch_price(stock: Stock) -> dict:
     return result
 
 
-def _is_market_open(market: str, now: Optional[datetime] = None) -> bool:
-    """평일 + 시간대 판정. 공휴일은 미고려 (followup §3.4 후속).
+# 시장 운영시간 (공휴일 미고려 — followup §3.4 후속). DST는 zoneinfo가 처리.
+_MARKET_HOURS = {
+    "kr": {"tz": _KST, "open": (9, 0), "close": (15, 30), "markets": DOMESTIC_MARKETS},   # KOSPI/KOSDAQ
+    "us": {"tz": _ET, "open": (9, 30), "close": (16, 0), "markets": US_MARKETS},          # NASDAQ/NYSE
+}
 
-    KR (KOSPI/KOSDAQ): KST Mon~Fri 09:00 ≤ t < 15:30
-    US (NASDAQ/NYSE):  ET  Mon~Fri 09:30 ≤ t < 16:00  (DST는 zoneinfo가 처리)
-    """
-    if market in DOMESTIC_MARKETS:
-        tz, open_hm, close_hm = _KST, (9, 0), (15, 30)
-    elif market in US_MARKETS:
-        tz, open_hm, close_hm = _ET, (9, 30), (16, 0)
-    else:
+
+def _region_of(market: str) -> Optional[str]:
+    return "kr" if market in DOMESTIC_MARKETS else "us" if market in US_MARKETS else None
+
+
+def _is_market_open(market: str, now: Optional[datetime] = None) -> bool:
+    """평일 + 시간대 판정. KR 09:00~15:30 KST / US 09:30~16:00 ET. 공휴일 미고려."""
+    region = _region_of(market)
+    if region is None:
         return False
-    local = (now or datetime.now(tz=tz)).astimezone(tz)
+    h = _MARKET_HOURS[region]
+    local = (now or datetime.now(tz=h["tz"])).astimezone(h["tz"])
     if local.weekday() >= 5:  # 토(5)·일(6)
         return False
-    t = (local.hour, local.minute)
-    return open_hm <= t < close_hm
+    return h["open"] <= (local.hour, local.minute) < h["close"]
+
+
+def market_status(now: Optional[datetime] = None) -> dict:
+    """KR·US 시장 개장/마감 상태 + 운영시간. KIS 호출 없는 순수 시간 로직.
+    반환: {kr:{is_open,open_time,close_time,timezone}, us:{...}}."""
+    out = {}
+    for region, h in _MARKET_HOURS.items():
+        rep = next(iter(h["markets"]))  # 지역 대표 시장으로 개장 판정(같은 지역은 동일 시간)
+        out[region] = {
+            "is_open": _is_market_open(rep, now),
+            "open_time": f"{h['open'][0]:02d}:{h['open'][1]:02d}",
+            "close_time": f"{h['close'][0]:02d}:{h['close'][1]:02d}",
+            "timezone": h["tz"].key,
+        }
+    return out
 
 
 def get_cache_ttl(stock: Stock) -> int:
@@ -252,7 +271,9 @@ def get_orderbook_ttl(stock: Stock) -> int:
 
 # ----- 체결강도(거래비율, volume power) — 인기 랭킹 컬럼용 -----
 
-VOLPOWER_TTL = 60  # 체결강도 캐시 TTL(초). 워밍 배치 주기와 맞춤.
+VOLPOWER_TTL = 120  # 체결강도 캐시 TTL(초). 워밍 1주기(~20s)보다 넉넉히 — 사이클 사이 만료 방지.
+# 체결강도 없음(US 장마감 등) 음성 캐시값 — 요청 경로가 매번 라이브 재조회하지 않게.
+VOLPOWER_EMPTY = {"volume_power": None, "buy_ratio": None, "sell_ratio": None}
 
 
 def volpower_key(market: str, code: str) -> str:
@@ -280,6 +301,8 @@ def fetch_volume_power(market: str, code: str) -> Optional[dict]:
             return {"volume_power": round(r, 2),
                     "buy_ratio": round(buy, 1), "sell_ratio": round(100 - buy, 1)}
         if market in US_MARKETS:
+            if not _is_market_open(market):
+                return None  # 장마감엔 호가 체결량 0 → 체결강도 없음. 불필요한 KIS 호출 skip.
             excd = MARKET_TO_EXCD[market]
             o1 = client.get_overseas_orderbook(excd, code).get("output1", {})
             bvol = float(o1.get("bvol") or 0)
@@ -294,6 +317,31 @@ def fetch_volume_power(market: str, code: str) -> Optional[dict]:
             ValueError, InvalidOperation):
         return None
     return None
+
+
+# ----- 랭킹 전용 시세 캐시 (인기 랭킹 시총상위100용) -----
+# fetch_price의 stock:price:raw는 장중 3s라 워밍에 안 맞음 → 랭킹은 60s 캐시로 분리(시세 약간 staleness 허용).
+RANKPRICE_TTL = 120  # 워밍 1주기(~20s)보다 넉넉히 — 사이클 사이 만료 방지
+
+
+def rankprice_key(market: str, code: str) -> str:
+    return f"stock:rankprice:{market}:{code}"
+
+
+def fetch_rank_price(stock: Stock) -> Optional[dict]:
+    """랭킹용 슬림 시세(current/change/change_rate/trading_value/volume)를 60s 캐시에 적재.
+    워밍 배치·요청 경로 공용. fetch_price(3s 캐시) 재사용 → KIS 중복 호출 dedup. 실패면 None."""
+    try:
+        p = fetch_price(stock)
+    except (requests.HTTPError, requests.Timeout, RuntimeError, KeyError,
+            ValueError, InvalidOperation):
+        return None
+    slim = {
+        "current": p["current"], "change": p["change"], "change_rate": p["change_rate"],
+        "trading_value": p["trading_value"], "volume": p["volume"],
+    }
+    cache.set(rankprice_key(stock.market, stock.code), slim, timeout=RANKPRICE_TTL)
+    return slim
 
 
 # ----- 분봉 (chart API용) -----

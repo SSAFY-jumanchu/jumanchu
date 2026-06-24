@@ -2,8 +2,8 @@
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { fetchLongtermRanking } from '../api/recommend'
-import { fetchStocks, fetchStockPrice, fetchStockChart } from '../api/stocks'
-import { retry } from '../api/client'
+import { fetchStockPrice, fetchStockChart } from '../api/stocks'
+import client, { retry } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import { useFavoritesStore } from '../stores/favorites'
 
@@ -233,6 +233,7 @@ function fmtPrice(v, market) {
 }
 
 function fmtChange(v, market) {
+  if (v == null || Number.isNaN(v)) return '—'   // change 미보강(스와이프 저장 등) 시 KR에서 toLocaleString 크래시 방지
   const isKrw = market === 'KOSPI' || market === 'KOSDAQ'
   const prefix = v >= 0 ? '+' : ''
   return isKrw ? prefix + v.toLocaleString('ko-KR') + '원' : prefix + '$' + Math.abs(v / 1380).toFixed(2)
@@ -370,25 +371,48 @@ const isFav = (code) => favStore.isFav(code)
 const toggleFavorite = (stock) => favStore.toggle(stock)
 const nowLabel = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
 
-// ----- 실데이터: fetchStocks(시총순) 목록 + 행별 KIS 실시간가 -----
+// ----- 실데이터: BE /markets/popular/ (시총상위100 + 실시간가 + 통화환산 + 체결강도) -----
 const popularReal = ref([])          // 가격 조회 성공한 행만 보관
 const popularLoading = ref(true)     // 첫 렌더부터 로딩 표시 (빈 표 깜빡임 방지)
 const popularError = ref('')
 let popularLoadId = 0                 // 동시/연속 호출 경합 방지 토큰
 let popularLoadedMarket = null        // 같은 시장 재요청 스킵용
 
-// 거래대금 → 사람이 읽는 단위 (KRW: 억/조, USD: M/B)
-function fmtTradingValue(v, market) {
-  if (v == null) return '—'
-  const n = Number(v)
-  if (market === 'KOSPI' || market === 'KOSDAQ') {
-    if (n >= 1e12) return (n / 1e12).toFixed(1) + '조'
-    if (n >= 1e8) return Math.round(n / 1e8).toLocaleString('ko-KR') + '억'
-    return n.toLocaleString('ko-KR')
-  }
+// ===== 표시 통화 (전체/국내=원화통일, 해외=₩/$ 토글) =====
+const usdKrwRate = ref(1350)              // BE usd_krw_rate 로 갱신
+const overseasCurrency = ref('usd')       // 해외 탭 토글: 'usd' | 'krw'
+const displayCurrency = computed(() =>    // 전체/국내는 항상 원화, 해외만 토글
+  marketFilter.value === 'overseas' ? overseasCurrency.value : 'krw')
+const isUsMarket = (m) => m === 'NASDAQ' || m === 'NYSE'
+function toDisp(v, market) {               // 표시 통화로 환산(krw 모드 & 미국주면 ×환율)
+  return displayCurrency.value === 'krw' && isUsMarket(market) ? v * usdKrwRate.value : v
+}
+function toKrwAlways(v, market) {          // 정렬용: 표시통화와 무관하게 항상 KRW
+  return isUsMarket(market) ? v * usdKrwRate.value : v
+}
+function fmtKrwAmt(n) {
+  if (n >= 1e12) return (n / 1e12).toFixed(1) + '조'
+  if (n >= 1e8) return Math.round(n / 1e8).toLocaleString('ko-KR') + '억'
+  return Math.round(n).toLocaleString('ko-KR')
+}
+function fmtUsdAmt(n) {
   if (n >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'B'
   if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M'
   return '$' + n.toLocaleString('en-US')
+}
+// 거래대금 → 표시 통화 환산·포맷 (인기 탭 전용)
+function dispAmount(v, market) {
+  if (v == null) return '—'
+  const dv = toDisp(Number(v), market)
+  return displayCurrency.value === 'krw' ? fmtKrwAmt(dv) : fmtUsdAmt(dv)
+}
+// 현재가 → 표시 통화 환산·포맷 (인기 탭 전용)
+function dispPrice(v, market) {
+  if (v == null) return '—'
+  const dv = toDisp(Number(v), market)
+  return displayCurrency.value === 'krw'
+    ? Math.round(dv).toLocaleString('ko-KR') + '원'
+    : '$' + dv.toLocaleString('en-US', { maximumFractionDigits: 2 })
 }
 
 // 거래량(주식 수) → 사람이 읽는 단위 (KR: 만/억, US: K/M)
@@ -433,65 +457,42 @@ async function mapLimit(arr, limit, fn) {
 // 전체=국내+해외, 국내=KOSPI, 해외=NASDAQ. 시총 상위를 후보로 받아 실시간 거래대금으로 정렬.
 const POP_LIMIT = 100
 
-function marketsForFilter() {
-  if (marketFilter.value === 'domestic') return ['KOSPI']
-  if (marketFilter.value === 'overseas') return ['NASDAQ']
-  return ['KOSPI', 'NASDAQ']   // 전체 = 국내 + 해외
-}
-
-function makeRow(it) {
+// 인기 응답 1건 → 행 (실시간가·거래대금·등락률·체결강도 모두 BE가 채워줌)
+function rowFromPopular(it) {
   return {
-    code: it.code, name: it.name, market: it.market, sector: it.sector,
+    code: it.code, name: it.name, market: it.market, sector: it.sector || '',
     color: rankColor(it.code),
-    price: null, change: null, rate: null,
-    volume: '—', rawValue: null, rawVolume: null,
-    buyRatio: null, sellRatio: null, aiNote: '',
+    price: it.current == null ? null : Number(it.current),          // 원본 통화(표시 때 환산)
+    change: it.change == null ? null : Number(it.change),
+    rate: it.change_rate == null ? null : Number(it.change_rate),
+    rawValue: it.trading_value == null ? null : Number(it.trading_value),  // 원본 통화
+    rawValueKrw: it.trading_value_krw == null ? null : Number(it.trading_value_krw),  // 정렬용 KRW
+    rawVolume: it.volume == null ? null : Number(it.volume),
+    buyRatio: it.buy_ratio, sellRatio: it.sell_ratio,              // 체결강도(거래 비율)
+    aiNote: '',
     // 상세 패널이 참조하는 필드 안전 기본값 (클릭 시 크래시 방지)
     chartPoints: [], sparkline: [], aiReason: '', summary: [], community: [],
   }
 }
-function applyPrice(row, p, market) {
-  row.price = Number(p.current)
-  row.change = Number(p.change)
-  row.rate = Number(p.change_rate)
-  row.rawValue = Number(p.trading_value)
-  row.rawVolume = Number(p.volume)
-  row.volume = fmtTradingValue(p.trading_value, market)
-}
 
-// 식별 행을 먼저 띄우고, 실시간가는 백그라운드로 보강(동시 4건, 실패행은 '—' 유지).
-async function enrichPopularPrices(items, myId) {
-  await mapLimit(items, 4, async (it) => {
-    if (myId !== popularLoadId) return
-    try {
-      const { price } = await retry(() => fetchStockPrice(it.code), { attempts: 3, delayMs: 500 })
-      if (myId !== popularLoadId) return
-      const row = popularReal.value.find((r) => r.code === it.code)
-      if (row) applyPrice(row, price, it.market)
-    } catch { /* 실패행은 '—' 유지 */ }
-  })
-}
-
+// 인기 랭킹 = BE GET /markets/popular/ 1콜 (시총상위100 + 실시간가 + 통화환산 + 체결강도).
+// 시세는 BE 워밍캐시(stock:rankprice:*)에서 옴 → FE는 종목당 호출 안 함(기존 100콜 → 1콜).
 async function loadPopular() {
-  const markets = marketsForFilter()
-  const key = markets.join(',')
+  const key = marketFilter.value
   if (popularLoadedMarket === key && popularReal.value.length) return
   const myId = ++popularLoadId
   popularLoading.value = true
   popularError.value = ''
   popularReal.value = []
   try {
-    // 시총 상위 후보 목록 (전체는 국내·해외 반반 → 합쳐서 최대 100). 목록 조회는 DB라 빠름.
-    const per = markets.length > 1 ? Math.ceil(POP_LIMIT / markets.length) : POP_LIMIT
-    const lists = await Promise.all(markets.map((m) =>
-      fetchStocks({ market: m, sort: 'market_cap', size: per })
-        .then((r) => r.items || []).catch(() => [])))
+    const { data } = await retry(() => client.get('/markets/popular/', {
+      params: { market: key, sort: popularSort.value, size: POP_LIMIT },
+    }), { attempts: 3, delayMs: 500 })
     if (myId !== popularLoadId) return
-    const items = lists.flat().slice(0, POP_LIMIT)
-    popularReal.value = items.map(makeRow)        // 식별 행 먼저 표시 (가격은 곧 채움)
-    popularLoadedMarket = items.length ? key : null
-    if (!items.length) { popularError.value = '목록을 불러오지 못했어요.'; return }
-    enrichPopularPrices(items, myId)              // 실시간 거래대금/현재가 백그라운드 보강
+    usdKrwRate.value = Number(data.usd_krw_rate) || usdKrwRate.value
+    popularReal.value = (data.items || []).map(rowFromPopular)
+    popularLoadedMarket = popularReal.value.length ? key : null
+    if (!popularReal.value.length) { popularError.value = '목록을 불러오지 못했어요.'; return }
     ensurePeriodRates()                           // 기간 탭이면 일봉으로 기간 통계 계산
   } catch (e) {
     if (myId !== popularLoadId) return
@@ -516,6 +517,15 @@ function popValue(s) {
   if (sortPeriod.value === 'rt') return s.rawValue
   const st = periodStats(s); return st ? st.value : null
 }
+// 정렬용 거래대금(KRW 통일) — 전체 탭에서 ₩/$ 섞여 순서 틀어지지 않게
+function popValueKrw(s) {
+  if (sortPeriod.value === 'rt') {
+    if (s.rawValueKrw != null) return s.rawValueKrw
+    return s.rawValue != null ? toKrwAlways(s.rawValue, s.market) : null
+  }
+  const st = periodStats(s)
+  return st && st.value != null ? toKrwAlways(st.value, s.market) : null
+}
 function popVolume(s) {
   if (sortPeriod.value === 'rt') return s.rawVolume
   const st = periodStats(s); return st ? st.volume : null
@@ -527,7 +537,7 @@ function popRateText(s) {
 }
 function popValueText(s) {
   const v = popValue(s)
-  return v == null ? (periodLoading.value ? '…' : '—') : fmtTradingValue(v, s.market)
+  return v == null ? (periodLoading.value ? '…' : '—') : dispAmount(v, s.market)
 }
 function popVolumeText(s) {
   const v = popVolume(s)
@@ -612,7 +622,7 @@ const popularStocks = computed(() => {
     return true
   })
   const n = (v) => (v == null || Number.isNaN(v) ? -Infinity : v)
-  if (popularSort.value === 'value') list = [...list].sort((a, b) => n(popValue(b)) - n(popValue(a)))
+  if (popularSort.value === 'value') list = [...list].sort((a, b) => n(popValueKrw(b)) - n(popValueKrw(a)))
   else if (popularSort.value === 'volume') list = [...list].sort((a, b) => n(popVolume(b)) - n(popVolume(a)))
   else if (popularSort.value === 'up') list = [...list].sort((a, b) => n(popRate(b)) - n(popRate(a)))
   else if (popularSort.value === 'down') list = [...list].sort((a, b) => n(popRate(a)) - n(popRate(b)))
@@ -800,9 +810,10 @@ async function loadRanking() {
       sector: r.sector,
       color: rankColor(r.stock_code),
       ltc: Math.round(r.longterm_total),
-      // 가격·거래 정보는 랭킹 엔드포인트에 없음 → 표에서 '—'
-      price: null,
-      rate: null,
+      // 현재가·등락률·거래대금은 BE longterm_ranking이 제공 (volume·거래비율은 미제공)
+      price: r.current_price ?? null,
+      rate: r.change_rate ?? null,
+      tradingValue: r.trading_value ?? null,
       volume: null,
       buyRatio: null,
       sellRatio: null,
@@ -905,6 +916,11 @@ onMounted(() => {
                 @click="sortPeriod = p.key"
               >{{ p.label }}</button>
             </div>
+            <!-- 해외 탭에서만 통화 토글 (전체/국내는 원화 통일) -->
+            <div v-if="marketFilter === 'overseas'" class="segmented cur-seg">
+              <button type="button" :class="{ 'is-selected': overseasCurrency === 'usd' }" @click="overseasCurrency = 'usd'">$</button>
+              <button type="button" :class="{ 'is-selected': overseasCurrency === 'krw' }" @click="overseasCurrency = 'krw'">₩</button>
+            </div>
           </div>
 
           <p class="pop-caption">
@@ -946,7 +962,7 @@ onMounted(() => {
                   <span>{{ s.market }} · {{ s.sector }}</span>
                 </div>
               </div>
-              <span class="pop-num pop-price">{{ fmtPopPrice(s.price, s.market) }}</span>
+              <span class="pop-num pop-price">{{ dispPrice(s.price, s.market) }}</span>
               <span class="pop-num pop-rate" :class="{ up: popRate(s) != null && popRate(s) >= 0, down: popRate(s) != null && popRate(s) < 0 }">
                 {{ popRateText(s) }}
               </span>
@@ -1149,7 +1165,7 @@ onMounted(() => {
               <span class="rank-r rank-rate" :class="s.rate >= 0 ? 'up' : 'down'">
                 {{ s.rate != null ? (s.rate >= 0 ? '+' : '') + s.rate.toFixed(2) + '%' : '—' }}
               </span>
-              <span class="rank-r rank-vol">{{ s.volume ?? '—' }}</span>
+              <span class="rank-r rank-vol">{{ s.tradingValue != null ? dispAmount(s.tradingValue, s.market) : '—' }}</span>
               <div class="rank-ratio">
                 <template v-if="s.buyRatio != null">
                   <div class="rank-ratio-bar">
