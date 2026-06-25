@@ -10,9 +10,9 @@
 | 항목 | 버전 / 비고 |
 |---|---|
 | Git | https://git-scm.com/download/win |
-| Docker Desktop | 실행 중이어야 함. WSL2 백엔드 권장 |
-| Python | **3.11.x** (현재 venv 기준) |
-| Node.js | **LTS 22.x** 권장 (Vite 8 호환) |
+| Docker Desktop | 실행 중이어야 함. WSL2 백엔드 권장. **Postgres·Redis 둘 다 컨테이너로 뜸** (따로 설치 X) |
+| Python | **3.12** 권장 (`backend/.python-version`). 기존 팀 venv는 3.11.9로도 동작 |
+| Node.js | **20.19+ 또는 22.12+** (`package.json` engines, Vite 8 호환) |
 
 확인:
 ```powershell
@@ -54,7 +54,14 @@ Copy-Item .env.example .env
 | `OPENAI_API_KEY` | (사용 시) OpenAI 콘솔에서 발급 |
 | `GNews_API_KEY`, `BIGKINDS_API_KEY` | (사용 시) 각 서비스 콘솔 |
 
-DB 관련 (`DB_NAME` / `DB_USER` / `DB_PASSWORD` / `DB_HOST` / `DB_PORT`)는 `.env.example` 기본값을 그대로 두면 됩니다.
+DB 관련(`DB_NAME` / `DB_USER` / `DB_PASSWORD` / `DB_HOST` / `DB_PORT`)은 `.env.example` 기본값을 그대로 두면 됩니다.
+
+⚠️ **`.env.example`이 불완전합니다 — Redis 항목이 빠져 있어요.** 아래 두 줄을 `.env`에 직접 추가하세요. 없으면 컨테이너가 랜덤 포트로 떠서 Django가 Redis를 못 찾고 `ConnectionError`가 납니다:
+
+```
+REDIS_HOST=localhost
+REDIS_PORT=6379
+```
 
 > ⚠️ **시크릿 공유 주의**: `KIS_APP_SECRET`, `DART_API_KEY` 등은 카톡/슬랙/이메일 본문에 그대로 붙이지 마세요. 본인이 다른 본인 PC에서 쓰는 경우라면 USB나 1Password/Bitwarden 같은 비밀 관리 도구로 옮기는 게 안전합니다.
 
@@ -73,15 +80,15 @@ pip install -r requirements.txt
 
 ---
 
-## 4. DB 컨테이너 띄우기 + 마이그레이션
+## 4. DB·Redis 컨테이너 띄우기 + 마이그레이션
 
 프로젝트 루트(`jumanchu/`)에서:
 
 ```powershell
-docker compose up -d db
+docker compose up -d        # db + redis 둘 다
 ```
 
-→ `docker compose ps`에서 `jumanchu-pg`가 `Up (healthy)`로 뜨면 OK (10초 안에).
+→ `docker compose ps`에서 `jumanchu-pg`(5432)·`jumanchu-redis`(6379)가 둘 다 `Up (healthy)`로 뜨면 OK (10초 안에).
 
 이어서 마이그레이션:
 
@@ -126,13 +133,29 @@ python manage.py runserver
 
 기본 `http://localhost:8000` 에서 동작.
 
+> ⚠️ `runserver` 시 `stocks` 앱이 인기랭킹 워머(`warm_loop`)를 백그라운드 데몬으로 자동 기동합니다. KIS 키가 없으면 콘솔에 KIS 에러가 찍히지만 **서버 자체는 정상 동작**합니다. 로그가 거슬리면 `$env:DISABLE_WARMER=1; python manage.py runserver` 로 끄세요.
+
+---
+
+## 7. (선택) 종목 데이터 채우기
+
+`migrate` 직후 DB에는 종목·시세가 비어 있습니다. 채우려면 **KIS·DART 키가 필요**하며, 배치를 의존 순서대로 실행합니다 (무겁고 시간이 걸림 — 자세한 주기는 [BATCH_SCHEDULING.md](./BATCH_SCHEDULING.md)):
+
+```powershell
+python manage.py run_batch weekly    # 종목 마스터·메타·재무 (먼저)
+python manage.py run_batch daily     # 일봉·지표·DNA·장투점수
+python manage.py run_batch hourly    # 뉴스 RSS
+```
+
+> 회원가입·일기·커뮤니티 등 DB 기능은 이 단계 없이도 동작합니다. 주식 시세·뉴스·추천 화면만 비어 보입니다.
+
 ---
 
 ## 자주 쓰는 명령 (셋업 끝난 뒤)
 
 ```powershell
-# DB 컨테이너
-docker compose up -d db          # 켜기
+# DB·Redis 컨테이너
+docker compose up -d             # 켜기 (db + redis)
 docker compose down              # 끄기 (데이터는 named volume에 보존)
 docker compose down -v           # ⚠️ 데이터까지 삭제
 
@@ -173,5 +196,6 @@ Get-Content dump.sql | docker compose exec -T db psql -U jumanchu -d jumanchu
 | `docker compose up` 했는데 `Cannot connect to the Docker daemon` | Docker Desktop이 안 켜져 있음 |
 | `python manage.py migrate` 시 `KeyError: 'DB_NAME'` | `.env`가 없거나 DB 변수가 빠짐 — `.env.example` 다시 확인 |
 | `psycopg.OperationalError: connection refused` | 컨테이너가 아직 안 떴거나 죽음 — `docker compose ps`로 상태 확인 |
+| `redis...ConnectionError: ...localhost:6379 ...연결을 거부` | `.env`에 `REDIS_PORT`가 없어 Redis가 랜덤 포트로 뜸 → `REDIS_PORT=6379` 추가 후 `docker compose up -d redis` 재생성 |
 | `.\venv\Scripts\Activate.ps1` 시 실행 정책 오류 | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` 한 번 실행 |
 | 포트 5432 충돌 | 다른 PostgreSQL이 떠 있음 — 끄거나, `.env`의 `DB_PORT`를 5433 등으로 바꾸고 `docker compose up -d db` 다시 |
