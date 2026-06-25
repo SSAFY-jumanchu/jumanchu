@@ -209,4 +209,4 @@ STATIC_URL = 'static/'
 # 실제 시세와 차이날 수 있으니 필요 시 env USD_KRW_RATE 로 덮어쓰기.
 from decimal import Decimal  # noqa: E402
 
-USD_KRW_RATE = Decimal(os.environ.get('USD_KRW_RATE', '1350'))
+USD_KRW_RATE = Decimal(os.environ.get('USD_KRW_RATE', '1500'))

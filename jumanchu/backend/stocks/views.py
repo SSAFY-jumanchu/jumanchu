@@ -1,3 +1,4 @@
+import hashlib
 from datetime import date, datetime, timedelta
 from decimal import InvalidOperation
 from zoneinfo import ZoneInfo
@@ -16,7 +17,7 @@ from rest_framework.views import APIView
 from stocks import serializers as s
 from stocks.models import EconomicEvent, Stock, StockIndicator, StockPrice
 from stocks.pagination import paginate
-from stocks.services.market_summary import market_summary, popular_ranking
+from stocks.services.market_summary import market_summary, period_stats, popular_ranking
 from stocks.services.price_dispatch import (
     build_today_candle, fetch_minute_candles, fetch_orderbook, fetch_price,
     get_cache_ttl, get_orderbook_ttl, market_status,
@@ -213,7 +214,10 @@ class StockDetailView(APIView):
                 user=request.user, stock=stock, is_active=True
             ).exists()
         )
-        return Response({'stock': s.StockDetailSerializer(stock).data})
+        return Response({
+            'stock': s.StockDetailSerializer(stock).data,
+            'usd_krw_rate': settings.USD_KRW_RATE,   # FE 통화환산 단일 출처(랭킹과 동일 값)
+        })
 
 
 @extend_schema(tags=['Stock'])
@@ -500,6 +504,43 @@ class PopularRankingView(APIView):
             'usd_krw_rate': settings.USD_KRW_RATE, 'fetched_at': timezone.now(),
         }).data
         cache.set(cache_key, body, timeout=15)  # 탭 전환 대부분 캐시히트(데이터는 ~30s 워밍이라 무방)
+        return Response(body)
+
+
+@extend_schema(tags=['Market'])
+class PeriodStatsView(APIView):
+    """인기 탭 기간 통계 — 표시 중 종목들의 기간(1w~1y) 등락률·거래대금·거래량을 한 방에.
+    FE가 종목마다 일봉 차트를 받아 클라에서 계산하던 N콜(팬아웃)을 단일 DB 집계로 대체."""
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        summary='기간 통계 (인기 탭 기간 탭 — 종목들 1w~1y 등락률·거래대금·거래량 일괄)',
+        parameters=[
+            OpenApiParameter('period', str, required=True, enum=['1w', '1m', '3m', '6m', '1y']),
+            OpenApiParameter('codes', str, required=True, description='콤마구분 종목코드 (최대 200)'),
+        ],
+        responses={200: s.PeriodStatsResponseSerializer},
+    )
+    def get(self, request):
+        p = request.query_params
+        period = p.get('period', '')
+        if period not in ('1w', '1m', '3m', '6m', '1y'):
+            return Response({'detail': f'유효하지 않은 period: {period}', 'code': 'INVALID_PERIOD'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        codes = [c.strip() for c in p.get('codes', '').split(',') if c.strip()][:200]
+        if not codes:
+            return Response({'detail': 'codes가 비어있습니다.', 'code': 'NO_CODES'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        codes_key = hashlib.md5(','.join(sorted(codes)).encode()).hexdigest()[:12]
+        cache_key = f'markets:periodstats:{period}:{codes_key}'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+        items = [{'code': c, **v} for c, v in period_stats(codes, period).items()]
+        body = s.PeriodStatsResponseSerializer({
+            'period': period, 'items': items, 'fetched_at': timezone.now(),
+        }).data
+        cache.set(cache_key, body, timeout=600)  # 일봉 기반이라 하루 내 안정 → 10분 캐시
         return Response(body)
 
 

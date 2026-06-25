@@ -372,7 +372,7 @@ let popularLoadId = 0                 // 동시/연속 호출 경합 방지 토�
 let popularLoadedMarket = null        // 같은 시장 재요청 스킵용
 
 // ===== 표시 통화 (전체/국내=원화통일, 해외=₩/$ 토글) =====
-const usdKrwRate = ref(1350)              // BE usd_krw_rate 로 갱신
+const usdKrwRate = ref(1500)              // BE usd_krw_rate 로 갱신(기본값도 BE와 동일 1500)
 const overseasCurrency = ref('usd')       // 해외 탭 토글: 'usd' | 'krw'
 const displayCurrency = computed(() =>    // 전체/국내는 항상 원화, 해외만 토글
   marketFilter.value === 'overseas' ? overseasCurrency.value : 'krw')
@@ -506,7 +506,7 @@ async function loadPopular() {
 }
 
 // ===== 기간 통계 (실시간 = 실시간가, 그 외 = 일봉으로 등락률·거래대금·거래량 계산) =====
-const periodStatsCache = reactive({})   // `${code}:${period}` -> { rate, value, volume } | null
+const periodStatsCache = reactive({})   // `${code}:${period}` -> { base, last, value, volume } | null
 const periodInFlight = new Set()        // 중복 호출 방지
 const periodLoading = ref(false)        // 기간 통계 계산 중 표시
 
@@ -514,7 +514,16 @@ function periodStats(s) { return periodStatsCache[`${s.code}:${sortPeriod.value}
 // 현재 선택 기간 기준 값 (실시간=실시간가, 그 외=캐시, 미계산=null)
 function popRate(s) {
   if (sortPeriod.value === 'rt') return s.rate
-  const st = periodStats(s); return st ? st.rate : null
+  const st = periodStats(s)
+  if (!st || st.base == null || st.base === 0) return null
+  // 등락률 = (현재가 − 기간시작 종가)/기준가. 현재가 없으면(US 장마감) DB 최신 종가로 폴백 → 표시 현재가와 일관.
+  const cur = s.price != null ? s.price : st.last
+  return cur != null ? (cur - st.base) / st.base * 100 : null
+}
+// 표시용 현재가 — 기간탭에서 현재가 없으면(US 장마감) DB 최신 종가로 대체(등락률과 같은 기준).
+function popPrice(s) {
+  if (sortPeriod.value === 'rt' || s.price != null) return s.price
+  const st = periodStats(s); return st ? st.last : null
 }
 function popValue(s) {
   if (sortPeriod.value === 'rt') return s.rawValue
@@ -582,12 +591,12 @@ function computePeriodStats(candles, days) {
   return { rate, value, volume }
 }
 
-// 보이는 종목 중 선택 기간 통계가 없는 것들을 일봉으로 계산해 채움 (동시 2건 제한)
+// 보이는 종목들의 기간 통계를 BE 단일 집계(GET /markets/period-stats/)로 한 번에 채움.
+// (구: 종목마다 일봉 차트 N콜 + 클라 계산 → 첫 로딩 ~60s. 신: 1콜 DB집계 → ~1s)
 async function ensurePeriodRates() {
   const period = sortPeriod.value
   if (period === 'rt') return                  // 실시간가로 충분
-  const spec = PERIOD_SPEC[period]
-  if (!spec) return
+  if (!PERIOD_SPEC[period]) return             // 알 수 없는 기간 가드
   const targets = popularReal.value.filter((r) => {
     const key = `${r.code}:${period}`
     return periodStatsCache[key] === undefined && !periodInFlight.has(key)
@@ -596,20 +605,27 @@ async function ensurePeriodRates() {
   targets.forEach((r) => periodInFlight.add(`${r.code}:${period}`))
   periodLoading.value = true
   try {
-    await mapLimit(targets, 2, async (r) => {
-      const key = `${r.code}:${period}`
-      try {
-        const { candles = [] } = await retry(
-          () => fetchStockChart(r.code, { period: spec.fetch, interval: '1d' }),
-          { attempts: 3, delayMs: 500 })
-        periodStatsCache[key] = computePeriodStats(candles, spec.days)
-      } catch (e) {
-        periodStatsCache[key] = null
-      } finally {
-        periodInFlight.delete(key)
-      }
-    })
+    const { data } = await retry(
+      () => client.get('/markets/period-stats/', {
+        params: { period, codes: targets.map((r) => r.code).join(',') },
+      }), { attempts: 3, delayMs: 500 })
+    const byCode = {}
+    for (const it of (data.items || [])) byCode[it.code] = it
+    for (const r of targets) {
+      const it = byCode[r.code]
+      periodStatsCache[`${r.code}:${period}`] = it
+        ? {
+            base: it.base_price != null ? Number(it.base_price) : null,   // 기준가(DB, 기간시작 종가)
+            last: it.last_close != null ? Number(it.last_close) : null,   // 최신 종가 — 현재가 없을 때 폴백
+            value: Number(it.trading_value),
+            volume: Number(it.volume),
+          }
+        : null                                 // 기간 데이터 없는 종목은 '—'
+    }
+  } catch (e) {
+    for (const r of targets) periodStatsCache[`${r.code}:${period}`] = null
   } finally {
+    targets.forEach((r) => periodInFlight.delete(`${r.code}:${period}`))
     periodLoading.value = false
   }
 }
@@ -965,7 +981,7 @@ onMounted(() => {
                   <span>{{ s.market }} · {{ s.sector }}</span>
                 </div>
               </div>
-              <span class="pop-num pop-price">{{ dispPrice(s.price, s.market) }}</span>
+              <span class="pop-num pop-price">{{ dispPrice(popPrice(s), s.market) }}</span>
               <span class="pop-num pop-rate" :class="{ up: popRate(s) != null && popRate(s) >= 0, down: popRate(s) != null && popRate(s) < 0 }">
                 {{ popRateText(s) }}
               </span>

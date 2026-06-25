@@ -54,6 +54,7 @@ async function loadStock(code) {
     ])
     const d = detail.stock
     const p = priceRes?.price
+    if (detail.usd_krw_rate != null) usdKrw.value = Number(detail.usd_krw_rate)   // 환율은 BE 단일 출처
     stock.value = {
       ...stock.value,
       code: d.code,
@@ -120,7 +121,7 @@ const changeRate = computed(() =>
 const curSym = computed(() => (stock.value.currency === 'USD' ? '$' : '₩'))
 
 // ===== 헤더 가격 달러/원화 토글 =====
-const USD_KRW = 1500   // 백엔드 USD_KRW_RATE와 동일 (TODO: 라이브 환율)
+const usdKrw = ref(1500)   // BE usd_krw_rate 로 갱신 — 환율 단일 출처(랭킹·상세 동일)
 const showAltCcy = ref(false)   // false=종목 원통화, true=반대 통화로 환산 표시
 const nativeCcy = computed(() => (stock.value.currency === 'USD' ? 'USD' : 'KRW'))
 // 토글은 미국 주식에서만 — 국내 주식은 항상 원(₩)으로 표시
@@ -128,7 +129,7 @@ const dispCcy = computed(() => (nativeCcy.value === 'USD' && showAltCcy.value ? 
 // 종목 원통화 값 v를 현재 표시 통화로 환산 + 심볼 포함 포맷
 function fmtCcy(v) {
   let c = v
-  if (dispCcy.value !== nativeCcy.value) c = nativeCcy.value === 'USD' ? v * USD_KRW : v / USD_KRW
+  if (dispCcy.value !== nativeCcy.value) c = nativeCcy.value === 'USD' ? v * usdKrw.value : v / usdKrw.value
   if (dispCcy.value === 'KRW') return '₩' + Math.round(c).toLocaleString('ko-KR')
   return '$' + Number(c).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }

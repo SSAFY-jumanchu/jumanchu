@@ -39,6 +39,7 @@ class StockListResponseSerializer(serializers.Serializer):
 
 class StockDetailResponseSerializer(serializers.Serializer):
     stock = StockDetailSerializer()
+    usd_krw_rate = serializers.DecimalField(max_digits=10, decimal_places=2)  # USD→KRW 환산 환율(전역, BE 단일 출처)
 
 
 class StockWarningsSerializer(serializers.Serializer):
@@ -202,6 +203,20 @@ class PopularRankingResponseSerializer(serializers.Serializer):
     market = serializers.ChoiceField(choices=['all', 'domestic', 'overseas'])
     sort = serializers.ChoiceField(choices=['value', 'volume', 'up', 'down'])
     usd_krw_rate = serializers.DecimalField(max_digits=10, decimal_places=2)  # 기간탭 원화환산용 환율
+    fetched_at = serializers.DateTimeField()
+
+
+class PeriodStatItemSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    base_price = serializers.DecimalField(max_digits=18, decimal_places=4, allow_null=True)       # 기간 시작 종가(기준가)
+    last_close = serializers.DecimalField(max_digits=18, decimal_places=4, allow_null=True)       # 최신 종가 — 현재가 없을 때(US 장마감) 폴백
+    trading_value = serializers.DecimalField(max_digits=30, decimal_places=4, allow_null=True)    # 기간 거래대금(원본 통화)
+    volume = serializers.IntegerField(allow_null=True)                                            # 기간 거래량
+
+
+class PeriodStatsResponseSerializer(serializers.Serializer):
+    period = serializers.CharField()
+    items = PeriodStatItemSerializer(many=True)
     fetched_at = serializers.DateTimeField()
 
 

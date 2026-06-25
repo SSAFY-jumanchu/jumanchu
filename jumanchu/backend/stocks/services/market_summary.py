@@ -18,10 +18,10 @@ from decimal import Decimal
 import requests
 from django.conf import settings
 from django.core.cache import cache
-from django.db.models import F
+from django.db.models import DecimalField, F, Max, Sum
 from django.utils import timezone
 
-from stocks.models import Stock
+from stocks.models import Stock, StockPrice
 from stocks.services.price_dispatch import (
     VOLPOWER_EMPTY, VOLPOWER_TTL, fetch_rank_price, fetch_volume_power,
     get_kis_client, rankprice_key, volpower_key,
@@ -203,17 +203,17 @@ _PRICE_FILL_LIMIT = 12  # 시세 캐시 미스 중 요청 경로에서 즉석 �
 
 
 def _market_cap_candidates(market: str, size: int) -> list[Stock]:
-    """랭킹 후보 = DB 시총상위 (실시간 거래대금·등락률은 시세로 매김). 전체는 시장별 반반."""
+    """랭킹 후보 = DB 시총상위. 전체는 시장별로 각 size씩(합 2·size) 뽑아,
+    한 시장이 장마감(거래대금 null)으로 빠져도 다른 시장이 size를 채울 수 있게 한다."""
     markets = _POPULAR_CANDIDATE_MARKETS.get(market, _POPULAR_CANDIDATE_MARKETS["all"])
-    per = size // len(markets) if len(markets) > 1 else size
     stocks: list[Stock] = []
     for m in markets:
         stocks += list(
             Stock.objects.filter(market=m, is_active=True)
             # market_cap NULL은 맨 뒤로 (기본 -market_cap은 Postgres에서 NULL이 앞 → 잡주가 1위 됨)
-            .order_by(F("market_cap").desc(nulls_last=True))[:per]
+            .order_by(F("market_cap").desc(nulls_last=True))[:size]
         )
-    return stocks[:size]
+    return stocks
 
 
 def _apply_currency(it: dict) -> None:
@@ -261,6 +261,21 @@ def _attach_prices(items: list[dict]) -> list[dict]:
     return items
 
 
+def _balanced_pick(items: list[dict], sort: str, key, reverse: bool, size: int) -> list[dict]:
+    """전체 탭(거래대금/거래량): metric이 null인 시장(장마감)은 빼고 시장 균형(절반씩) 구성.
+    한쪽이 부족하면(예: 미국 장마감) 다른 시장으로 size까지 채움 → US 닫히면 KR 100개."""
+    metric = "trading_value_krw" if sort == "value" else "volume"
+    # items는 이미 key로 정렬됨 → 필터가 순서를 보존
+    us = [it for it in items if it["market"] in _US_MARKETS and it.get(metric)]
+    kr = [it for it in items if it["market"] not in _US_MARKETS and it.get(metric)]
+    half = size // 2
+    picked = kr[:half] + us[:half]
+    if len(picked) < size:                          # 한쪽 부족 → 나머지로 size까지 채움
+        leftover = sorted(kr[half:] + us[half:], key=key, reverse=reverse)
+        picked += leftover[: size - len(picked)]
+    return sorted(picked, key=key, reverse=reverse)
+
+
 def popular_ranking(market: str = "all", sort: str = "value", size: int = 100) -> list[dict]:
     """인기 종목 랭킹 = DB 시총상위 후보를 실시간 시세로 매겨 정렬.
     시세는 랭킹 워밍캐시(stock:rankprice:*) 우선 → 요청당 KIS 라이브 호출 최소화(미스만 ≤N).
@@ -271,7 +286,62 @@ def popular_ranking(market: str = "all", sort: str = "value", size: int = 100) -
     _attach_volume_power(items)
     key, reverse = _POPULAR_SORT.get(sort, _POPULAR_SORT["value"])
     items.sort(key=key, reverse=reverse)
+    if market == "all" and sort in ("value", "volume"):   # 장마감 시장 null 제외 + 시장 균형/채움
+        return _balanced_pick(items, sort, key, reverse, size)
     return items[:size]
+
+
+# ----- 기간 통계 (인기 탭의 기간 탭: 1주~1년) -----
+# FE가 종목마다 일봉 차트를 받아 클라에서 계산하던 것(100요청)을 BE 단일 DB 집계(1요청)로 대체.
+_PERIOD_DAYS = {"1w": 7, "1m": 30, "3m": 90, "6m": 183, "1y": 365}
+
+
+def period_stats(codes: list[str], period: str) -> dict[str, dict]:
+    """표시 중 종목들의 기간 통계 — code → {base_price, last_close, trading_value, volume}.
+    StockPrice(일봉 마감) SQL 집계 한 방. KIS·today 합성 없음(장중 무관 → 안정적·캐시가능).
+    등락률은 base_price(기간시작 종가)와 '현재가'로 FE가 계산(현재가 없으면 last_close=최신 종가 폴백).
+    거래대금=Σ(종가×거래량), 거래량=Σ거래량. 윈도우 시작은 '최신 거래일−N일'(today 아님).
+    거래대금은 원본 통화(KR=KRW/US=USD) — KRW 환산은 FE 정렬 단계에서.
+    """
+    days = _PERIOD_DAYS.get(period)
+    if not days or not codes:
+        return {}
+    id_to_code = dict(Stock.objects.filter(code__in=codes).values_list("id", "code"))
+    if not id_to_code:
+        return {}
+    ids = list(id_to_code)
+
+    # 최신 거래일 기준 N일 윈도우(today 아님 — 시드 지연 대응)
+    latest = StockPrice.objects.filter(stock_id__in=ids).aggregate(m=Max("price_date"))["m"]
+    if latest is None:
+        return {}
+    start = latest - timedelta(days=days)
+    win = StockPrice.objects.filter(stock_id__in=ids, price_date__gte=start, price_date__lte=latest)
+
+    # Σ(종가×거래량)·Σ거래량 — stock별 GROUP BY 한 방
+    sums = {r["stock_id"]: r for r in win.values("stock_id").annotate(
+        tv=Sum(F("close") * F("volume"),
+               output_field=DecimalField(max_digits=30, decimal_places=4)),
+        vol=Sum("volume"),
+    )}
+    # 종목별 시작/끝 종가 — Postgres DISTINCT ON (Neon=Postgres)
+    firsts = dict(win.order_by("stock_id", "price_date")
+                  .distinct("stock_id").values_list("stock_id", "close"))
+    lasts = dict(win.order_by("stock_id", "-price_date")
+                 .distinct("stock_id").values_list("stock_id", "close"))
+
+    out: dict[str, dict] = {}
+    for sid, code in id_to_code.items():
+        base, last, agg = firsts.get(sid), lasts.get(sid), sums.get(sid)
+        if base is None or last is None or agg is None or base == 0:
+            continue
+        out[code] = {
+            "base_price": base,        # 기간 시작 종가(기준가)
+            "last_close": last,        # 최신 종가 — 현재가 없을 때(US 장마감) 등락률·표시 폴백
+            "trading_value": agg["tv"],
+            "volume": agg["vol"],
+        }
+    return out
 
 
 # ----- 체결강도(거래비율) 부착 — 워밍 캐시 우선 + 미스 즉석 채움 -----
