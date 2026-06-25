@@ -58,6 +58,8 @@ DB_SSLMODE=require                  # Neon은 require (로컬 Postgres면 prefer
 # === Redis — Upstash (클라우드 공유) ===
 # settings.py가 REDIS_URL을 우선 사용. 이거 하나면 됨.
 REDIS_URL="rediss://default:<팀에서 받기>@<...>.upstash.io:6379"
+# 인기랭킹 워머: 실시간 랭킹용으로 기본 ON. 끄려면 주석 해제(Upstash 한도 절약, 한 대만 권장).
+# DISABLE_WARMER=1
 
 # === 외부 API 키 (팀 공유) ===
 KIS_APP_KEY=<팀에서 받기>
@@ -92,7 +94,13 @@ python manage.py runserver         # http://localhost:8000
 
 > ⚠️ **공유 DB라 `migrate`에 주의.** Neon엔 이미 스키마·데이터가 들어 있어서, 모델을 안 건드렸다면 `migrate`는 보통 *"No migrations to apply"*로 끝납니다. 이게 정상이에요. **본인이 모델을 바꾼 게 아니면 `makemigrations`를 돌리지 마세요** — 공유 스키마가 어긋납니다. (규칙: 마이그레이션은 한 사람만 → [CLAUDE.md](../CLAUDE.md))
 >
-> ⚠️ `runserver` 시 `stocks` 앱이 인기랭킹 워머(`warm_loop`)를 백그라운드 데몬으로 자동 기동합니다(KIS 시세를 Upstash 캐시에 워밍). 로그가 거슬리면 `$env:DISABLE_WARMER=1; python manage.py runserver` 로 끄세요.
+> ⚡ `runserver` 시 `stocks` 앱이 인기랭킹 워머(`warm_loop`)를 자동 기동합니다 — 30초마다 KIS 시세를 Upstash 캐시에 채워 **랭킹을 실시간으로** 유지해요.
+>
+> ⚠️ **Upstash 무료 한도(50만 명령/월)는 30초 워머로 ~하루면 소진**됩니다. 그래서:
+> - **워머는 한 대에서만** 돌리세요. Redis가 공유라 한 명이 워밍하면 팀 전원이 캐시 히트 — 여러 명이 켜면 같은 키를 중복 write할 뿐 한도만 빨리 닳습니다.
+> - 개발/발표 안 할 땐 끄기: `.env`에 `DISABLE_WARMER=1` (또는 `$env:DISABLE_WARMER=1; python manage.py runserver`).
+> - 발표 직전 즉시 데우기(상시 워머 없이): `python manage.py warm_loop --once`.
+> - 24/7 실시간이 꼭 필요하면 결국 **유료 Redis**가 답(무료론 불가).
 
 Redis 연결만 빠르게 확인하고 싶으면:
 ```powershell
