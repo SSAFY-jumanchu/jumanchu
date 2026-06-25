@@ -380,6 +380,42 @@
     }
     #onb .ot-chip.ot-mid b { color: #fff; }
 
+    /* 6p — 4유형 2축 사분면 (위험 성향 × 투자 기간) */
+    #onb .onb-quad { margin-top: 16px; }
+    #onb .oq-cap { font-size: .42em; font-weight: 600; letter-spacing: .06em; color: var(--cyan); text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: .5em; }
+    #onb .oq-body { display: grid; grid-template-columns: 2.4em 1fr; gap: 10px; align-items: stretch; }
+    /* 세로축 온도계 — 위험 성향(= 종합점수) */
+    #onb .oq-yaxis { display: grid; grid-template-rows: auto 1fr auto; justify-items: center; gap: 5px; }
+    #onb .oq-y-top { font-size: .4em; font-weight: 700; color: var(--magenta); }
+    #onb .oq-y-bot { font-size: .4em; font-weight: 700; color: var(--blue); }
+    #onb .oq-y-bar { position: relative; width: 7px; height: 100%; border-radius: 999px;
+      background: linear-gradient(180deg, var(--magenta) 0%, rgba(255,61,139,.22) 52%, var(--blue) 100%); }
+    #onb .oq-y-mark { position: absolute; top: 22%; left: 50%; transform: translate(-50%,-50%);
+      width: 13px; height: 13px; border-radius: 50%; background: #fff; border: 2px solid var(--magenta); box-shadow: 0 0 10px rgba(255,61,139,.6); }
+    #onb .oq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    #onb .oq-cell { display: flex; flex-direction: column; gap: 3px; padding: 12px 9px; border-radius: 13px;
+      border: 1px solid var(--line); background: rgba(255,255,255,.03); text-align: center; }
+    #onb .oq-cell b { font-size: .5em; color: var(--text); font-weight: 600; }
+    #onb .oq-cell small { font-size: .38em; color: var(--dim); }
+    #onb .oq-cell.is-ex { border-color: rgba(255,61,139,.5); background: rgba(255,61,139,.10);
+      box-shadow: 0 0 0 1px rgba(255,61,139,.16), inset 0 1px 0 rgba(255,255,255,.14); }
+    #onb .oq-cell.is-ex b { color: #fff; }
+    #onb .oq-xlabels { display: flex; justify-content: space-between; margin-top: 7px; font-size: .4em; font-weight: 600; color: var(--blue); }
+    #onb .oq-note { margin-top: 11px; font-size: .4em; color: var(--dim); line-height: 1.55; word-break: keep-all; }
+    #onb .oq-note b { color: var(--text); font-weight: 600; }
+
+    /* 6p — 종합점수 → 표시 유형(배지) 표 (좌측 하단) */
+    #onb .onb-score { margin-top: 24px; }
+    #onb .sc-cap { font-size: .5em; font-weight: 600; letter-spacing: .04em; color: var(--cyan); margin-bottom: 13px; display: flex; align-items: center; gap: .5em; }
+    #onb .sc-rows { display: flex; flex-direction: column; gap: 10px; }
+    #onb .sc-row { display: flex; align-items: center; gap: 15px; }
+    #onb .sc-band {
+      font-family: "Inter", sans-serif; font-size: .58em; font-weight: 700; color: var(--magenta); width: 6.4em; text-align: center;
+      background: rgba(255,61,139,.08); border: 1px solid rgba(255,61,139,.22); border-radius: 999px; padding: .42em 0;
+    }
+    #onb .sc-type { font-size: .68em; color: var(--text); font-weight: 600; }
+    #onb .sc-foot { margin-top: 13px; font-size: .46em; color: var(--dim); line-height: 1.5; }
+
     /* ============ 7. 궁합추천 ★ (Core Feature 02) ============ */
     #match h2 { font-size: 1.4em; }
     #match .mt-grid { display: grid; grid-template-columns: 0.92fr 1.08fr; gap: 44px; margin-top: 1em; align-items: start; }
@@ -447,6 +483,18 @@
     #match .mw-mean { font-size: .48em; color: var(--dim); line-height: 1.45; word-break: keep-all; }
     #match .mt-note { margin-top: 1.05em; font-size: .46em; color: var(--dim); line-height: 1.5; word-break: keep-all; }
     #match .mt-note b { color: var(--text); font-weight: 600; }
+    /* 8p — JUMANCHU 궁합 산식 유도 (요소별 formula → 값, × 가중) */
+    #match .mt-calc { margin-top: .9em; display: flex; flex-direction: column; gap: 10px; }
+    #match .mt-drow { display: grid; grid-template-columns: 3.4em 1fr 2.4em; align-items: baseline; gap: 9px; }
+    #match .mt-drow .d-name { font-size: .54em; color: #fff; font-weight: 600; }
+    #match .mt-drow .d-formula { font-family: "Inter", sans-serif; font-size: .48em; color: var(--dim); letter-spacing: -.01em; white-space: nowrap; }
+    #match .mt-drow .d-formula b { color: var(--cyan); font-weight: 700; }
+    #match .mt-drow .d-w { font-family: "Inter", sans-serif; font-size: .46em; color: var(--magenta); text-align: right; font-weight: 700; }
+    #match .mt-dsum { display: flex; align-items: baseline; border-top: 1px solid var(--line); padding-top: 11px; margin-top: 3px; }
+    #match .mt-dsum .ds-label { font-size: .5em; color: #fff; font-weight: 600; }
+    #match .mt-dsum .ds-raw { margin-left: auto; font-family: "Inter", sans-serif; font-size: .5em; color: var(--dim); margin-right: .5em; }
+    #match .mt-dsum .ds-final { font-family: "Inter", sans-serif; font-size: .92em; font-weight: 700;
+      background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
 
     /* ============ 8. 장투케어 (Core Feature 03) ============ */
     #care h2 { font-size: 1.4em; }
@@ -534,7 +582,7 @@
 
     /* ============ 11. 시스템 구조 ============ */
     #sys h2 { font-size: 1.4em; }
-    #sys .sys-flow { display: flex; align-items: stretch; justify-content: center; margin-top: 1.4em; }
+    #sys .sys-flow { display: flex; align-items: stretch; justify-content: center; margin-top: 1em; }
     #sys .sys-node {
       flex: 1 1 0; max-width: 258px; text-align: center; padding: 22px 18px; border-radius: 18px;
       background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.03));
@@ -557,6 +605,22 @@
       font-family: "Inter", sans-serif; font-size: .42em; color: var(--text); border: 1px solid var(--line);
       border-radius: 999px; padding: .42em .85em; background: rgba(74,125,255,.07);
     }
+    /* 11p — 외부소스 · 배치 · 도메인앱 레이어 (디테일) */
+    #sys .sys-layers { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+    #sys .sys-layer { display: grid; grid-template-columns: 4.6em 1fr; align-items: center; gap: 14px;
+      background: rgba(255,255,255,.025); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; }
+    #sys .sl-label { font-size: .4em; font-weight: 700; letter-spacing: .08em; color: var(--cyan); text-transform: uppercase; line-height: 1.3; }
+    #sys .sl-items { display: flex; flex-wrap: wrap; gap: 7px; }
+    #sys .sl-box { font-size: .42em; color: var(--dim); border: 1px solid var(--line); border-radius: 9px;
+      padding: .5em .75em; background: rgba(255,255,255,.02); white-space: nowrap; }
+    #sys .sl-box b { color: var(--text); font-weight: 600; }
+    #sys .sl-box.is-key { border-color: rgba(255,61,139,.4); background: rgba(255,61,139,.08); }
+    #sys .sl-box.is-key b { color: #fff; }
+    #sys .sl-arrow { color: var(--blue); font-weight: 700; font-size: .46em; align-self: center; }
+    #sys .sys-apps { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
+    #sys .sa-chip { font-size: .44em; color: var(--dim); border: 1px solid rgba(74,125,255,.25);
+      border-radius: 999px; padding: .5em .95em; background: rgba(74,125,255,.07); }
+    #sys .sa-chip b { color: var(--text); font-weight: 700; font-family: "Inter", sans-serif; margin-right: .3em; }
 
     /* ============ 12. 구현 결과 / 배포 ============ */
     #done h2 { font-size: 1.4em; }
@@ -799,17 +863,27 @@
           <div class="onb-step">
             <span class="os-num">03</span>
             <div>
-              <strong>나의 투자 유형 산출</strong>
-              <p>누적 점수 → 안정형 · 중립형 · 공격형 + 성향 5벡터</p>
+              <strong>두 축으로 4유형 분류</strong>
+              <p>6문항 → 5벡터 → <b>위험축</b>(목적·자금·하락반응) × <b>기간축</b>(보유기간) → 4가지 투자 유형 + 경험 배지</p>
             </div>
           </div>
+        </div>
+
+        <div class="onb-score">
+          <div class="sc-cap">✦ 종합점수 → 결과화면 표시 유형 (배지)</div>
+          <div class="sc-rows">
+            <div class="sc-row"><span class="sc-band">7–13점</span><span class="sc-type">🛡️ 안정형</span></div>
+            <div class="sc-row"><span class="sc-band">14–22점</span><span class="sc-type">⚖️ 중립형</span></div>
+            <div class="sc-row"><span class="sc-band">23–35점</span><span class="sc-type">🚀 공격형</span></div>
+          </div>
+          <p class="sc-foot">표시·배지용 3유형 · 실제 추천은 우측 5벡터 매칭</p>
         </div>
       </div>
 
       <div class="onb-right">
         <div class="onb-card">
           <div class="oc-prog"><div class="oc-prog-fill"></div></div>
-          <div class="oc-meta"><span>문항 4 / 6</span><span class="oc-score">누적 14점</span></div>
+          <div class="oc-meta"><span>문항 4 / 6</span><span class="oc-score">성향 분석 중</span></div>
           <div class="oc-q">
             <span class="oc-tag">문항 4 · 자금 의존도</span>
             <p class="oc-qt">“이 자금은 안정적인 연인인가요, 가능성을 보는 썸인가요?”</p>
@@ -820,15 +894,103 @@
             <div class="oc-opt"><span class="oc-b">5</span><span>완전한 여유 자금</span></div>
           </div>
         </div>
-        <div class="onb-types">
-          <span class="ot-chip"><b>🛡️ 안정형</b><small>≤ 13점</small></span>
-          <span class="ot-chip ot-mid"><b>⚖️ 중립형</b><small>14–22점</small></span>
-          <span class="ot-chip"><b>🚀 공격형</b><small>23점+</small></span>
+        <div class="onb-quad">
+          <div class="oq-cap">✦ 두 축으로 나누는 4유형</div>
+          <div class="oq-body">
+            <div class="oq-yaxis">
+              <span class="oq-y-top">공격</span>
+              <div class="oq-y-bar"><i class="oq-y-mark"></i></div>
+              <span class="oq-y-bot">안정</span>
+            </div>
+            <div class="oq-main">
+              <div class="oq-grid">
+                <div class="oq-cell"><b>⚡ 단기 승부형</b><small>모멘텀·테마</small></div>
+                <div class="oq-cell is-ex"><b>🌱 성장 동반형</b><small>고성장주 장기</small></div>
+                <div class="oq-cell"><b>🔍 신중 탐색형</b><small>보수적 관망</small></div>
+                <div class="oq-cell"><b>🌳 가치 파트너형</b><small>우량·저평가</small></div>
+              </div>
+              <div class="oq-xlabels"><span>◀ 단기</span><span>장기 ▶</span></div>
+            </div>
+          </div>
+          <p class="oq-note"><b>세로축</b> 위험 성향(종합점수 ↑ = 공격) × <b>가로축</b> 투자 기간 → 4분면.<br/>예시 유저: <b>종합 24점 · 장기 · 관심 IT서비스 → 🌱 성장 동반형</b><br/><span style="color:var(--magenta)">→ 이후 JUMANCHU DNA와 궁합 매칭 (8p)</span></p>
         </div>
       </div>
     </div>
 
     <p class="why-foot">이 데이터는 <span class="grad-text">Stock DNA</span>와 매칭되는 “나의 DNA”가 됩니다.</p>
+  </section>
+
+  <!-- ============ Stock DNA 알고리즘 ★ (궁합 매칭 입력) ============ -->
+  <section id="dna">
+    <span class="kicker">Algorithm ★ · Stock DNA</span>
+    <h2>모든 종목의 금융 데이터, <span class="grad-text">4가지 핵심 지표</span>로 표준화합니다.</h2>
+
+    <div class="dna-grid">
+      <div class="dna-left">
+        <div class="dna-radar-wrap">
+          <svg class="dna-radar" viewBox="0 0 200 200" aria-hidden="true">
+            <defs>
+              <linearGradient id="dnaFill" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#ff3d8b" stop-opacity=".55" />
+                <stop offset="100%" stop-color="#4a7dff" stop-opacity=".5" />
+              </linearGradient>
+              <linearGradient id="dnaStroke" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#ff6fae" />
+                <stop offset="100%" stop-color="#5be0ff" />
+              </linearGradient>
+            </defs>
+            <polygon class="dr-grid" points="100,20 180,100 100,180 20,100" />
+            <polygon class="dr-grid" points="100,47 153,100 100,153 47,100" />
+            <polygon class="dr-grid" points="100,73 127,100 100,127 73,100" />
+            <line class="dr-axis" x1="100" y1="20" x2="100" y2="180" />
+            <line class="dr-axis" x1="20" y1="100" x2="180" y2="100" />
+            <polygon class="dr-shape" points="100,50.4 162.4,100 100,143.2 44,100" />
+            <circle class="dr-dot" cx="100" cy="50.4" r="3" />
+            <circle class="dr-dot" cx="162.4" cy="100" r="3" />
+            <circle class="dr-dot" cx="100" cy="143.2" r="3" />
+            <circle class="dr-dot" cx="44" cy="100" r="3" />
+            <text class="dr-label" x="100" y="12" text-anchor="middle">변동성 62</text>
+            <text class="dr-label" x="188" y="103" text-anchor="start">성장성 78</text>
+            <text class="dr-label" x="100" y="197" text-anchor="middle">가치 54</text>
+            <text class="dr-label" x="12" y="103" text-anchor="end">안정성 70</text>
+          </svg>
+        </div>
+        <p class="dna-cap">예시 — JUMANCHU 000000 · Stock DNA <span style="color:var(--magenta)">→ 다음 장 매칭에 사용</span></p>
+        <div class="dna-chips">
+          <span><b>2,649</b> 종목 적재</span>
+          <span>한·미 <b>시장별</b> 정규화</span>
+          <span><b>일 1회</b> 배치 캐시</span>
+        </div>
+      </div>
+
+      <div class="dna-right">
+        <p class="lead">복잡한 재무·시장 데이터를 <b>0~100 분위수</b>로 정규화하여,<br/>종목 간의 성격을 <b>왜곡 없이 비교</b>할 수 있도록 돕습니다.</p>
+        <div class="dna-axes">
+          <div class="dna-axis">
+            <span class="ax-name"><span class="ax-dot" style="background:#ff3d8b"></span>변동성</span>
+            <span class="ax-formula">pct( β )</span>
+            <span class="ax-mean">시장 대비 출렁임 — 베타가 높을수록 ↑</span>
+          </div>
+          <div class="dna-axis">
+            <span class="ax-name"><span class="ax-dot" style="background:#4a7dff"></span>가치</span>
+            <span class="ax-formula">pct( 1 / PBR )</span>
+            <span class="ax-mean">저평가 정도 — PBR이 낮을수록 ↑</span>
+          </div>
+          <div class="dna-axis">
+            <span class="ax-name"><span class="ax-dot" style="background:#5be0ff"></span>성장성</span>
+            <span class="ax-formula">pct( 순이익 YoY )</span>
+            <span class="ax-mean">이익 성장 속도 — 값 없으면 중립 0.5</span>
+          </div>
+          <div class="dna-axis">
+            <span class="ax-name"><span class="ax-dot" style="background:#b06bff"></span>안정성</span>
+            <span class="ax-formula">avg( 부채↓ · 유동↑ )</span>
+            <span class="ax-mean">재무 건전성 — 부채비율·유동비율 분위수 평균</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="why-foot">시장 내 상대적 위치를 보여주는 <span class="grad-text">가장 객관적인 지표</span></p>
   </section>
 
   <!-- ============ 7. 핵심기능 ② 궁합추천 ★ ============ -->
@@ -838,25 +1000,26 @@
 
     <div class="mt-grid">
       <div class="mt-left">
-        <p class="lead">결과만 던지지 않습니다. 내 성향 <b>5벡터</b>와 종목 <b>Stock DNA 4축</b>을<br/>가중 매칭해 <b>0~100 궁합 점수</b>로 환산합니다.</p>
-        <div class="mt-formula-head">궁합 점수 = 5요소 가중합 <span>(0~100)</span></div>
-        <div class="mt-weights">
-          <div class="mt-w"><span class="mw-name">리스크</span><span class="mw-pct">35%</span><span class="mw-mean">위험 성향 ↔ 변동성, 거리가 가까울수록 ↑</span></div>
-          <div class="mt-w"><span class="mw-name">기간</span><span class="mw-pct">20%</span><span class="mw-mean">보유기간별 안정·가치·변동 조합</span></div>
-          <div class="mt-w"><span class="mw-name">섹터</span><span class="mw-pct">20%</span><span class="mw-mean">관심섹터 가중 1.0 · 0.6 · 0.3</span></div>
-          <div class="mt-w"><span class="mw-name">경험</span><span class="mw-pct">15%</span><span class="mw-mean">경험별 안정·성장·변동 조합</span></div>
-          <div class="mt-w"><span class="mw-name">스타일</span><span class="mw-pct">10%</span><span class="mw-mean">(가치 + 성장) / 2</span></div>
+        <p class="lead"><b>🌱 성장 동반형</b> 유저 × <b>JUMANCHU</b> 궁합 계산<br/><span style="font-size:.82em;color:var(--dim)">위험성향 4 · 경험 3 · 기간 장기 · 관심 IT서비스</span></p>
+        <div class="mt-formula-head">요소별 산식 → 값 <span>(× 가중치)</span></div>
+        <div class="mt-calc">
+          <div class="mt-drow"><span class="d-name">리스크</span><span class="d-formula">1 − |성향0.75 − 변동0.62| = <b>0.87</b></span><span class="d-w">×.35</span></div>
+          <div class="mt-drow"><span class="d-name">기간</span><span class="d-formula">(안정0.70 + 가치0.54) / 2 = <b>0.62</b></span><span class="d-w">×.20</span></div>
+          <div class="mt-drow"><span class="d-name">섹터</span><span class="d-formula">관심섹터(IT) 일치 = <b>1.00</b></span><span class="d-w">×.20</span></div>
+          <div class="mt-drow"><span class="d-name">경험</span><span class="d-formula">(안정0.70 + 성장0.78) / 2 = <b>0.74</b></span><span class="d-w">×.15</span></div>
+          <div class="mt-drow"><span class="d-name">스타일</span><span class="d-formula">(가치0.54 + 성장0.78) / 2 = <b>0.66</b></span><span class="d-w">×.10</span></div>
+          <div class="mt-dsum"><span class="ds-label">Σ(값×가중) × 100</span><span class="ds-raw">80.55 → 정수</span><span class="ds-final">81</span></div>
         </div>
-        <p class="mt-note">후보 = 시장별 <b>시총 상위 200 대형주</b> · 담은 종목 제외 · 추천 사유는 <b>규칙 기반</b> 한 줄</p>
+        <p class="mt-note">화면 표시는 <b>정수로 반올림</b> · 후보마다 반복 → 점수순 상위 추천</p>
       </div>
 
       <div class="mt-right">
         <div class="mt-card">
           <div class="mt-card-top">
             <span class="mt-badge">KOSPI · IT 서비스</span>
-            <div class="mt-score"><b>88</b><small>궁합점수</small></div>
+            <div class="mt-score"><b>81</b><small>궁합점수</small></div>
           </div>
-          <div class="mt-name"><h3>NAVER</h3><span>035420</span></div>
+          <div class="mt-name"><h3>JUMANCHU</h3><span>000000</span></div>
 
           <div class="mt-dna-label">✦ Stock DNA · 4축 (시장 분위수 0~100)</div>
           <div class="mt-dna-row"><span>변동성</span><i><b style="width:62%"></b></i><em>62</em></div>
@@ -864,7 +1027,7 @@
           <div class="mt-dna-row"><span>성장성</span><i><b style="width:78%"></b></i><em>78</em></div>
           <div class="mt-dna-row"><span>안정성</span><i><b style="width:70%"></b></i><em>70</em></div>
 
-          <div class="mt-reason">🤝 <b>가치 파트너형</b> · IT서비스 선호에 <b>성장성(78)</b>이 잘 맞아요</div>
+          <div class="mt-reason">🤝 <b>성장 동반형</b> · IT서비스 선호에 <b>성장성(78)</b>이 잘 맞아요</div>
           <div class="mt-interest">❤️ 2,140명이 이 종목에 관심 있어요</div>
         </div>
       </div>
@@ -907,79 +1070,6 @@
     </div>
   </section>
 
-  <!-- ============ 9. Stock DNA 알고리즘 ★ ============ -->
-  <section id="dna">
-    <span class="kicker">Algorithm ★ · Stock DNA</span>
-    <h2>모든 종목에, <span class="grad-text">4축의 성격</span>을 부여합니다.</h2>
-
-    <div class="dna-grid">
-      <div class="dna-left">
-        <div class="dna-radar-wrap">
-          <svg class="dna-radar" viewBox="0 0 200 200" aria-hidden="true">
-            <defs>
-              <linearGradient id="dnaFill" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#ff3d8b" stop-opacity=".55" />
-                <stop offset="100%" stop-color="#4a7dff" stop-opacity=".5" />
-              </linearGradient>
-              <linearGradient id="dnaStroke" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#ff6fae" />
-                <stop offset="100%" stop-color="#5be0ff" />
-              </linearGradient>
-            </defs>
-            <polygon class="dr-grid" points="100,20 180,100 100,180 20,100" />
-            <polygon class="dr-grid" points="100,47 153,100 100,153 47,100" />
-            <polygon class="dr-grid" points="100,73 127,100 100,127 73,100" />
-            <line class="dr-axis" x1="100" y1="20" x2="100" y2="180" />
-            <line class="dr-axis" x1="20" y1="100" x2="180" y2="100" />
-            <polygon class="dr-shape" points="100,42.4 167.2,100 100,140 47.2,100" />
-            <circle class="dr-dot" cx="100" cy="42.4" r="3" />
-            <circle class="dr-dot" cx="167.2" cy="100" r="3" />
-            <circle class="dr-dot" cx="100" cy="140" r="3" />
-            <circle class="dr-dot" cx="47.2" cy="100" r="3" />
-            <text class="dr-label" x="100" y="12" text-anchor="middle">변동성</text>
-            <text class="dr-label" x="188" y="103" text-anchor="start">성장성</text>
-            <text class="dr-label" x="100" y="197" text-anchor="middle">가치</text>
-            <text class="dr-label" x="12" y="103" text-anchor="end">안정성</text>
-          </svg>
-        </div>
-        <p class="dna-cap">예시 — 한 종목의 DNA 시그니처</p>
-        <div class="dna-chips">
-          <span><b>2,649</b> 종목 적재</span>
-          <span>한·미 <b>시장별</b> 정규화</span>
-          <span><b>일 1회</b> 배치 캐시</span>
-        </div>
-      </div>
-
-      <div class="dna-right">
-        <p class="lead">완벽한 예측 모델이 아닙니다. <b>비교 가능한 기준</b>입니다.<br/>재무·시장 지표를 <b>0~100 분위수</b>로 환산해 종목의 성격을 정의합니다.</p>
-        <div class="dna-axes">
-          <div class="dna-axis">
-            <span class="ax-name"><span class="ax-dot" style="background:#ff3d8b"></span>변동성</span>
-            <span class="ax-formula">pct( β )</span>
-            <span class="ax-mean">시장 대비 출렁임 — 베타가 높을수록 ↑</span>
-          </div>
-          <div class="dna-axis">
-            <span class="ax-name"><span class="ax-dot" style="background:#4a7dff"></span>가치</span>
-            <span class="ax-formula">pct( 1 / PBR )</span>
-            <span class="ax-mean">저평가 정도 — PBR이 낮을수록 ↑</span>
-          </div>
-          <div class="dna-axis">
-            <span class="ax-name"><span class="ax-dot" style="background:#5be0ff"></span>성장성</span>
-            <span class="ax-formula">pct( 순이익 YoY )</span>
-            <span class="ax-mean">이익 성장 속도 — 값 없으면 중립 0.5</span>
-          </div>
-          <div class="dna-axis">
-            <span class="ax-name"><span class="ax-dot" style="background:#b06bff"></span>안정성</span>
-            <span class="ax-formula">avg( 부채↓ · 유동↑ )</span>
-            <span class="ax-mean">재무 건전성 — 부채비율·유동비율 분위수 평균</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <p class="why-foot">핵심은 <span class="grad-text">분위수(순위) 정규화</span> — 극단값에 면역, 한국·미국을 같은 잣대로 비교합니다.</p>
-  </section>
-
   <!-- ============ 10. 생성형 AI 활용 ============ -->
   <section id="ai">
     <span class="kicker">Generative AI</span>
@@ -1016,35 +1106,62 @@
   <!-- ============ 11. 시스템 구조 ============ -->
   <section id="sys">
     <span class="kicker">System Architecture</span>
-    <h2>흐름을 떠받치는 <span class="grad-text">기술 구조</span>.</h2>
+    <h2>복잡한 금융 데이터를 <span class="grad-text">안정적으로 처리</span>하는 시스템 구조.</h2>
 
     <div class="sys-flow">
       <div class="sys-node">
         <div class="sn-role">Frontend</div>
         <div class="sn-title">Vue 3.5</div>
-        <div class="sn-sub">Pinia · vue-router · Vite<br/>11개 화면</div>
+        <div class="sn-sub">Pinia · vue-router · Vite · axios<br/>11개 화면 · SPA</div>
       </div>
-      <div class="sys-arrow">→<small>axios · JWT</small></div>
+      <div class="sys-arrow">→<small>REST · JWT</small></div>
       <div class="sys-node">
         <div class="sn-role">Backend</div>
         <div class="sn-title">Django REST</div>
-        <div class="sn-sub">DRF · 도메인 앱<br/>accounts · stocks · recommend · portfolio</div>
+        <div class="sn-sub">DRF · 7 도메인 앱 · JWT(simplejwt)<br/>drf-spectacular 문서</div>
       </div>
       <div class="sys-arrow">→<small>ORM</small></div>
       <div class="sys-node">
-        <div class="sn-role">Database</div>
+        <div class="sn-role">Data</div>
         <div class="sn-title">PostgreSQL 16</div>
-        <div class="sn-sub">정규화된<br/>도메인 스키마</div>
+        <div class="sn-sub">정규화 도메인 스키마<br/>+ Redis 캐시</div>
       </div>
     </div>
 
-    <div class="sys-feeders">
-      <span class="ss-box"><span class="ss-k">KIS</span> 실서버 — <b>현재가 · 일봉 · 10호가</b> (국내+해외)</span>
-      <span class="ss-box"><span class="ss-k">일 1회 배치</span> — <b>Stock DNA · 장투 점수</b> 캐시</span>
+    <div class="sys-layers">
+      <div class="sys-layer">
+        <span class="sl-label">External<br/>Sources</span>
+        <div class="sl-items">
+          <span class="sl-box is-key"><b>KIS</b> 현재가·일봉·10호가</span>
+          <span class="sl-box"><b>DART</b> 재무·공시</span>
+          <span class="sl-box"><b>yfinance</b> 해외 메타</span>
+          <span class="sl-box is-key"><b>GMS·GPT-4o</b> AI 리포트</span>
+          <span class="sl-box"><b>네이버뉴스·RSS</b> 뉴스</span>
+        </div>
+      </div>
+      <div class="sys-layer">
+        <span class="sl-label">Daily<br/>Batch</span>
+        <div class="sl-items">
+          <span class="sl-box">종목마스터 동기화</span>
+          <span class="sl-arrow">→</span>
+          <span class="sl-box">시세·재무 적재</span>
+          <span class="sl-arrow">→</span>
+          <span class="sl-box is-key"><b>Stock DNA</b> 산출</span>
+          <span class="sl-arrow">→</span>
+          <span class="sl-box is-key"><b>장투점수</b> 산출</span>
+          <span class="sl-box">뉴스 수집</span>
+        </div>
+      </div>
     </div>
 
-    <div class="sys-entities">
-      <span>InvestmentProfile</span><span>Stock</span><span>StockDna</span><span>LongTermScore</span><span>Holding</span><span>Order</span><span>StockDiary</span><span>UserLikedStock</span><span>CommunityPost</span>
+    <div class="sys-apps">
+      <span class="sa-chip"><b>accounts</b> 인증·온보딩</span>
+      <span class="sa-chip"><b>stocks</b> 종목·시세·랭킹</span>
+      <span class="sa-chip"><b>recommend</b> 궁합·장투·AI</span>
+      <span class="sa-chip"><b>portfolio</b> 보유·주문</span>
+      <span class="sa-chip"><b>diary</b> 매매일지</span>
+      <span class="sa-chip"><b>community</b> 커뮤니티</span>
+      <span class="sa-chip"><b>newses</b> 뉴스</span>
     </div>
   </section>
 
