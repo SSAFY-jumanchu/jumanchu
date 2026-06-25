@@ -1,0 +1,121 @@
+// 연애모드(love 팔레트) 문구 사전.
+// key → 연애 버전 문구. 기본(default 팔레트)에서는 화면의 fallback(팀원 문구)이 그대로 나온다.
+// "장기연애" 컨셉: 종목=인연/상대, 매수=만남 시작, 보유=만나는 중, 장투=장기연애, 점검=관계 점검.
+// ⚠️ 숫자·금액·코드·상태 로직값은 건드리지 않는다(표시 문구만).
+export const datingCopy = {
+  // ===== 네비게이션 (AppNavbar) =====
+  'nav.home': '홈',
+  'nav.community': '연애 상담소',
+  'nav.stocks': '인연 찾기',
+  'nav.holdings': '만나는 중',
+  'nav.diary': '데이트 기록',
+  'nav.portfolio': '관계 점검',
+
+  // ===== 홈 (HomeView) =====
+  'home.match.title': '오늘의 인연 추천 💝',
+  'home.match.sub': '당신과 잘 맞는 인연이에요. 넘기면서 마음에 드는 상대를 골라보세요.',
+  'home.match.count': '인연',
+  'home.match.interest': '명이 이 인연에 두근거리고 있어요',
+  'home.action.diary': '데이트 기록 쓰러 가기',
+  'home.action.care.title': '우리 사이 점검하기',
+  'home.action.care.desc': '지금 만나는 인연들, 잘 지내고 있나요?',
+  'home.asset.eyebrow': '나의 연애',
+  'home.asset.title': '연애 현황',
+  'home.asset.total': '총 마음',
+  'home.asset.return': '총 설렘률',
+  'home.asset.profit': '총 설렘',
+  'home.asset.cash': '아직 못 준 마음',
+  'home.asset.stock': '주고 있는 마음',
+  'home.asset.holdings': '📊 만나는 중',
+  'home.watch.eyebrow': '내 관심 상대 소식',
+  'home.watch.title': '관심 상대 뉴스',
+  'home.holdings.eyebrow': '나의 인연들',
+  'home.holdings.title': '만나는 중',
+  'home.diary.eyebrow': '나의 연애 기록',
+  'home.diary.title': '데이트 기록',
+  'home.diary.write': '+ 오늘 데이트 기록',
+  'home.rank.label': '🏆 궁합 랭킹',
+
+  // ===== 주식 조회 (StocksView) — 홈과 같은 키 재사용 =====
+
+  // ===== 온보딩 설문 (OnboardingView) =====
+  'ob.pageTitle': '나의 연애 DNA 분석하기',
+  'ob.step.intro': '사전 설정',
+  'ob.scoreInline': '누적 점수',
+  'ob.s0.title': '관심 이상형 & 선호 만남 기간',
+  'ob.s0.desc': '주만님과 잘 맞는 인연을 추천해드리기 위한 과정이에요. 관심 이상형과 선호 만남 기간을 선택해주세요.',
+  'ob.s0.sectorLabel': '관심 이상형',
+  'ob.s0.sectorHint': '복수 선택 가능',
+  'ob.s0.periodLabel': '선호 만남 기간',
+  'ob.s0.periodHint': '단일 선택',
+  'ob.weightedNote': '⚖️ 이 문항은 가중치 2배가 적용됩니다.',
+  'ob.nav.result': '결과 확인',
+  'ob.nav.next': '다음',
+  'ob.result.eyebrow': '연애 성향 분석 완료',
+  'ob.result.scoreLabel': '종합 점수',
+  'ob.result.sectorKey': '관심 이상형',
+  'ob.result.periodKey': '선호 만남 기간',
+  'ob.finish.loading': '저장 중…',
+  'ob.finish.go': '주만추 시작하기 🎉',
+
+  // ===== 매매일기 → 데이트 기록 (TradingDiaryView) =====
+  'td.title': '데이트 기록',
+  'td.sub': '왜 만났는지, 어땠는지 한 줄로 남겨 건강한 연애 습관을 만들어요.',
+  'td.pending.title': '기록 대기 1건',
+  'td.pending.desc': '만났는데 아직 기록을 안 남긴 데이트예요.',
+  'td.list.title': '나의 데이트 기록',
+  'td.list.countPre': '총',
+  'td.list.countSuf': '번의 만남',
+  'td.status.done': '돌아보기 완료',
+  'td.status.pending': '돌아보기 대기',
+  'td.tag.target': '기대',
+  'td.tag.stop': '마지노선',
+  'td.review.actualLabel': '🔍 실제',
+  'td.review.verdictLabel': '느낌',
+  'td.save': '데이트 기록 저장',
+
+  // ===== 보유 종목 → 만나는 중 (HoldingsView) =====
+  'hv.title': '만나는 중',
+  'hv.badge': '가상 만남 기준',
+  'hv.summary.title': '내 마음 요약',
+  'hv.sum.eval': '지금 준 마음 합계',
+  'hv.sum.pnl': '총 설렘 손익',
+  'hv.sum.cost': '처음 준 마음',
+  'hv.shortcut.orders': '만남 내역',
+  'hv.shortcut.diary': '데이트 기록',
+  'hv.list.title': '만나는 인연 목록',
+  'hv.alloc.title': '마음 구성 (국내·해외)',
+  'hv.detail.buy': '다가가기',
+  'hv.detail.sell': '거리두기',
+  'hv.detail.go': '이 인연 더 알아보기 →',
+  'hv.news.title': '소식 · 상담소',
+
+  // ===== 장투 케어 → 관계 점검 (PortfolioView) =====
+  'lt.title': '관계 점검',
+  'lt.sub': '지금 만나는 인연, 계속 함께할 만한가요? 우리 사이를 점검해드려요.',
+  'lt.list.title': '만나는 인연',
+  'lt.overview.go': '이 인연 더 보기 →',
+  'lt.score.재무': '안정감',
+  'lt.score.성장': '성장 가능성',
+  'lt.journal.title': '📒 이 인연 데이트 기록',
+  'lt.side.buy': '다가가기',
+  'lt.side.sell': '거리두기',
+  'lt.history.title': '📈 관계 점수 히스토리',
+  'lt.news.title': '📰 이 인연 관련 소식',
+
+  // ===== 마이페이지 (MyPageView) =====
+  'mp.tab.invest': '내 연애',
+  'mp.invest.analysis': '설렘 분석',
+  'mp.invest.holdings': '만나는 인연 현황',
+  'mp.invest.trades': '내 만남 내역',
+  'mp.profile.investType': '연애 성향',
+  'mp.profile.retest': '연애 성향 재검사',
+  'mp.profile.community': '상담소 프로필',
+  'mp.act.posts': '작성한 글',
+
+  // ===== 종목 상세 (StockDetailView) — 가벼운 컨셉 터치 =====
+  'sd.watch': '💗 관심 인연 추가',
+  'sd.watched': '💗 관심 인연',
+  'sd.community.title': '이 인연 수다방',
+  'sd.comm.detailBtn': '이 사람 더 알아보기 →',
+}

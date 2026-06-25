@@ -6,7 +6,9 @@ import { fetchStockPrice, fetchStockChart } from '../api/stocks'
 import client, { retry } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import { useFavoritesStore } from '../stores/favorites'
+import { useCopy } from '../composables/useCopy'
 
+const { t } = useCopy()
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
@@ -995,8 +997,8 @@ onMounted(() => {
         <!-- 스와이프 모드: 궁합 랭킹 종목을 넘기며 선호에 담기 (10개 다 넘겨야 종료) -->
         <template v-if="swipeActive">
           <div class="sv-match-header">
-            <h2 class="sv-match-title">오늘의 궁합 추천 💝</h2>
-            <p class="sv-match-sub">궁합 랭킹 상위 종목이에요. 넘기면서 선호 종목을 골라보세요.</p>
+            <h2 class="sv-match-title">{{ t('home.match.title', '오늘의 궁합 추천 💝') }}</h2>
+            <p class="sv-match-sub">{{ t('home.match.sub', '궁합 랭킹 상위 종목이에요. 넘기면서 선호 종목을 골라보세요.') }}</p>
             <span class="sv-match-count">추천 {{ swipeIdx + 1 }} / {{ swipeBatch.length }}</span>
           </div>
 

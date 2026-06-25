@@ -3,6 +3,9 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { fetchDiaries, createDiary, updateDiary } from '../api/diary'
 import { fetchOrders } from '../api/portfolio'
 import { errMsg } from '../api/client'
+import { useCopy } from '../composables/useCopy'
+
+const { t } = useCopy()
 
 // ===== 액션/사유 enum ↔ 한글 라벨 =====
 const ACTION_LABEL = { BUY: '매수', SELL: '매도', WATCH: '관심' }
@@ -234,8 +237,8 @@ async function saveReview(e) {
 
     <!-- 헤더 -->
     <header class="td-header">
-      <h1>매매일기</h1>
-      <p class="td-sub">왜 샀는지 고르기만 하면 끝 — 나중에 결과로 복기하며 투자 습관을 만들어요.</p>
+      <h1>{{ t('td.title', '매매일기') }}</h1>
+      <p class="td-sub">{{ t('td.sub', '왜 샀는지 고르기만 하면 끝 — 나중에 결과로 복기하며 투자 습관을 만들어요.') }}</p>
     </header>
 
     <!-- 로드 오류 -->
@@ -359,7 +362,7 @@ async function saveReview(e) {
           ></textarea>
         </div>
 
-        <button class="td-save-btn" type="button" @click="saveDiary" :disabled="saving">매매일기 저장</button>
+        <button class="td-save-btn" type="button" @click="saveDiary" :disabled="saving">{{ t('td.save', '매매일기 저장') }}</button>
         <p class="td-form-hint">매매 유형은 고정, 나머지는 선택만으로 1초 작성</p>
       </section>
 
@@ -372,7 +375,7 @@ async function saveReview(e) {
     <section v-else class="panel td-list" aria-label="작성 완료한 매매일기">
       <div class="td-list-head">
         <h2>작성 완료</h2>
-        <span class="td-list-count">총 {{ entries.length }}건</span>
+        <span class="td-list-count">{{ t('td.list.countPre', '총') }} {{ entries.length }}{{ t('td.list.countSuf', '건') }}</span>
       </div>
 
       <p v-if="!entries.length" class="td-empty">작성한 매매일기가 없어요.</p>
@@ -388,7 +391,7 @@ async function saveReview(e) {
               </div>
               <span class="td-date">{{ e.date }}</span>
             </div>
-            <span class="td-status" :class="e.memo ? 'done' : 'pending'">{{ e.memo ? '복기 완료' : '복기 대기' }}</span>
+            <span class="td-status" :class="e.memo ? 'done' : 'pending'">{{ e.memo ? t('td.status.done', '복기 완료') : t('td.status.pending', '복기 대기') }}</span>
             <button type="button" class="td-edit-btn" @click="startEdit(e)">{{ editingId === e.id ? '닫기' : '수정' }}</button>
           </div>
 
@@ -397,8 +400,8 @@ async function saveReview(e) {
             <div class="td-tags">
               <span v-if="e.reason" class="td-reason">{{ e.reason }}</span>
               <span v-else class="td-reason td-reason-none">이유 미입력</span>
-              <span class="td-metric">목표 {{ fmtTarget(e) }}</span>
-              <span class="td-metric">손절 {{ fmtStop(e) }}</span>
+              <span class="td-metric">{{ t('td.tag.target', '목표') }} {{ fmtTarget(e) }}</span>
+              <span class="td-metric">{{ t('td.tag.stop', '손절') }} {{ fmtStop(e) }}</span>
               <span class="td-stars">
                 <span v-for="n in 5" :key="n" :class="n <= e.confidence ? 'on' : ''">★</span>
               </span>

@@ -6,7 +6,9 @@ import { fetchHoldings } from '../api/portfolio'
 import { fetchStockChart } from '../api/stocks'
 import { fetchHoldingsNews } from '../api/news'
 import { errMsg, retry } from '../api/client'
+import { useCopy } from '../composables/useCopy'
 
+const { t } = useCopy()
 const router = useRouter()
 
 // 보유 종목 (실데이터: GET /portfolio/holdings/)
@@ -150,8 +152,8 @@ onMounted(() => {
 
     <!-- 헤더 -->
     <header class="hv-header">
-      <h1>보유 종목</h1>
-      <span class="hv-badge"><span class="hv-badge-dot"></span>가상 계좌 기준</span>
+      <h1>{{ t('hv.title', '보유 종목') }}</h1>
+      <span class="hv-badge"><span class="hv-badge-dot"></span>{{ t('hv.badge', '가상 계좌 기준') }}</span>
     </header>
 
     <!-- 로드 오류 -->
@@ -165,19 +167,19 @@ onMounted(() => {
         <!-- 상단: 내 자산 요약 + 바로가기 -->
         <div class="hv-top-row">
           <section class="panel hv-summary" aria-label="내 자산 요약">
-            <p class="hv-card-title">내 자산 요약</p>
+            <p class="hv-card-title">{{ t('hv.summary.title', '내 자산 요약') }}</p>
             <div class="hv-sum-row">
-              <span class="hv-sum-label">현재 총 평가액</span>
+              <span class="hv-sum-label">{{ t('hv.sum.eval', '현재 총 평가액') }}</span>
               <strong class="hv-sum-big">{{ man(totalEval) }}<small>만원</small></strong>
             </div>
             <div class="hv-sum-row">
-              <span class="hv-sum-label">총 평가 손익</span>
+              <span class="hv-sum-label">{{ t('hv.sum.pnl', '총 평가 손익') }}</span>
               <strong class="hv-sum-pnl" :class="totalPnl >= 0 ? 'is-up' : 'is-down'">
                 {{ totalPnl >= 0 ? '+' : '' }}{{ man(totalPnl) }}만원 ({{ fmtRate(totalReturn) }})
               </strong>
             </div>
             <div class="hv-sum-row">
-              <span class="hv-sum-label">총 투자원금</span>
+              <span class="hv-sum-label">{{ t('hv.sum.cost', '총 투자원금') }}</span>
               <strong class="hv-sum-mid">{{ man(totalCost) }}만원</strong>
             </div>
           </section>
@@ -189,10 +191,10 @@ onMounted(() => {
                 <span class="hv-shortcut-ico">🏦</span> 내 계좌
               </button>
               <button class="hv-shortcut-btn" type="button" @click="router.push('/mypage')">
-                <span class="hv-shortcut-ico">📄</span> 주문내역
+                <span class="hv-shortcut-ico">📄</span> {{ t('hv.shortcut.orders', '주문내역') }}
               </button>
               <button class="hv-shortcut-btn" type="button" @click="router.push('/trading-diary')">
-                <span class="hv-shortcut-ico">📓</span> 매매일지
+                <span class="hv-shortcut-ico">📓</span> {{ t('hv.shortcut.diary', '매매일지') }}
               </button>
             </div>
           </section>
@@ -201,7 +203,7 @@ onMounted(() => {
         <!-- 보유 종목 목록 -->
         <section class="panel hv-list-card" aria-label="보유 종목 목록">
           <div class="hv-list-head">
-            <h2>보유 종목 목록</h2>
+            <h2>{{ t('hv.list.title', '보유 종목 목록') }}</h2>
             <div class="hv-seg">
               <button :class="{ 'is-active': marketFilter === 'all' }" @click="marketFilter = 'all'">전체</button>
               <button :class="{ 'is-active': marketFilter === 'domestic' }" @click="marketFilter = 'domestic'">국내</button>
@@ -246,7 +248,7 @@ onMounted(() => {
 
         <!-- 자산 구성 -->
         <section class="panel hv-alloc" aria-label="자산 구성">
-          <p class="hv-card-title">자산 구성 (국내·해외)</p>
+          <p class="hv-card-title">{{ t('hv.alloc.title', '자산 구성 (국내·해외)') }}</p>
           <div class="hv-alloc-bar">
             <span class="dom" :style="{ width: marketGroups.dom.pct + '%' }"></span>
             <span class="ovs" :style="{ width: marketGroups.ovs.pct + '%' }"></span>
@@ -286,12 +288,12 @@ onMounted(() => {
               <dd :class="returnRate(selectedHolding) >= 0 ? 'is-up' : 'is-down'">{{ fmtRate(returnRate(selectedHolding)) }}</dd>
             </div>
           </dl>
-          <button class="hv-detail-go" type="button" @click="router.push(`/stocks/${selectedHolding.code}`)">종목 상세 보기 →</button>
+          <button class="hv-detail-go" type="button" @click="router.push(`/stocks/${selectedHolding.code}`)">{{ t('hv.detail.go', '종목 상세 보기 →') }}</button>
         </section>
 
         <!-- 보유 종목 뉴스 (보유가 있을 때만) -->
         <section v-if="holdings.length" class="panel hv-news" aria-label="보유 종목 뉴스">
-          <p class="hv-card-title">보유 종목 뉴스</p>
+          <p class="hv-card-title">{{ t('hv.news.title', '보유 종목 뉴스') }}</p>
           <a
             v-for="n in holdingNews"
             :key="n.title"

@@ -10,7 +10,9 @@ import { fetchRecommendations, fetchLongtermRanking } from '../api/recommend'
 import { fetchPortfolioSummary, fetchMilestones, fetchOrders } from '../api/portfolio'
 import { fetchDiaries } from '../api/diary'
 import { retry } from '../api/client'
+import { useCopy } from '../composables/useCopy'
 
+const { t } = useCopy()
 const router = useRouter()
 const auth = useAuthStore()
 const favStore = useFavoritesStore()
@@ -811,8 +813,8 @@ function onDemoUp() {
       <section class="panel goal-panel" aria-label="자산 현황 및 목표">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">나의 자산</p>
-            <h2>자산 현황</h2>
+            <p class="eyebrow">{{ t('home.asset.eyebrow', '나의 자산') }}</p>
+            <h2>{{ t('home.asset.title', '자산 현황') }}</h2>
           </div>
           <button class="hide-amount-btn" type="button" @click="hideAmount = !hideAmount">
             👁 {{ hideAmount ? '금액 보기' : '금액 숨기기' }}
@@ -822,17 +824,17 @@ function onDemoUp() {
         <!-- 총 자산 = 예수금 + 주식 평가액 -->
         <div class="asset-summary">
           <div class="asset-total">
-            <span class="asset-total-label">총 자산</span>
+            <span class="asset-total-label">{{ t('home.asset.total', '총 자산') }}</span>
             <strong class="asset-total-value">{{ !assetReady ? '' : hideAmount ? '••••••••' : fmt(totalAsset) + '원' }}</strong>
           </div>
           <div class="asset-return">
-            <span class="asset-return-label">총 수익률</span>
+            <span class="asset-return-label">{{ t('home.asset.return', '총 수익률') }}</span>
             <strong class="asset-return-value" :class="totalReturn >= 0 ? 'is-up' : 'is-down'">
               <template v-if="assetReady">{{ totalReturn >= 0 ? '+' : '' }}{{ totalReturn.toFixed(2) }}%</template>
             </strong>
           </div>
           <div class="asset-return">
-            <span class="asset-return-label">총 수익금</span>
+            <span class="asset-return-label">{{ t('home.asset.profit', '총 수익금') }}</span>
             <strong class="asset-return-value" :class="totalProfit >= 0 ? 'is-up' : 'is-down'">
               <template v-if="assetReady">{{ hideAmount ? '••••' : (totalProfit >= 0 ? '+' : '') + fmt(totalProfit) + '원' }}</template>
             </strong>
@@ -855,7 +857,7 @@ function onDemoUp() {
         <!-- 보유 종목 (많으면 스크롤) -->
         <div class="asset-block">
           <div class="asset-block-head">
-            <span class="asset-block-title">📊 보유 종목</span>
+            <span class="asset-block-title">{{ t('home.asset.holdings', '📊 보유 종목') }}</span>
             <button class="asset-block-more" type="button" @click="router.push('/holdings')">전체 →</button>
           </div>
           <div class="asset-holdings">
@@ -883,7 +885,7 @@ function onDemoUp() {
         <button class="ltc-score" type="button" @click="goRanking">
           <span class="ltc-circle">{{ rankPreview.score }}<span>점</span></span>
           <span class="ltc-info">
-            <span class="ltc-label">🏆 궁합 랭킹</span>
+            <span class="ltc-label">{{ t('home.rank.label', '🏆 궁합 랭킹') }}</span>
             <Transition name="ltc-roll" mode="out-in">
               <strong class="ltc-ticker" :key="rankIdx">
                 <span class="ltc-rk">{{ rankPreview.rank }}위</span> {{ rankPreview.name }} · {{ rankPreview.score }}점
@@ -898,7 +900,7 @@ function onDemoUp() {
           <button class="asset-action-card" type="button" @click="router.push('/trading-diary')">
             <span class="aac-icon">📓</span>
             <span class="aac-body">
-              <strong>투자 일기 쓰러 가기</strong>
+              <strong>{{ t('home.action.diary', '투자 일기 쓰러 가기') }}</strong>
               <small>{{ diaryPendingCount === null ? '작성 대기 확인 중…' : diaryPendingCount === 0 ? '전체 작성 완료' : `작성 대기 ${diaryPendingCount}건` }}</small>
             </span>
             <span class="aac-arrow">→</span>
@@ -906,8 +908,8 @@ function onDemoUp() {
           <button class="asset-action-card" type="button" @click="router.push('/portfolio')">
             <span class="aac-icon">🩺</span>
             <span class="aac-body">
-              <strong>장투 점검하기</strong>
-              <small>내 종목 지금 점검해보세요</small>
+              <strong>{{ t('home.action.care.title', '장투 점검하기') }}</strong>
+              <small>{{ t('home.action.care.desc', '내 종목 지금 점검해보세요') }}</small>
             </span>
             <span class="aac-arrow">→</span>
           </button>
@@ -968,9 +970,9 @@ function onDemoUp() {
       <!-- 오른쪽: 궁합 추천 스와이프 -->
       <section class="swipe-recommend-panel" aria-label="궁합 추천">
         <div class="match-header">
-          <h2 class="match-title">오늘의 궁합 추천 💝</h2>
-          <p class="match-sub">당신의 투자 성향과 잘 맞는 종목이에요. 넘기면서 관심 종목을 골라보세요.</p>
-          <span class="match-count">추천 {{ matchIndex + 1 }} / {{ matchStocks.length }}</span>
+          <h2 class="match-title">{{ t('home.match.title', '오늘의 궁합 추천 💝') }}</h2>
+          <p class="match-sub">{{ t('home.match.sub', '당신의 투자 성향과 잘 맞는 종목이에요. 넘기면서 관심 종목을 골라보세요.') }}</p>
+          <span class="match-count">{{ t('home.match.count', '추천') }} {{ matchIndex + 1 }} / {{ matchStocks.length }}</span>
         </div>
 
         <div class="deck-wrap">
@@ -1070,7 +1072,7 @@ function onDemoUp() {
             </div>
 
             <div class="mc-reason">🐤 성장 선호와 {{ current.sector }} 모멘텀(성장 {{ current.dna[1].value }})이 맞아요.</div>
-            <div class="mc-interest">❤️ {{ current.interest.toLocaleString('ko-KR') }}명이 이 종목에 관심 있어요</div>
+            <div class="mc-interest">❤️ {{ current.interest.toLocaleString('ko-KR') }}{{ t('home.match.interest', '명이 이 종목에 관심 있어요') }}</div>
           </article>
         </div>
 
@@ -1301,8 +1303,8 @@ function onDemoUp() {
       <section v-if="auth.isAuthenticated" class="panel news-panel" aria-label="관심 종목 뉴스">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">내 관심 종목 소식</p>
-            <h2>관심 종목 뉴스</h2>
+            <p class="eyebrow">{{ t('home.watch.eyebrow', '내 관심 종목 소식') }}</p>
+            <h2>{{ t('home.watch.title', '관심 종목 뉴스') }}</h2>
           </div>
           <button class="more-btn" @click="router.push({ name: 'news', query: { tab: 'watchlist' } })">더보기 →</button>
         </div>
@@ -1332,7 +1334,7 @@ function onDemoUp() {
       <!-- 관심 종목 뉴스 (비로그인): 인기 종목 top10 스와이핑 맛보기 (로그인 덱과 동일 디자인) -->
       <section v-else class="panel demo-swipe-panel" aria-label="스와이핑 추천 맛보기">
         <div class="match-header">
-          <h2 class="match-title">오늘의 궁합 추천 💝</h2>
+          <h2 class="match-title">{{ t('home.match.title', '오늘의 궁합 추천 💝') }}</h2>
           <p class="match-sub">로그인 전 미리 체험해보세요. 지금 인기 있는 종목으로 넘겨보는 궁합 맛보기예요.</p>
           <span v-if="!demoDone" class="match-count">{{ Math.min(demoIndex + 1, demoSwipeCards.length) }} / {{ demoSwipeCards.length }}</span>
         </div>
@@ -1429,7 +1431,7 @@ function onDemoUp() {
               </div>
 
               <div class="mc-reason">🐤 성장 선호와 {{ demoCurrent.sector }} 모멘텀(성장 {{ demoCurrent.dna[1].value }})이 맞아요.</div>
-              <div class="mc-interest">❤️ {{ demoCurrent.interest.toLocaleString('ko-KR') }}명이 이 종목에 관심 있어요</div>
+              <div class="mc-interest">❤️ {{ demoCurrent.interest.toLocaleString('ko-KR') }}{{ t('home.match.interest', '명이 이 종목에 관심 있어요') }}</div>
             </article>
           </div>
 

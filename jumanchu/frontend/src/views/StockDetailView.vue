@@ -14,7 +14,10 @@ import { fetchStockNews } from '../api/news'
 import { addWatchlist, removeWatchlist } from '../api/recommend'
 import { errMsg } from '../api/client'
 import { useRecentStocksStore } from '../stores/recentStocks'
+import { useCopy } from '../composables/useCopy'
 
+// 이 컴포넌트는 v-for 루프 변수로 t를 쓰므로 헬퍼는 tr로 별칭
+const { t: tr } = useCopy()
 const router = useRouter()
 const route = useRoute()
 const recentStore = useRecentStocksStore()
@@ -702,7 +705,7 @@ onMounted(async () => {
               type="button"
               :disabled="watching"
               @click="toggleWatch"
-            >{{ isWatched ? '★ 관심종목' : '☆ 관심종목 추가' }}</button>
+            >{{ isWatched ? tr('sd.watched', '★ 관심종목') : tr('sd.watch', '☆ 관심종목 추가') }}</button>
           </div>
           <div class="sd-price-row">
             <strong class="sd-price">{{ fmtCcy(stock.price) }}</strong>
@@ -833,7 +836,7 @@ onMounted(async () => {
           <div class="community-head">
             <div>
               <p class="eyebrow">Community</p>
-              <h3>종목토론방</h3>
+              <h3>{{ tr('sd.community.title', '종목토론방') }}</h3>
             </div>
             <button class="text-btn">전체보기 ›</button>
           </div>
@@ -1210,7 +1213,7 @@ onMounted(async () => {
             <div class="comm-stock-change" :class="change >= 0 ? 'is-up' : 'is-down'">
               ▲ {{ fmt(Math.abs(change)) }} ({{ change >= 0 ? '+' : '' }}{{ changeRate.toFixed(2) }}%)
             </div>
-            <button class="comm-stock-btn" type="button" @click="selectedTab = '종목 홈'">종목 상세 보기 →</button>
+            <button class="comm-stock-btn" type="button" @click="selectedTab = '종목 홈'">{{ tr('sd.comm.detailBtn', '종목 상세 보기 →') }}</button>
           </div>
 
           <div class="panel comm-popular">

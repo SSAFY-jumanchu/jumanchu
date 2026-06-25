@@ -3,7 +3,9 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { errMsg } from '../api/client'
+import { useCopy } from '../composables/useCopy'
 
+const { t } = useCopy()
 const router = useRouter()
 const auth = useAuthStore()
 
@@ -198,20 +200,20 @@ function displayScore(q, score) {
     <div v-if="step === 7" class="ob-result-wrap">
       <div class="panel ob-result-card">
         <div class="result-emoji">{{ riskResult.emoji }}</div>
-        <p class="eyebrow" style="text-align:center;">투자 성향 분석 완료</p>
+        <p class="eyebrow" style="text-align:center;">{{ t('ob.result.eyebrow', '투자 성향 분석 완료') }}</p>
         <h2 class="result-title" :style="{ color: riskResult.colorVar }">{{ riskResult.label }}</h2>
         <p class="result-score">종합 점수 <strong>{{ accumulatedScore }}점</strong></p>
         <p class="result-desc">{{ riskResult.desc }}</p>
 
         <div class="result-profile">
           <div class="result-profile-row">
-            <span class="result-profile-key">관심 섹터</span>
+            <span class="result-profile-key">{{ t('ob.result.sectorKey', '관심 섹터') }}</span>
             <div class="result-chips">
               <span v-for="s in selectedSectors" :key="s" class="result-chip">{{ s }}</span>
             </div>
           </div>
           <div class="result-profile-row">
-            <span class="result-profile-key">선호 보유 기간</span>
+            <span class="result-profile-key">{{ t('ob.result.periodKey', '선호 보유 기간') }}</span>
             <strong class="result-profile-val">{{ periods.find(p => p.value === selectedPeriod)?.label ?? '-' }}</strong>
           </div>
         </div>
@@ -226,7 +228,7 @@ function displayScore(q, score) {
 
       <!-- 헤더 -->
       <div class="ob-page-header">
-        <h1 class="ob-page-title">나의 투자 DNA 분석하기</h1>
+        <h1 class="ob-page-title">{{ t('ob.pageTitle', '나의 투자 DNA 분석하기') }}</h1>
       </div>
 
       <!-- 진행 바 -->
@@ -247,13 +249,13 @@ function displayScore(q, score) {
         <div v-if="step === 0">
           <div class="ob-card-head">
             <span class="ob-tag">사전 설정</span>
-            <h2 class="ob-card-title">관심 섹터 &amp; 선호 보유 기간</h2>
-            <p class="ob-card-desc">주만님과 잘 맞는 주식을 추천해드리기 위한 과정이에요. 관심 섹터와 선호 보유기간을 선택해주세요.</p>
+            <h2 class="ob-card-title">{{ t('ob.s0.title', '관심 섹터 & 선호 보유 기간') }}</h2>
+            <p class="ob-card-desc">{{ t('ob.s0.desc', '주만님과 잘 맞는 주식을 추천해드리기 위한 과정이에요. 관심 섹터와 선호 보유기간을 선택해주세요.') }}</p>
           </div>
 
           <div class="ob-section">
             <p class="ob-section-label">
-              관심 섹터
+              {{ t('ob.s0.sectorLabel', '관심 섹터') }}
               <span class="ob-hint">복수 선택 가능</span>
             </p>
             <div class="sector-chips">
@@ -279,7 +281,7 @@ function displayScore(q, score) {
           <Transition name="ob-reveal">
             <div v-if="periodOpen" class="ob-section">
               <p class="ob-section-label">
-                선호 보유 기간
+                {{ t('ob.s0.periodLabel', '선호 보유 기간') }}
                 <span class="ob-hint">단일 선택 · 선택 시 다음으로</span>
               </p>
               <div class="period-chips">
