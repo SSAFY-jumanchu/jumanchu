@@ -170,15 +170,20 @@ const volumeData = ref([
 ])
 
 // SVG 라인 차트 경로 계산 (last = 추세선 마지막 점 좌표)
+// opts.times+domain을 주면 x를 인덱스가 아닌 실제 시각으로 배치 → 마감으로 끊긴 구간은 우측이 비어 now까지 안 닿음.
 // padR로 우측에 살짝 여백을 둬 라인 끝이 가장자리에 붙지 않게 하고, 끝점(last)을 점과 공유한다.
-function buildPath(prices, w, h, padT = 36, padB = 16, padL = 0, padR = 48) {
+function buildPath(prices, w, h, opts = {}) {
+  const { times = null, domainStart = null, domainEnd = null, padT = 36, padB = 16, padL = 0, padR = 48 } = opts
   const min = Math.min(...prices)
   const max = Math.max(...prices)
   const range = max - min || 1
   const n = prices.length
   const innerW = w - padL - padR
+  const useTime = times && times.length === n && domainEnd > domainStart
   const pts = prices.map((p, i) => {
-    const x = padL + (n > 1 ? (i / (n - 1)) * innerW : innerW)
+    const x = useTime
+      ? padL + ((times[i] - domainStart) / (domainEnd - domainStart)) * innerW
+      : padL + (n > 1 ? (i / (n - 1)) * innerW : innerW)
     const y = padT + (1 - (p - min) / range) * (h - padT - padB)
     return { x, y }
   })
@@ -187,14 +192,53 @@ function buildPath(prices, w, h, padT = 36, padB = 16, padL = 0, padR = 48) {
   return { line, last }
 }
 
-const chartPath = computed(() => buildPath(intradayPrices.value, 560, 200))
-// 현재가 점 — 추세선 마지막 점 좌표 그대로 사용 (라인 끝과 정확히 일치)
+const PAD_R = 48
+const INNER_W = 560 - PAD_R
+// 캔들 시각(ms) — 차트를 인덱스가 아닌 실제 시각 기준으로 배치. loadChart에서 chartTimes를 채움.
+const chartTimes = ref([])
+const chartTs = computed(() => chartTimes.value.map((t) => new Date(t).getTime()).filter((t) => !Number.isNaN(t)))
+// 시간 도메인: 시작=첫 캔들. 끝은 분/일 탭이면 now까지 확장(마감돼 멈춘 미국장 등 → 우측에 빈 구간) /
+// 주·월은 마지막 캔들까지(캔들 시각이 '구간 시작'이라 now 확장 시 가짜 공백이 생겨서).
+const timeDomain = computed(() => {
+  const ts = chartTs.value
+  if (ts.length < 2) return null
+  const label = selectedPeriod.value
+  const extend = label === '1분' || label === '5분' || label === '일'
+  const end = extend ? Math.max(ts[ts.length - 1], Date.now()) : ts[ts.length - 1]
+  return { start: ts[0], end }
+})
+const chartPath = computed(() => {
+  const d = timeDomain.value
+  return buildPath(intradayPrices.value, 560, 200,
+    d ? { times: chartTs.value, domainStart: d.start, domainEnd: d.end } : {})
+})
+// 현재가 점 — 추세선 마지막 점 좌표 그대로 사용 (라인 끝과 일치 — 마감 시 우측 끝이 아니라 데이터 끝에 위치)
 const chartDot = computed(() => ({ x: chartPath.value.last.x, y: chartPath.value.last.y }))
 // 현재가 라벨 가로 위치 — 점 x를 %로 (translateX(-50%)로 점 중앙 정렬)
 const labelLeft = computed(() => (chartDot.value.x / 560) * 100)
 // 주가 태그는 평상시 숨김 — 점에 마우스 호버 시에만 표시 (항상 점 위로 — 커서 가림 방지)
 const showPriceLabel = ref(false)
-const maxVolume = computed(() => Math.max(...volumeData.value, 1))
+// 거래량 막대 — 가격 라인과 동일하게 시각 기준 배치 (마감 구간은 비어 '데이터 없음').
+const volumeBars = computed(() => {
+  const vols = volumeData.value, ts = chartTs.value, d = timeDomain.value
+  const n = vols.length, maxV = Math.max(...vols, 1)
+  const useTime = d && ts.length === n
+  const bw = Math.max(1, INNER_W / Math.max(n, 1) - 1)
+  return vols.map((v, i) => {
+    const x = useTime ? ((ts[i] - d.start) / (d.end - d.start)) * INNER_W : (i / n) * INNER_W
+    const hgt = (v / maxV) * 68
+    const prev = intradayPrices.value[i - 1] ?? intradayPrices.value[i]
+    return { x, w: bw, y: 70 - hgt, h: hgt, up: intradayPrices.value[i] >= prev }
+  })
+})
+// 마지막 데이터가 now에 못 미쳐 우측에 빈 구간이 있으면 그 정보(있을 때만 non-null)
+const nowMarker = computed(() => {
+  const d = timeDomain.value, ts = chartTs.value
+  if (!d || ts.length < 2) return null
+  const lastX = ((ts[ts.length - 1] - d.start) / (d.end - d.start)) * INNER_W
+  // 24px 미만(일봉 2~3일 휴장 등)은 노이즈라 미표기 — 분봉 마감처럼 큰 공백만 표시
+  return INNER_W - lastX > 24 ? { lastX, nowX: INNER_W } : null
+})
 
 // ===== 차트 기간 탭 =====
 const chartPeriods = ['1분', '5분', '일', '주', '월']
@@ -214,11 +258,26 @@ const priceAxis = computed(() => {
   const N = 5
   return Array.from({ length: N }, (_, i) => fmtAxisPrice(max - (i / (N - 1)) * (max - min)))
 })
-// X축: 분봉/일(장중)=시간, 주/월=날짜. 시장(USD/KRW)별 장 운영시간 반영
+// X축 라벨 — 실제 캔들 시각(chartTimes)에서 N개 균등 추출해 기간별 포맷.
+// 1분·5분=시:분, 일·주=월/일, 월=YY.MM. 실데이터 없으면(합성 폴백) 기간 스팬만큼 합성.
+function fmtAxisTime(t, label) {
+  const d = new Date(t)
+  if (Number.isNaN(d.getTime())) return ''
+  if (label === '1분' || label === '5분') return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+  if (label === '월') return `${String(d.getFullYear()).slice(2)}.${String(d.getMonth() + 1).padStart(2, '0')}`
+  return `${d.getMonth() + 1}/${d.getDate()}`   // 일·주
+}
 const timeAxis = computed(() => {
   const label = selectedPeriod.value
   const N = 7
-  if (label === '1분' || label === '5분' || label === '일') {
+  const d = timeDomain.value
+  // 1) 실데이터: 축을 [첫 캔들 ~ 도메인끝(분/일=now)]로 균등 분할 → 우측 끝이 현재 시각
+  if (d) {
+    return Array.from({ length: N }, (_, i) =>
+      fmtAxisTime(d.start + (i / (N - 1)) * (d.end - d.start), label))
+  }
+  // 2) 합성 폴백 — 분봉=장 운영시간, 일/주/월=기간 스팬만큼 날짜 역산
+  if (label === '1분' || label === '5분') {
     const [sH, sM, eH, eM] = stock.value.currency === 'USD' ? [9, 30, 16, 0] : [9, 0, 15, 30]
     const start = sH * 60 + sM
     const end = eH * 60 + eM
@@ -227,12 +286,14 @@ const timeAxis = computed(() => {
       return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`
     })
   }
-  const days = label === '주' ? 7 : 30
+  const spanDays = label === '일' ? 90 : label === '주' ? 365 : 730
   const now = new Date()
   return Array.from({ length: N }, (_, i) => {
     const d = new Date(now)
-    d.setDate(now.getDate() - Math.round((1 - i / (N - 1)) * days))
-    return `${d.getMonth() + 1}/${d.getDate()}`
+    d.setDate(now.getDate() - Math.round((1 - i / (N - 1)) * spanDays))
+    return label === '월'
+      ? `${String(d.getFullYear()).slice(2)}.${String(d.getMonth() + 1).padStart(2, '0')}`
+      : `${d.getMonth() + 1}/${d.getDate()}`
   })
 })
 
@@ -541,14 +602,14 @@ function fmtCompact(v) {
 // ===== 차트·재무·종토방 실데이터 로딩 =====
 const pct = (v, digits = 1) => (v == null ? null : (v * 100).toFixed(digits) + '%')
 
-// 기간 탭 → period/interval.
-// 1분·5분·일 = 오늘 장중(분봉, period=1d), 주 = 최근 7일·월 = 최근 30일 일봉(DB StockPrice).
+// 기간 탭 → period/interval (각 탭이 그 단위 캔들로). 범위는 1분<5분<일<주<월 순으로 증가.
+// 1분·5분 = 오늘 장중 분봉, 일 = 일봉(3개월), 주 = 주봉(1년), 월 = 월봉(가용 전체, BE가 일봉을 집계).
 const CHART_PARAM = {
   '1분': { period: '1d', interval: '1m' },
   '5분': { period: '1d', interval: '5m' },
-  '일': { period: '1d', interval: '15m' },   // 하루(오늘) 기준 장중 추세
-  '주': { period: '1w', interval: '1d' },     // 최근 7일 일봉
-  '월': { period: '1m', interval: '1d' },     // 최근 30일 일봉
+  '일': { period: '3m', interval: '1d' },     // 일봉 (최근 3개월)
+  '주': { period: '1y', interval: '1w' },      // 주봉 (최근 1년)
+  '월': { period: '5y', interval: '1mo' },     // 월봉 (가용 전체)
 }
 
 // 실데이터(캔들)가 없을 때 기간별로 모양이 다른 추세선을 합성한다.
@@ -557,9 +618,9 @@ function syntheticSeries(label) {
   const cfg = {
     '1분': { n: 200, vol: 0.0010 },   // 가장 상세한 장중
     '5분': { n: 80, vol: 0.0022 },
-    '일': { n: 40, vol: 0.0045 },     // 하루 장중
-    '주': { n: 18, vol: 0.011 },      // 주간
-    '월': { n: 30, vol: 0.021 },      // 30일
+    '일': { n: 60, vol: 0.012 },      // 일봉 ~3개월
+    '주': { n: 52, vol: 0.03 },       // 주봉 ~1년
+    '월': { n: 24, vol: 0.06 },       // 월봉 ~2년
   }[label] || { n: 60, vol: 0.005 }
   const base = Number(stock.value.price) || 100
   let seed = 0
@@ -584,6 +645,7 @@ async function loadChart(code, label) {
     if (candles.length) {
       intradayPrices.value = candles.map((c) => Number(c.close))
       volumeData.value = candles.map((c) => Number(c.volume))
+      chartTimes.value = candles.map((c) => c.time)
       return
     }
   } catch {
@@ -593,6 +655,7 @@ async function loadChart(code, label) {
   const { prices, volumes } = syntheticSeries(label)
   intradayPrices.value = prices
   volumeData.value = volumes
+  chartTimes.value = []   // 합성 → 실 시각 없음 → timeAxis가 합성 라벨 사용
 }
 
 async function loadFinancials(code) {
@@ -778,6 +841,9 @@ onMounted(async () => {
                 <!-- 라인 -->
                 <path :d="chartPath.line" fill="none" stroke="var(--accent)" stroke-width="2"
                   stroke-linecap="round" stroke-linejoin="round" />
+                <!-- 'now'(현재) 세로 마커 — 마감 등으로 데이터가 끊겨 우측에 빈 구간이 있을 때만 -->
+                <line v-if="nowMarker" :x1="nowMarker.nowX" y1="0" :x2="nowMarker.nowX" y2="200"
+                  stroke="rgba(180,200,255,0.35)" stroke-width="1" stroke-dasharray="3 3" />
               </svg>
 
               <!-- 현재가 점 — HTML 오버레이(고정 px 정원). SVG는 preserveAspectRatio=none이라 내부 도형이 눌려서 밖으로 뺌 -->
@@ -796,6 +862,13 @@ onMounted(async () => {
                 class="current-price-label"
                 :style="{ left: labelLeft + '%', top: chartDot.y + 'px' }"
               >{{ curSym }}{{ fmt(stock.price) }}</div>
+
+              <!-- 마감 등으로 현재까지 데이터가 없을 때 — 빈 구간에 표기 -->
+              <div
+                v-if="nowMarker"
+                class="chart-nodata"
+                :style="{ left: ((nowMarker.lastX + nowMarker.nowX) / 2 / 560 * 100) + '%' }"
+              >데이터 없음</div>
             </div>
 
             <!-- 가격 축 (그래프 오른쪽) -->
@@ -816,13 +889,13 @@ onMounted(async () => {
           <div class="volume-chart-wrap">
             <svg viewBox="0 0 560 70" preserveAspectRatio="none" class="volume-svg">
               <rect
-                v-for="(v, i) in volumeData"
+                v-for="(b, i) in volumeBars"
                 :key="i"
-                :x="(i / volumeData.length) * 560"
-                :width="(560 / volumeData.length) - 1"
-                :y="70 - (v / maxVolume) * 68"
-                :height="(v / maxVolume) * 68"
-                :fill="intradayPrices[i] >= (intradayPrices[i-1] ?? intradayPrices[i]) ? 'rgba(var(--accent-rgb),0.5)' : 'rgba(255,59,92,0.45)'"
+                :x="b.x"
+                :width="b.w"
+                :y="b.y"
+                :height="b.h"
+                :fill="b.up ? 'rgba(var(--accent-rgb),0.5)' : 'rgba(255,59,92,0.45)'"
               />
             </svg>
           </div>
@@ -1651,6 +1724,18 @@ onMounted(async () => {
 
 .price-chart-svg { width: 100%; height: 100%; }
 
+/* 마감 등으로 현재까지 데이터가 없을 때 빈 구간에 표기 */
+.chart-nodata {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(180, 200, 255, 0.5);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* 현재가 점 — SVG 밖 HTML 오버레이라 화면 크기와 무관하게 항상 정원 */
 .chart-dot-hit {
   position: absolute;
@@ -1701,7 +1786,8 @@ onMounted(async () => {
 .time-axis {
   display: flex;
   justify-content: space-between;
-  padding: 4px 60px 6px 0;
+  /* 우측 padding = 가격축 60px + 차트 padR(48/560) → 라벨이 데이터 영역[0,512]·now-라인과 정렬 */
+  padding: 4px calc(60px + (100% - 60px) * 48 / 560) 6px 0;
   font-size: 10px;
   font-weight: 700;
   color: var(--faint);
