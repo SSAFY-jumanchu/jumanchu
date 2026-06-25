@@ -434,6 +434,20 @@
     #match .mt-reason b { color: #fff; font-weight: 600; }
     #match .mt-interest { margin-top: 10px; font-size: .46em; color: var(--dim); }
 
+    /* 7p — 궁합 점수 5요소 가중치 리스트 */
+    #match .mt-formula-head { margin-top: 1.15em; font-size: .58em; color: #fff; font-weight: 600; display: flex; align-items: baseline; gap: .45em; }
+    #match .mt-formula-head span { color: var(--dim); font-weight: 500; font-size: .82em; }
+    #match .mt-weights { margin-top: .85em; display: flex; flex-direction: column; gap: 9px; }
+    #match .mt-w { display: grid; grid-template-columns: 4.2em 3.4em 1fr; align-items: center; gap: 12px; }
+    #match .mw-name { font-size: .54em; color: #fff; font-weight: 600; }
+    #match .mw-pct {
+      font-family: "Inter", sans-serif; font-size: .46em; font-weight: 700; color: var(--magenta); text-align: center;
+      background: rgba(255,61,139,.10); border: 1px solid rgba(255,61,139,.22); border-radius: 999px; padding: .32em 0;
+    }
+    #match .mw-mean { font-size: .48em; color: var(--dim); line-height: 1.45; word-break: keep-all; }
+    #match .mt-note { margin-top: 1.05em; font-size: .46em; color: var(--dim); line-height: 1.5; word-break: keep-all; }
+    #match .mt-note b { color: var(--text); font-weight: 600; }
+
     /* ============ 8. 장투케어 (Core Feature 03) ============ */
     #care h2 { font-size: 1.4em; }
     #care .lead { font-size: .66em; max-width: 40em; }
@@ -824,30 +838,16 @@
 
     <div class="mt-grid">
       <div class="mt-left">
-        <p class="lead">결과만 던지지 않습니다. 내 성향과 종목 DNA를 매칭해<br/><b>“왜 나에게 맞는지”</b>까지 함께 보여줍니다.</p>
-        <div class="mt-steps">
-          <div class="mt-step">
-            <span class="ms-num">01</span>
-            <div>
-              <strong>궁합 점수</strong>
-              <p>온보딩 성향 ↔ 종목 Stock DNA를 0–100 점수로 매칭</p>
-            </div>
-          </div>
-          <div class="mt-step">
-            <span class="ms-num">02</span>
-            <div>
-              <strong>추천 사유</strong>
-              <p>성향 · 섹터 · 모멘텀 근거를 한 문장으로 — “왜 나에게 맞는지”</p>
-            </div>
-          </div>
-          <div class="mt-step">
-            <span class="ms-num">03</span>
-            <div>
-              <strong>탐색 방식</strong>
-              <p>스와이프로 관심 종목 선별 + 궁합 랭킹(재무 30 · 성장 40 · 궁합 30)</p>
-            </div>
-          </div>
+        <p class="lead">결과만 던지지 않습니다. 내 성향 <b>5벡터</b>와 종목 <b>Stock DNA 4축</b>을<br/>가중 매칭해 <b>0~100 궁합 점수</b>로 환산합니다.</p>
+        <div class="mt-formula-head">궁합 점수 = 5요소 가중합 <span>(0~100)</span></div>
+        <div class="mt-weights">
+          <div class="mt-w"><span class="mw-name">리스크</span><span class="mw-pct">35%</span><span class="mw-mean">위험 성향 ↔ 변동성, 거리가 가까울수록 ↑</span></div>
+          <div class="mt-w"><span class="mw-name">기간</span><span class="mw-pct">20%</span><span class="mw-mean">보유기간별 안정·가치·변동 조합</span></div>
+          <div class="mt-w"><span class="mw-name">섹터</span><span class="mw-pct">20%</span><span class="mw-mean">관심섹터 가중 1.0 · 0.6 · 0.3</span></div>
+          <div class="mt-w"><span class="mw-name">경험</span><span class="mw-pct">15%</span><span class="mw-mean">경험별 안정·성장·변동 조합</span></div>
+          <div class="mt-w"><span class="mw-name">스타일</span><span class="mw-pct">10%</span><span class="mw-mean">(가치 + 성장) / 2</span></div>
         </div>
+        <p class="mt-note">후보 = 시장별 <b>시총 상위 200 대형주</b> · 담은 종목 제외 · 추천 사유는 <b>규칙 기반</b> 한 줄</p>
       </div>
 
       <div class="mt-right">
@@ -858,13 +858,13 @@
           </div>
           <div class="mt-name"><h3>NAVER</h3><span>035420</span></div>
 
-          <div class="mt-dna-label">✦ Stock DNA · 성향 밸런스</div>
+          <div class="mt-dna-label">✦ Stock DNA · 4축 (시장 분위수 0~100)</div>
           <div class="mt-dna-row"><span>변동성</span><i><b style="width:62%"></b></i><em>62</em></div>
-          <div class="mt-dna-row"><span>성장</span><i><b style="width:78%"></b></i><em>78</em></div>
           <div class="mt-dna-row"><span>가치</span><i><b style="width:54%"></b></i><em>54</em></div>
+          <div class="mt-dna-row"><span>성장성</span><i><b style="width:78%"></b></i><em>78</em></div>
           <div class="mt-dna-row"><span>안정성</span><i><b style="width:70%"></b></i><em>70</em></div>
 
-          <div class="mt-reason">🐤 <b>성장 선호</b> 성향과 <b>IT 모멘텀</b>(성장 78)이 잘 맞아요</div>
+          <div class="mt-reason">🤝 <b>가치 파트너형</b> · IT서비스 선호에 <b>성장성(78)</b>이 잘 맞아요</div>
           <div class="mt-interest">❤️ 2,140명이 이 종목에 관심 있어요</div>
         </div>
       </div>
@@ -889,7 +889,7 @@
           <li><b>관심종목</b> — 후보를 모아 가격·궁합 비교</li>
           <li><b>보유종목</b> — 평가손익·수익률 모니터링</li>
           <li><b>포트폴리오</b> — 자산 배분·섹터 비중 한눈에</li>
-          <li><b>장투 점수 · AI 리포트</b> — 종목별 장기보유 적합도 분석</li>
+          <li><b>장투 점수</b> — 종목 소계(재무30·성장40) 70% + 개인 궁합 30%</li>
         </ul>
       </div>
 
@@ -988,18 +988,11 @@
 
     <div class="ai-grid">
       <div class="ai-card">
-        <div class="ai-ic">💬</div>
-        <div class="ai-role">Recommendation</div>
-        <h3>추천 사유 설명</h3>
-        <p>“왜 이 종목이 나와 맞는지”를 성향 · 섹터 · DNA 근거로 한 문장으로 설명합니다.</p>
-        <div class="ai-quote">🤝 가치 파트너형 · IT 선호에 안정성(78)이 잘 맞아요.</div>
-      </div>
-      <div class="ai-card">
         <div class="ai-ic">📑</div>
-        <div class="ai-role">Long-term Report</div>
+        <div class="ai-role">Long-term Report · 생성형</div>
         <h3>장투 케어 리포트</h3>
-        <p>보유 종목당 <b>재무 · 성장 · 적합도 요약 + 종합의견</b> 4개 문장을 생성합니다.</p>
-        <div class="ai-quote">종목 1개당 LLM 1콜 · 실제 보유 데이터 기반</div>
+        <p>보유 종목 1개당 <b>재무 · 성장 · 적합도 요약 + 종합의견</b> 4개 문장을 생성합니다. <b>유일한</b> LLM 사용처.</p>
+        <div class="ai-quote">종목 1개당 LLM 1콜 · 실데이터 기반 · 캐시 TTL 1일</div>
       </div>
       <div class="ai-card">
         <div class="ai-ic">🛡️</div>
@@ -1007,6 +1000,13 @@
         <h3>환각 방지 설계</h3>
         <p>프롬프트에 <b>“제공된 수치만 사용, 목표가 · 전망은 지어내지 말 것”</b>을 명시합니다.</p>
         <div class="ai-quote">데이터 없으면 ‘데이터 없음’으로 정직하게</div>
+      </div>
+      <div class="ai-card">
+        <div class="ai-ic">⚙️</div>
+        <div class="ai-role">Deterministic</div>
+        <h3>규칙은 결정적, AI는 해설만</h3>
+        <p>궁합 점수 · 추천 사유 · 등급은 <b>코드로 계산</b>(규칙 기반). 생성형 AI는 보유 종목 <b>해설에만</b> 씁니다.</p>
+        <div class="ai-quote">AI 남용 0 · 환각 위험을 구조적으로 차단</div>
       </div>
     </div>
 
