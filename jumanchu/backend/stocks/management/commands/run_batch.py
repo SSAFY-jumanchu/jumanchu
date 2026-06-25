@@ -59,7 +59,7 @@ class Command(BaseCommand):
         group = opts["group"]
         steps = PIPELINES[group]
         self.stdout.write(self.style.MIGRATE_HEADING(
-            f"[run_batch:{group}] {len(steps)}단계 — {' → '.join(steps)}"))
+            f"[run_batch:{group}] {len(steps)}단계 - {' -> '.join(steps)}"))
 
         if opts["dry_run"]:
             self.stdout.write(self.style.WARNING("[dry-run] 실행 안 함"))
@@ -69,22 +69,22 @@ class Command(BaseCommand):
         failed: list[tuple[str, str]] = []
         t_all = time.monotonic()
         for i, cmd in enumerate(steps, 1):
-            self.stdout.write(f"\n──[{i}/{len(steps)}] {cmd} ──────────────")
+            self.stdout.write(f"\n--[{i}/{len(steps)}] {cmd} --------------")
             t0 = time.monotonic()
             try:
                 call_command(cmd)
                 ok.append(cmd)
-                self.stdout.write(self.style.SUCCESS(f"✓ {cmd} ({time.monotonic() - t0:.1f}s)"))
+                self.stdout.write(self.style.SUCCESS(f"[OK] {cmd} ({time.monotonic() - t0:.1f}s)"))
             except Exception as exc:  # 한 단계 실패가 전체 배치를 막지 않게
                 failed.append((cmd, str(exc)))
-                self.stderr.write(self.style.ERROR(f"✗ {cmd} ({time.monotonic() - t0:.1f}s): {exc}"))
+                self.stderr.write(self.style.ERROR(f"[X] {cmd} ({time.monotonic() - t0:.1f}s): {exc}"))
                 if opts["fail_fast"]:
-                    raise CommandError(f"{cmd} 실패 — 중단(--fail-fast)")
+                    raise CommandError(f"{cmd} 실패 - 중단(--fail-fast)")
 
         self.stdout.write(self.style.MIGRATE_HEADING(
             f"\n[run_batch:{group}] 완료 {time.monotonic() - t_all:.1f}s "
-            f"— 성공 {len(ok)} / 실패 {len(failed)}"))
+            f"- 성공 {len(ok)} / 실패 {len(failed)}"))
         for cmd, err in failed:
-            self.stderr.write(self.style.ERROR(f"  실패: {cmd} — {err}"))
+            self.stderr.write(self.style.ERROR(f"  실패: {cmd} - {err}"))
         if failed:
             raise CommandError(f"{len(failed)}개 단계 실패 (위 로그 참고)")
