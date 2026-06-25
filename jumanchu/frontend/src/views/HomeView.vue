@@ -569,7 +569,7 @@ const generalNews = ref([
 // 보유 종목 (실데이터: /portfolio/ 요약 holdings_preview로 채움)
 const holdings = ref([])
 
-function fmt(n) { return n.toLocaleString('ko-KR') }
+function fmt(n) { return Math.round(n).toLocaleString('ko-KR') }   // 원화는 정수로 (해외 환산분 소수점 제거)
 
 // 관심 종목 뉴스 (실데이터: 보유 종목 + 선호 종목 뉴스 병합)
 const watchlistNews = ref([])

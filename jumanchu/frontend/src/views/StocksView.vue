@@ -232,13 +232,6 @@ function fmtPrice(v, market) {
   return isKrw ? v.toLocaleString('ko-KR') + '원' : '$' + (v / 1380).toLocaleString('en-US', { maximumFractionDigits: 2 })
 }
 
-function fmtChange(v, market) {
-  if (v == null || Number.isNaN(v)) return '—'   // change 미보강(스와이프 저장 등) 시 KR에서 toLocaleString 크래시 방지
-  const isKrw = market === 'KOSPI' || market === 'KOSDAQ'
-  const prefix = v >= 0 ? '+' : ''
-  return isKrw ? prefix + v.toLocaleString('ko-KR') + '원' : prefix + '$' + Math.abs(v / 1380).toFixed(2)
-}
-
 // ===== 차트 포인트 → SVG path =====
 function buildChartPath(pts, w, h) {
   const min = Math.min(...pts), max = Math.max(...pts), range = max - min || 1
@@ -406,13 +399,23 @@ function dispAmount(v, market) {
   const dv = toDisp(Number(v), market)
   return displayCurrency.value === 'krw' ? fmtKrwAmt(dv) : fmtUsdAmt(dv)
 }
-// 현재가 → 표시 통화 환산·포맷 (인기 탭 전용)
+// 현재가 → 표시 통화 환산·포맷 (인기 탭·상세 패널 공통)
 function dispPrice(v, market) {
   if (v == null) return '—'
   const dv = toDisp(Number(v), market)
   return displayCurrency.value === 'krw'
     ? Math.round(dv).toLocaleString('ko-KR') + '원'
     : '$' + dv.toLocaleString('en-US', { maximumFractionDigits: 2 })
+}
+// 등락액 → 표시 통화 환산·포맷 (상세 패널 — dispPrice와 동일 규칙)
+function dispChange(v, market) {
+  if (v == null || Number.isNaN(Number(v))) return '—'
+  const dv = toDisp(Number(v), market)
+  const sign = dv >= 0 ? '+' : '-'
+  const abs = Math.abs(dv)
+  return displayCurrency.value === 'krw'
+    ? sign + Math.round(abs).toLocaleString('ko-KR') + '원'
+    : sign + '$' + abs.toLocaleString('en-US', { maximumFractionDigits: 2 })
 }
 
 // 거래량(주식 수) → 사람이 읽는 단위 (KR: 만/억, US: K/M)
@@ -1213,7 +1216,7 @@ onMounted(() => {
           <!-- 가격·등락 (궁합 랭킹 항목은 가격 데이터가 없어 가드) -->
           <template v-if="selectedStock.price != null">
             <div class="detail-price-row">
-              <strong class="detail-price">{{ selectedStock.price.toLocaleString() }}<small>원</small></strong>
+              <strong class="detail-price">{{ dispPrice(selectedStock.price, selectedStock.market) }}</strong>
               <span
                 class="detail-rate"
                 :class="selectedStock.rate >= 0 ? 'is-up' : 'is-down'"
@@ -1222,7 +1225,7 @@ onMounted(() => {
               </span>
             </div>
             <div class="detail-change" :class="selectedStock.rate >= 0 ? 'is-up' : 'is-down'">
-              {{ fmtChange(selectedStock.change, selectedStock.market) }}
+              {{ dispChange(selectedStock.change, selectedStock.market) }}
             </div>
           </template>
 
@@ -1692,7 +1695,6 @@ onMounted(() => {
   letter-spacing: -0.5px;
 }
 
-.detail-price small { font-size: 13px; font-weight: 700; color: var(--faint); margin-left: 2px; }
 
 .detail-rate {
   font-size: 15px;

@@ -111,6 +111,13 @@ function fmt(n) {
 function signedFmt(n) {
   return (n >= 0 ? '+' : '') + n.toLocaleString('ko-KR')
 }
+// 계좌 합계는 모두 원화 — 해외 환산분 소수점 제거(정수 표시). USD가 섞이는 거래내역은 fmt/signedFmt 유지.
+function fmtKrw(n) {
+  return Math.round(n).toLocaleString('ko-KR')
+}
+function signedFmtKrw(n) {
+  return (n >= 0 ? '+' : '') + Math.round(n).toLocaleString('ko-KR')
+}
 
 const isEditingInfo = ref(false)
 const profileError = ref('')
@@ -292,21 +299,21 @@ onMounted(() => {
           <!-- 기본계좌: 총자산(예수금 + 주식 평가액) -->
           <div class="panel acc-balance-card">
             <div class="acc-label">기본계좌 · 총자산</div>
-            <div class="acc-balance">{{ fmt(account.totalAssets) }}<span class="acc-unit">원</span></div>
+            <div class="acc-balance">{{ fmtKrw(account.totalAssets) }}<span class="acc-unit">원</span></div>
             <dl class="acc-breakdown">
-              <div><dt>예수금</dt><dd>{{ fmt(account.balance) }}원</dd></div>
-              <div><dt>주식 평가액</dt><dd>{{ fmt(account.totalValue) }}원</dd></div>
+              <div><dt>예수금</dt><dd>{{ fmtKrw(account.balance) }}원</dd></div>
+              <div><dt>주식 평가액</dt><dd>{{ fmtKrw(account.totalValue) }}원</dd></div>
             </dl>
           </div>
 
           <!-- 총손익: 매수금액 → 평가금액 -->
           <div class="panel acc-profit-card">
             <div class="acc-label">총 손익</div>
-            <div class="acc-profit-num" :class="account.profitLoss >= 0 ? 'pos' : 'neg'">{{ signedFmt(account.profitLoss) }}원</div>
+            <div class="acc-profit-num" :class="account.profitLoss >= 0 ? 'pos' : 'neg'">{{ signedFmtKrw(account.profitLoss) }}원</div>
             <div class="acc-profit-pct" :class="account.profitLoss >= 0 ? 'pos' : 'neg'">{{ account.profitLoss >= 0 ? '+' : '' }}{{ account.profitRate.toFixed(2) }}%</div>
             <dl class="acc-breakdown">
-              <div><dt>매수 금액</dt><dd>{{ fmt(account.totalInvested) }}원</dd></div>
-              <div><dt>평가 금액</dt><dd>{{ fmt(account.totalValue) }}원</dd></div>
+              <div><dt>매수 금액</dt><dd>{{ fmtKrw(account.totalInvested) }}원</dd></div>
+              <div><dt>평가 금액</dt><dd>{{ fmtKrw(account.totalValue) }}원</dd></div>
             </dl>
           </div>
 
@@ -542,6 +549,7 @@ onMounted(() => {
 .profile-header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 20px;
   padding: 24px 28px;
 }
@@ -619,6 +627,8 @@ onMounted(() => {
   gap: 20px;
   align-items: start;
 }
+/* 그리드 아이템이 내부 min-content(표·고정폭 그리드)에 밀려 트랙을 넓히지 않도록 — 가로 넘침 방지 */
+.mp-sidebar, .mp-content { min-width: 0; }
 
 /* ---- Side Tab Box ---- */
 .mp-sidebar { padding: 12px 0; position: sticky; top: 80px; }
@@ -665,7 +675,7 @@ onMounted(() => {
 /* ---- 내 투자: 상단 3카드 ---- */
 .invest-cards {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
   align-items: start;
 }
@@ -673,7 +683,7 @@ onMounted(() => {
 /* ---- 프로필 ---- */
 .info-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
 }
 .info-card { padding: 20px 24px; }
@@ -802,8 +812,8 @@ onMounted(() => {
   color: var(--accent);
 }
 
-.trade-table-wrap { padding: 0; overflow: hidden; }
-.trade-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.trade-table-wrap { padding: 0; overflow-x: auto; }
+.trade-table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13px; }
 .trade-table thead tr { background: var(--glass-subtle); }
 .trade-table th {
   padding: 12px 16px;
@@ -842,7 +852,7 @@ onMounted(() => {
 .trade-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .ts-card { padding: 16px 20px; }
 .ts-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 700; }
-.ts-value { font-size: 16px; font-weight: 900; color: var(--ink); }
+.ts-value { font-size: 16px; font-weight: 900; color: var(--ink); white-space: nowrap; }
 .ts-value.pos { color: var(--positive); }
 
 /* ---- 계좌 카드 (내 투자 탭) ---- */
@@ -854,17 +864,18 @@ onMounted(() => {
 .acc-balance {
   font-size: 28px; font-weight: 900; color: var(--ink);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   margin-bottom: 14px;
 }
 .acc-unit { font-size: 16px; font-weight: 700; margin-left: 2px; }
 
-.acc-profit-num { font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; margin-bottom: 4px; }
+.acc-profit-num { font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; margin-bottom: 4px; }
 .acc-profit-pct { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
 
 /* 계좌 카드 내역(예수금/주식평가액, 매수/평가금액) */
 .acc-breakdown { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 0; }
 .acc-breakdown > div { display: flex; justify-content: space-between; font-size: 12px; }
-.acc-breakdown dt { color: var(--muted); }
+.acc-breakdown dt { color: var(--muted); white-space: nowrap; }
 .acc-breakdown dd { margin: 0; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
 
 /* 보유 종목 국내/해외 그룹 라벨 */
@@ -887,4 +898,19 @@ onMounted(() => {
 .hr-name { flex: 1; font-weight: 700; color: var(--ink); }
 .hr-qty { color: var(--muted); font-size: 12px; }
 .hr-pnl { font-weight: 800; font-size: 13px; min-width: 52px; text-align: right; }
+
+/* ---- 반응형 (모바일/태블릿) ---- */
+@media (max-width: 768px) {
+  /* 사이드바 → 상단 가로 탭바, 본문 1열 */
+  .mypage-body { grid-template-columns: 1fr; }
+  .mp-sidebar { position: static; top: auto; padding: 6px; }
+  .mp-menu { display: flex; gap: 4px; }
+  .mp-menu-item { flex: 1; margin: 0; text-align: center; }
+  /* 카드 그리드 단일 열로 — 위 프로필 카드 폭에 맞춤 */
+  .invest-cards,
+  .info-grid,
+  .activity-layout { grid-template-columns: 1fr; }
+  /* 거래 요약 4칸 → 2열 */
+  .trade-summary { grid-template-columns: 1fr 1fr; }
+}
 </style>

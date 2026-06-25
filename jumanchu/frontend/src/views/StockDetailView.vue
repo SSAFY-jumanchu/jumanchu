@@ -170,25 +170,30 @@ const volumeData = ref([
 ])
 
 // SVG 라인 차트 경로 계산 (last = 추세선 마지막 점 좌표)
-function buildPath(prices, w, h, padT = 16, padB = 16) {
+// padR로 우측에 살짝 여백을 둬 라인 끝이 가장자리에 붙지 않게 하고, 끝점(last)을 점과 공유한다.
+function buildPath(prices, w, h, padT = 36, padB = 16, padL = 0, padR = 48) {
   const min = Math.min(...prices)
   const max = Math.max(...prices)
   const range = max - min || 1
   const n = prices.length
+  const innerW = w - padL - padR
   const pts = prices.map((p, i) => {
-    const x = n > 1 ? (i / (n - 1)) * w : w
+    const x = padL + (n > 1 ? (i / (n - 1)) * innerW : innerW)
     const y = padT + (1 - (p - min) / range) * (h - padT - padB)
     return { x, y }
   })
   const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-  const area = `${line} L${w},${h} L0,${h} Z`
-  const last = pts[pts.length - 1] || { x: w, y: h / 2 }
-  return { line, area, last }
+  const last = pts[pts.length - 1] || { x: w - padR, y: h / 2 }
+  return { line, last }
 }
 
 const chartPath = computed(() => buildPath(intradayPrices.value, 560, 200))
-// 현재가 점/라벨 — 추세선 마지막 점에 맞물리도록 (x는 우측 클립 방지 위해 살짝 안쪽)
-const chartDot = computed(() => ({ x: Math.min(chartPath.value.last.x, 556), y: chartPath.value.last.y }))
+// 현재가 점 — 추세선 마지막 점 좌표 그대로 사용 (라인 끝과 정확히 일치)
+const chartDot = computed(() => ({ x: chartPath.value.last.x, y: chartPath.value.last.y }))
+// 현재가 라벨 가로 위치 — 점 x를 %로 (translateX(-50%)로 점 중앙 정렬)
+const labelLeft = computed(() => (chartDot.value.x / 560) * 100)
+// 주가 태그는 평상시 숨김 — 점에 마우스 호버 시에만 표시 (항상 점 위로 — 커서 가림 방지)
+const showPriceLabel = ref(false)
 const maxVolume = computed(() => Math.max(...volumeData.value, 1))
 
 // ===== 차트 기간 탭 =====
@@ -761,36 +766,41 @@ onMounted(async () => {
 
           <!-- 가격 축 레이블 -->
           <div class="chart-area-wrap">
-            <div class="price-axis">
-              <span v-for="(p, i) in priceAxis" :key="i">{{ p }}</span>
-            </div>
-
             <!-- 가격 라인 차트 -->
             <div class="chart-svg-wrap">
               <svg viewBox="0 0 560 200" preserveAspectRatio="none" class="price-chart-svg">
-                <defs>
-                  <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="rgba(var(--accent-rgb),0.22)" />
-                    <stop offset="100%" stop-color="rgba(var(--accent-rgb),0)" />
-                  </linearGradient>
-                </defs>
                 <!-- 그리드 -->
                 <line v-for="y in [40, 80, 120, 160]" :key="y" x1="0" :y1="y" x2="560" :y2="y"
                   stroke="rgba(180,200,255,0.25)" stroke-width="1" stroke-dasharray="4 4" />
                 <!-- 현재가 수평선 (추세선 끝점 높이에 맞춤) -->
                 <line x1="0" :y1="chartDot.y" x2="560" :y2="chartDot.y"
                   stroke="rgba(var(--accent-rgb),0.5)" stroke-width="1" stroke-dasharray="6 3" />
-                <!-- 면적 -->
-                <path :d="chartPath.area" fill="url(#priceGrad)" />
                 <!-- 라인 -->
                 <path :d="chartPath.line" fill="none" stroke="var(--accent)" stroke-width="2"
                   stroke-linecap="round" stroke-linejoin="round" />
-                <!-- 현재가 점 (추세선 마지막 점) -->
-                <circle :cx="chartDot.x" :cy="chartDot.y" r="4" fill="var(--accent)" />
               </svg>
 
-              <!-- 현재가 라벨 (추세선 끝점 높이에 정렬) -->
-              <div class="current-price-label" :style="{ top: chartDot.y + 'px' }">{{ curSym }}{{ fmt(stock.price) }}</div>
+              <!-- 현재가 점 — HTML 오버레이(고정 px 정원). SVG는 preserveAspectRatio=none이라 내부 도형이 눌려서 밖으로 뺌 -->
+              <div
+                class="chart-dot-hit"
+                :style="{ left: labelLeft + '%', top: chartDot.y + 'px' }"
+                @mouseenter="showPriceLabel = true"
+                @mouseleave="showPriceLabel = false"
+              >
+                <span class="chart-dot"></span>
+              </div>
+
+              <!-- 현재가 라벨 — 평상시 숨김, 점 호버 시에만 표시 -->
+              <div
+                v-show="showPriceLabel"
+                class="current-price-label"
+                :style="{ left: labelLeft + '%', top: chartDot.y + 'px' }"
+              >{{ curSym }}{{ fmt(stock.price) }}</div>
+            </div>
+
+            <!-- 가격 축 (그래프 오른쪽) -->
+            <div class="price-axis">
+              <span v-for="(p, i) in priceAxis" :key="i">{{ p }}</span>
             </div>
           </div>
 
@@ -1617,10 +1627,10 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 8px 8px 8px 0;
+  padding: 8px 0 8px 8px;
   width: 60px;
   flex-shrink: 0;
-  text-align: right;
+  text-align: left;
 }
 
 .price-axis span {
@@ -1641,26 +1651,57 @@ onMounted(async () => {
 
 .price-chart-svg { width: 100%; height: 100%; }
 
+/* 현재가 점 — SVG 밖 HTML 오버레이라 화면 크기와 무관하게 항상 정원 */
+.chart-dot-hit {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.chart-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
+}
+
 .current-price-label {
   position: absolute;
-  right: 6px;
-  top: 0;                       /* 실제 top은 인라인(추세선 끝점 y)으로 지정 */
-  transform: translateY(-50%);  /* 점 높이에 수직 중앙 정렬 */
+  left: 0;                                          /* 실제 left/top은 인라인(점 x%·y px) */
+  top: 0;
+  transform: translate(-50%, calc(-100% - 13px));   /* 점 중앙 위 + 점과 살짝 간격 (아래로 향한 꼬리) */
   font-size: 11px;
   font-weight: 900;
-  color: var(--accent);
-  background: rgba(var(--accent-rgb),0.1);
-  padding: 1px 6px;
-  border-radius: 4px;
-  border: 1px solid rgba(var(--accent-rgb),0.25);
+  color: #fff;
+  background: var(--accent);
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
   pointer-events: none;
+  z-index: 2;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+/* 말풍선 꼬리 — 기본(점 위): 아래쪽 가운데에서 점을 가리킴 */
+.current-price-label::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--accent);
 }
 
 /* 시간 축 */
 .time-axis {
   display: flex;
   justify-content: space-between;
-  padding: 4px 60px 6px 68px;
+  padding: 4px 60px 6px 0;
   font-size: 10px;
   font-weight: 700;
   color: var(--faint);
@@ -1668,12 +1709,13 @@ onMounted(async () => {
 
 /* 거래량 */
 .volume-label-row {
-  padding: 4px 68px 2px;
+  padding: 4px 60px 2px 0;
 }
 
 .volume-chart-wrap {
   height: 70px;
-  margin-left: 68px;
+  margin-left: 0;
+  margin-right: 60px;
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--surface-faint);
