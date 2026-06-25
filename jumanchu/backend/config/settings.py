@@ -99,9 +99,10 @@ CORS_ALLOWED_ORIGINS = [
 
 CACHES = {
     'default': {
-        # django_ratelimit은 원자적 increment 지원 캐시 필요 → Redis 사용 (docker-compose).
+        # django_ratelimit은 원자적 increment 지원 캐시 필요 → Redis 사용.
         'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': f"redis://{os.environ.get('REDIS_HOST', 'localhost')}:{os.environ.get('REDIS_PORT', '6379')}/1",
+        # REDIS_URL(클라우드: Upstash 등)이 있으면 우선 사용, 없으면 HOST/PORT 조합(로컬 docker).
+        'LOCATION': os.environ.get('REDIS_URL') or f"redis://{os.environ.get('REDIS_HOST', 'localhost')}:{os.environ.get('REDIS_PORT', '6379')}/1",
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         },
