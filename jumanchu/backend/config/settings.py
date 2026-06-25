@@ -159,6 +159,10 @@ DATABASES = {
         'PASSWORD': os.environ['DB_PASSWORD'],
         'HOST': os.environ.get('DB_HOST', 'localhost'),
         'PORT': os.environ.get('DB_PORT', '5432'),
+        'OPTIONS': {'sslmode': os.environ.get('DB_SSLMODE', 'prefer')},  # Neon=require / 로컬=prefer
+        # 연결 재사용: Neon 원격 연결 수립이 요청당 ~0.5s+ → 매 요청 새로 안 맺게(없으면 인기랭킹이 2s대).
+        'CONN_MAX_AGE': 60,
+        'CONN_HEALTH_CHECKS': True,   # 재사용 전 생존 확인 — Neon이 유휴 연결 닫아도 안전(stale 방지)
     }
 }
 
@@ -198,3 +202,10 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+
+# 환율 (USD→KRW) — 인기 랭킹 거래대금·현재가 원화 환산용. 고정값(라이브 FX 연동은 후속).
+# 실제 시세와 차이날 수 있으니 필요 시 env USD_KRW_RATE 로 덮어쓰기.
+from decimal import Decimal  # noqa: E402
+
+USD_KRW_RATE = Decimal(os.environ.get('USD_KRW_RATE', '1350'))

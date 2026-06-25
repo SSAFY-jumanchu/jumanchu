@@ -110,8 +110,11 @@ async function handleLogout() {
 
         <div class="user-area">
           <div class="user-greeting">
-            <div class="user-avatar">{{ user.initial }}</div>
-            <span class="user-welcome">환영합니다 <strong>{{ user.name }}</strong></span>
+            <div v-if="auth.isAuthenticated" class="user-avatar">{{ user.initial }}</div>
+            <span class="user-welcome">
+              <template v-if="auth.isAuthenticated">환영합니다 <strong>{{ user.name }}</strong></template>
+              <template v-else>로그인 해주세요.</template>
+            </span>
           </div>
           <div class="user-actions">
             <div ref="palettePicker" class="palette-picker">

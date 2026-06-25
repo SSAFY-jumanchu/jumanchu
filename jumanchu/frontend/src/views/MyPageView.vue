@@ -2,7 +2,7 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { me as fetchMe, updateMe } from '../api/auth'
-import { fetchPortfolioSummary, fetchOrders, fetchHoldings } from '../api/portfolio'
+import { fetchPortfolioSummary, fetchOrders, fetchHoldings, fetchMilestones } from '../api/portfolio'
 import { fetchPosts, fetchFollowers, fetchFollowing } from '../api/community'
 import { errMsg, retry } from '../api/client'
 
@@ -27,12 +27,16 @@ const avatarChar = computed(() => (user.nickname || '?').slice(0, 1))
 // 받은 좋아요 — 내 글들의 like_count 합(하드코딩 294 제거)
 const likesReceived = computed(() => myPosts.value.reduce((a, p) => a + (p.likes || 0), 0))
 
-// 프로필 헤더 아이콘 (와이어프레임 slide 9/10/11 공통 헤더)
-const headerBadges = [
-  { id: 1, icon: '🌱', name: '첫 만남' },
-  { id: 2, icon: '📈', name: '수익왕' },
-  { id: 3, icon: '🔥', name: '연속 투자' },
-]
+// 현재 자산 마일스톤 — 달성한 목표 뱃지 (GET /portfolio/milestones/, 하드코딩 아이콘 제거)
+const milestones = ref([])
+async function loadMilestones() {
+  try {
+    const d = await fetchMilestones()
+    milestones.value = (d.achieved || []).map((g) => ({ icon: g.icon, name: g.name }))
+  } catch {
+    // 실패 → 빈 목록
+  }
+}
 
 // 활동 내역: 본인이 작성한 글(GET /posts/?mine=true) — 하드코딩 목업 제거.
 const CAT_LABEL = { QUESTION: '질문', REVIEW: '후기', ANALYSIS: '분석', SHARE: '공유' }
@@ -96,11 +100,23 @@ const tabs = [
   { key: 'activity',label: '활동 내역' },
 ]
 
+// 활동 내역 글 제목 클릭 → 커뮤니티의 해당 글로 이동
+function goPost(id) {
+  router.push({ path: '/community', query: { post: id } })
+}
+
 function fmt(n) {
   return n.toLocaleString('ko-KR')
 }
 function signedFmt(n) {
   return (n >= 0 ? '+' : '') + n.toLocaleString('ko-KR')
+}
+// 계좌 합계는 모두 원화 — 해외 환산분 소수점 제거(정수 표시). USD가 섞이는 거래내역은 fmt/signedFmt 유지.
+function fmtKrw(n) {
+  return Math.round(n).toLocaleString('ko-KR')
+}
+function signedFmtKrw(n) {
+  return (n >= 0 ? '+' : '') + Math.round(n).toLocaleString('ko-KR')
 }
 
 const isEditingInfo = ref(false)
@@ -226,6 +242,7 @@ onMounted(() => {
   loadMe()
   loadOrders()
   loadPortfolio()
+  loadMilestones()
 })
 </script>
 
@@ -244,8 +261,8 @@ onMounted(() => {
           <span><strong>{{ user.following }}</strong> 팔로잉</span>
         </div>
       </div>
-      <div class="ph-badges-preview">
-        <span v-for="b in headerBadges" :key="b.id" class="badge-chip" :title="b.name">{{ b.icon }}</span>
+      <div v-if="milestones.length" class="ph-badges-preview" aria-label="달성 자산 마일스톤">
+        <span v-for="(b, i) in milestones.slice(0, 6)" :key="i" class="badge-chip" :title="b.name">{{ b.icon }}</span>
       </div>
       <div class="ph-actions">
         <button class="ph-btn accent" @click="isEditingInfo = true; activeSection = 'profile'">프로필 편집</button>
@@ -282,26 +299,21 @@ onMounted(() => {
           <!-- 기본계좌: 총자산(예수금 + 주식 평가액) -->
           <div class="panel acc-balance-card">
             <div class="acc-label">기본계좌 · 총자산</div>
-            <div class="acc-balance">{{ fmt(account.totalAssets) }}<span class="acc-unit">원</span></div>
+            <div class="acc-balance">{{ fmtKrw(account.totalAssets) }}<span class="acc-unit">원</span></div>
             <dl class="acc-breakdown">
-              <div><dt>예수금</dt><dd>{{ fmt(account.balance) }}원</dd></div>
-              <div><dt>주식 평가액</dt><dd>{{ fmt(account.totalValue) }}원</dd></div>
+              <div><dt>예수금</dt><dd>{{ fmtKrw(account.balance) }}원</dd></div>
+              <div><dt>주식 평가액</dt><dd>{{ fmtKrw(account.totalValue) }}원</dd></div>
             </dl>
-            <div class="acc-actions">
-              <button class="acc-btn accent">채우기</button>
-              <button class="acc-btn">보내기</button>
-              <button class="acc-btn">환전</button>
-            </div>
           </div>
 
           <!-- 총손익: 매수금액 → 평가금액 -->
           <div class="panel acc-profit-card">
             <div class="acc-label">총 손익</div>
-            <div class="acc-profit-num" :class="account.profitLoss >= 0 ? 'pos' : 'neg'">{{ signedFmt(account.profitLoss) }}원</div>
+            <div class="acc-profit-num" :class="account.profitLoss >= 0 ? 'pos' : 'neg'">{{ signedFmtKrw(account.profitLoss) }}원</div>
             <div class="acc-profit-pct" :class="account.profitLoss >= 0 ? 'pos' : 'neg'">{{ account.profitLoss >= 0 ? '+' : '' }}{{ account.profitRate.toFixed(2) }}%</div>
             <dl class="acc-breakdown">
-              <div><dt>매수 금액</dt><dd>{{ fmt(account.totalInvested) }}원</dd></div>
-              <div><dt>평가 금액</dt><dd>{{ fmt(account.totalValue) }}원</dd></div>
+              <div><dt>매수 금액</dt><dd>{{ fmtKrw(account.totalInvested) }}원</dd></div>
+              <div><dt>평가 금액</dt><dd>{{ fmtKrw(account.totalValue) }}원</dd></div>
             </dl>
           </div>
 
@@ -491,7 +503,7 @@ onMounted(() => {
                 <div v-for="post in myPosts" :key="post.id" class="post-item">
                   <div class="post-item-left">
                     <span class="post-cat">{{ post.category }}</span>
-                    <span class="post-title">{{ post.title }}</span>
+                    <span class="post-title post-title-link" @click="goPost(post.id)" :title="post.title">{{ post.title }}</span>
                   </div>
                   <div class="post-item-right">
                     <span class="post-meta">♥ {{ post.likes }}</span>
@@ -537,6 +549,7 @@ onMounted(() => {
 .profile-header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 20px;
   padding: 24px 28px;
 }
@@ -614,6 +627,8 @@ onMounted(() => {
   gap: 20px;
   align-items: start;
 }
+/* 그리드 아이템이 내부 min-content(표·고정폭 그리드)에 밀려 트랙을 넓히지 않도록 — 가로 넘침 방지 */
+.mp-sidebar, .mp-content { min-width: 0; }
 
 /* ---- Side Tab Box ---- */
 .mp-sidebar { padding: 12px 0; position: sticky; top: 80px; }
@@ -660,7 +675,7 @@ onMounted(() => {
 /* ---- 내 투자: 상단 3카드 ---- */
 .invest-cards {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
   align-items: start;
 }
@@ -668,7 +683,7 @@ onMounted(() => {
 /* ---- 프로필 ---- */
 .info-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
 }
 .info-card { padding: 20px 24px; }
@@ -764,6 +779,8 @@ onMounted(() => {
   white-space: nowrap; flex-shrink: 0;
 }
 .post-title { font-size: 13px; color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.post-title-link { cursor: pointer; transition: color 0.14s; }
+.post-title-link:hover { color: var(--accent); text-decoration: underline; }
 .post-item-right { display: flex; gap: 10px; flex-shrink: 0; }
 .post-meta { font-size: 12px; color: var(--muted); }
 .post-time { font-size: 11px; }
@@ -795,8 +812,8 @@ onMounted(() => {
   color: var(--accent);
 }
 
-.trade-table-wrap { padding: 0; overflow: hidden; }
-.trade-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.trade-table-wrap { padding: 0; overflow-x: auto; }
+.trade-table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13px; }
 .trade-table thead tr { background: var(--glass-subtle); }
 .trade-table th {
   padding: 12px 16px;
@@ -835,7 +852,7 @@ onMounted(() => {
 .trade-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .ts-card { padding: 16px 20px; }
 .ts-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 700; }
-.ts-value { font-size: 16px; font-weight: 900; color: var(--ink); }
+.ts-value { font-size: 16px; font-weight: 900; color: var(--ink); white-space: nowrap; }
 .ts-value.pos { color: var(--positive); }
 
 /* ---- 계좌 카드 (내 투자 탭) ---- */
@@ -847,33 +864,18 @@ onMounted(() => {
 .acc-balance {
   font-size: 28px; font-weight: 900; color: var(--ink);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   margin-bottom: 14px;
 }
 .acc-unit { font-size: 16px; font-weight: 700; margin-left: 2px; }
 
-.acc-actions { display: flex; gap: 8px; margin-bottom: 16px; }
-.acc-btn {
-  height: 34px; padding: 0 14px; border-radius: 8px;
-  border: 1px solid var(--glass-border);
-  background: var(--surface-soft);
-  font-size: 13px; font-weight: 700; color: var(--muted);
-  cursor: pointer; transition: all 0.15s;
-}
-.acc-btn:hover { background: var(--glass-strong); color: var(--ink); }
-.acc-btn.accent {
-  background: rgba(var(--accent-rgb),0.1);
-  border-color: rgba(var(--accent-rgb),0.28);
-  color: var(--accent);
-}
-.acc-btn.accent:hover { background: rgba(var(--accent-rgb),0.18); }
-
-.acc-profit-num { font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; margin-bottom: 4px; }
+.acc-profit-num { font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; margin-bottom: 4px; }
 .acc-profit-pct { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
 
 /* 계좌 카드 내역(예수금/주식평가액, 매수/평가금액) */
 .acc-breakdown { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 0; }
 .acc-breakdown > div { display: flex; justify-content: space-between; font-size: 12px; }
-.acc-breakdown dt { color: var(--muted); }
+.acc-breakdown dt { color: var(--muted); white-space: nowrap; }
 .acc-breakdown dd { margin: 0; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
 
 /* 보유 종목 국내/해외 그룹 라벨 */
@@ -896,4 +898,19 @@ onMounted(() => {
 .hr-name { flex: 1; font-weight: 700; color: var(--ink); }
 .hr-qty { color: var(--muted); font-size: 12px; }
 .hr-pnl { font-weight: 800; font-size: 13px; min-width: 52px; text-align: right; }
+
+/* ---- 반응형 (모바일/태블릿) ---- */
+@media (max-width: 768px) {
+  /* 사이드바 → 상단 가로 탭바, 본문 1열 */
+  .mypage-body { grid-template-columns: 1fr; }
+  .mp-sidebar { position: static; top: auto; padding: 6px; }
+  .mp-menu { display: flex; gap: 4px; }
+  .mp-menu-item { flex: 1; margin: 0; text-align: center; }
+  /* 카드 그리드 단일 열로 — 위 프로필 카드 폭에 맞춤 */
+  .invest-cards,
+  .info-grid,
+  .activity-layout { grid-template-columns: 1fr; }
+  /* 거래 요약 4칸 → 2열 */
+  .trade-summary { grid-template-columns: 1fr 1fr; }
+}
 </style>

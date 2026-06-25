@@ -17,6 +17,9 @@ export const fetchBalance = () => client.get('/portfolio/balance/').then((r) => 
 // 자산 배분(섹터/종목 비중)
 export const fetchAllocation = () => client.get('/portfolio/allocation/').then((r) => r.data)
 
+// 자산 마일스톤 (수익 기준) → { current_profit, achieved:[goal], next:goal|null, progress_percent, total_count }
+export const fetchMilestones = () => client.get('/portfolio/milestones/').then((r) => r.data)
+
 // 주문 미리보기 (수수료·세금)
 export const previewOrder = (payload) =>
   client.post('/orders/preview/', payload).then((r) => r.data)

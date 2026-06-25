@@ -95,7 +95,25 @@ class LongTermReportView(APIView):
         except ValueError as exc:  # GMS_API_KEY 없음 등
             return Response({'detail': str(exc)},
                             status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        # 궁합 카드 세부(5요소 매칭) — 리포트 LLM 캐시와 무관하게 즉석 부착
+        comps = services.userfit_components(request.user, code)
+        if comps and isinstance(data.get('userfit'), dict):
+            data['userfit']['components'] = comps
         return Response(data)
+
+
+@extend_schema(tags=['Recommend'])
+class LongTermHistoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(summary='종목 장투 총점 히스토리 (소계×0.7 + 궁합×0.3, 상단 종합점수와 동일, 최신 12개)')
+    def get(self, request, code):
+        try:
+            items = services.longterm_total_history(request.user, code)
+        except services.StockNotFound:
+            return Response({'detail': '해당 종목을 찾을 수 없습니다.'},
+                            status=status.HTTP_404_NOT_FOUND)
+        return Response({'items': items})
 
 
 @extend_schema(tags=['Recommend'])

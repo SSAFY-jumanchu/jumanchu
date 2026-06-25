@@ -7,14 +7,17 @@ import {
   fetchStockChart,
   fetchStockFinancials,
   fetchStockPosts,
+  fetchStockOrderbook,
 } from '../api/stocks'
 import { createOrder, fetchBalance, fetchHoldingDetail } from '../api/portfolio'
 import { fetchStockNews } from '../api/news'
 import { addWatchlist, removeWatchlist } from '../api/recommend'
 import { errMsg } from '../api/client'
+import { useRecentStocksStore } from '../stores/recentStocks'
 
 const router = useRouter()
 const route = useRoute()
+const recentStore = useRecentStocksStore()
 
 // 초기값은 와이어프레임 목업(삼성전자) — onMounted에서 실데이터로 교체
 const stock = ref({
@@ -116,6 +119,20 @@ const changeRate = computed(() =>
 // 통화 심볼 (KRW=₩ / USD=$) — 해외 종목 원화 오표기 방지
 const curSym = computed(() => (stock.value.currency === 'USD' ? '$' : '₩'))
 
+// ===== 헤더 가격 달러/원화 토글 =====
+const USD_KRW = 1500   // 백엔드 USD_KRW_RATE와 동일 (TODO: 라이브 환율)
+const showAltCcy = ref(false)   // false=종목 원통화, true=반대 통화로 환산 표시
+const nativeCcy = computed(() => (stock.value.currency === 'USD' ? 'USD' : 'KRW'))
+// 토글은 미국 주식에서만 — 국내 주식은 항상 원(₩)으로 표시
+const dispCcy = computed(() => (nativeCcy.value === 'USD' && showAltCcy.value ? 'KRW' : nativeCcy.value))
+// 종목 원통화 값 v를 현재 표시 통화로 환산 + 심볼 포함 포맷
+function fmtCcy(v) {
+  let c = v
+  if (dispCcy.value !== nativeCcy.value) c = nativeCcy.value === 'USD' ? v * USD_KRW : v / USD_KRW
+  if (dispCcy.value === 'KRW') return '₩' + Math.round(c).toLocaleString('ko-KR')
+  return '$' + Number(c).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 // ISO 일시 → 상대시간("3분 전" 등)
 function relTime(iso) {
   if (!iso) return ''
@@ -152,77 +169,139 @@ const volumeData = ref([
   70, 80, 85, 90, 95, 100,
 ])
 
-// SVG 라인 차트 경로 계산
-function buildPath(prices, w, h, padT = 16, padB = 16) {
+// SVG 라인 차트 경로 계산 (last = 추세선 마지막 점 좌표)
+// padR로 우측에 살짝 여백을 둬 라인 끝이 가장자리에 붙지 않게 하고, 끝점(last)을 점과 공유한다.
+function buildPath(prices, w, h, padT = 36, padB = 16, padL = 0, padR = 48) {
   const min = Math.min(...prices)
   const max = Math.max(...prices)
   const range = max - min || 1
   const n = prices.length
+  const innerW = w - padL - padR
   const pts = prices.map((p, i) => {
-    const x = (i / (n - 1)) * w
+    const x = padL + (n > 1 ? (i / (n - 1)) * innerW : innerW)
     const y = padT + (1 - (p - min) / range) * (h - padT - padB)
     return { x, y }
   })
   const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-  const area = `${line} L${w},${h} L0,${h} Z`
-  return { line, area }
+  const last = pts[pts.length - 1] || { x: w - padR, y: h / 2 }
+  return { line, last }
 }
 
 const chartPath = computed(() => buildPath(intradayPrices.value, 560, 200))
+// 현재가 점 — 추세선 마지막 점 좌표 그대로 사용 (라인 끝과 정확히 일치)
+const chartDot = computed(() => ({ x: chartPath.value.last.x, y: chartPath.value.last.y }))
+// 현재가 라벨 가로 위치 — 점 x를 %로 (translateX(-50%)로 점 중앙 정렬)
+const labelLeft = computed(() => (chartDot.value.x / 560) * 100)
+// 주가 태그는 평상시 숨김 — 점에 마우스 호버 시에만 표시 (항상 점 위로 — 커서 가림 방지)
+const showPriceLabel = ref(false)
 const maxVolume = computed(() => Math.max(...volumeData.value, 1))
 
 // ===== 차트 기간 탭 =====
-const chartPeriods = ['5분', '일', '주', '월', '년']
+const chartPeriods = ['1분', '5분', '일', '주', '월']
 const selectedPeriod = ref('일')
+
+// ===== 차트 축 (종목·기간에 맞춰 동적 생성) =====
+function fmtAxisPrice(v) {
+  if (stock.value.currency === 'USD') return v >= 1000 ? Math.round(v).toLocaleString('en-US') : v.toFixed(2)
+  return Math.round(v).toLocaleString('ko-KR')
+}
+// Y축: 현재 차트 데이터의 max→min 5단계
+const priceAxis = computed(() => {
+  const prices = intradayPrices.value
+  if (!prices.length) return []
+  const max = Math.max(...prices)
+  const min = Math.min(...prices)
+  const N = 5
+  return Array.from({ length: N }, (_, i) => fmtAxisPrice(max - (i / (N - 1)) * (max - min)))
+})
+// X축: 분봉/일(장중)=시간, 주/월=날짜. 시장(USD/KRW)별 장 운영시간 반영
+const timeAxis = computed(() => {
+  const label = selectedPeriod.value
+  const N = 7
+  if (label === '1분' || label === '5분' || label === '일') {
+    const [sH, sM, eH, eM] = stock.value.currency === 'USD' ? [9, 30, 16, 0] : [9, 0, 15, 30]
+    const start = sH * 60 + sM
+    const end = eH * 60 + eM
+    return Array.from({ length: N }, (_, i) => {
+      const m = Math.round(start + (i / (N - 1)) * (end - start))
+      return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`
+    })
+  }
+  const days = label === '주' ? 7 : 30
+  const now = new Date()
+  return Array.from({ length: N }, (_, i) => {
+    const d = new Date(now)
+    d.setDate(now.getDate() - Math.round((1 - i / (N - 1)) * days))
+    return `${d.getMonth() + 1}/${d.getDate()}`
+  })
+})
 
 // ===== 상단 탭 =====
 const mainTabs = ['종목 홈', '종목정보', '뉴스', '커뮤니티']
 const selectedTab = ref('종목 홈')
 
-// ===== 호가 데이터 =====
-const asks = ref([
-  { price: 321000, qty: 3456 },
-  { price: 320500, qty: 6789 },
-  { price: 320000, qty: 9012 },
-  { price: 319500, qty: 12345 },
-  { price: 319000, qty: 8901 },
-  { price: 318500, qty: 15678 },
-  { price: 318000, qty: 9876 },
-  { price: 317500, qty: 23456 },
-].reverse()) // 화면에서 낮은 ask가 현재가 위에 바로 오도록
+// ===== 호가 데이터 (실데이터: GET /stocks/:code/orderbook/ — KIS 10호가) =====
+const asks = ref([])   // 화면 표시용: 높은 가격이 위 → 낮은 가격이 아래 (내림차순)
+const bids = ref([])   // 높은 가격이 위 → 낮은 가격이 아래 (내림차순)
+const totalAskQty = ref(0)
+const totalBidQty = ref(0)
+const obMarketOpen = ref(true)
+const obLoaded = ref(false)
 
-const bids = ref([
-  { price: 316500, qty: 18901 },
-  { price: 316000, qty: 12345 },
-  { price: 315500, qty: 8765 },
-  { price: 315000, qty: 23456 },
-  { price: 314500, qty: 9876 },
-  { price: 314000, qty: 7654 },
-  { price: 313500, qty: 5432 },
-  { price: 313000, qty: 8901 },
-])
+const maxAskQty = computed(() => Math.max(...asks.value.map(a => a.qty), 1))
+const maxBidQty = computed(() => Math.max(...bids.value.map(b => b.qty), 1))
+const totalAsk = computed(() => totalAskQty.value || asks.value.reduce((s, a) => s + a.qty, 0))
+const totalBid = computed(() => totalBidQty.value || bids.value.reduce((s, b) => s + b.qty, 0))
+const hogaEmpty = computed(() => obLoaded.value && asks.value.length === 0 && bids.value.length === 0)
 
-const maxAskQty = computed(() => Math.max(...asks.value.map(a => a.qty)))
-const maxBidQty = computed(() => Math.max(...bids.value.map(b => b.qty)))
+async function loadOrderbook(code) {
+  try {
+    const { orderbook } = await fetchStockOrderbook(code)
+    const lv = (e) => ({ price: Number(e.price), qty: Number(e.quantity) })
+    const valid = (e) => e.price > 0
+    // KIS asks = 최저가→최고가 → 역순으로 (높은 가격 위, 낮은 가격 아래)
+    asks.value = (orderbook.asks || []).map(lv).filter(valid).reverse()
+    // KIS bids = 최고가→최저가 → 그대로 (높은 가격 위)
+    bids.value = (orderbook.bids || []).map(lv).filter(valid)
+    totalAskQty.value = Number(orderbook.total_ask_quantity || 0)
+    totalBidQty.value = Number(orderbook.total_bid_quantity || 0)
+    obMarketOpen.value = orderbook.is_market_open !== false
+  } catch {
+    // KIS 오류 등 → 빈 상태 표시
+  } finally {
+    obLoaded.value = true
+  }
+}
 
 // ===== 시세 (체결 내역) =====
-const trades = [
-  { price: 317000, qty: 5, rate: +2.42, time: '15:30:02', side: 'up' },
-  { price: 317000, qty: 2, rate: +2.42, time: '15:29:58', side: 'up' },
-  { price: 316500, qty: 8, rate: +2.26, time: '15:29:45', side: 'up' },
-  { price: 317000, qty: 3, rate: +2.42, time: '15:29:32', side: 'up' },
-  { price: 317500, qty: 1, rate: +2.58, time: '15:29:15', side: 'up' },
-  { price: 317000, qty: 12, rate: +2.42, time: '15:28:50', side: 'up' },
-  { price: 316500, qty: 4, rate: +2.26, time: '15:28:22', side: 'up' },
-  { price: 316000, qty: 7, rate: +2.10, time: '15:27:55', side: 'up' },
-  { price: 316500, qty: 2, rate: +2.26, time: '15:27:30', side: 'up' },
-  { price: 317000, qty: 9, rate: +2.42, time: '15:27:08', side: 'up' },
-  { price: 317500, qty: 3, rate: +2.58, time: '15:26:45', side: 'up' },
-  { price: 317000, qty: 6, rate: +2.42, time: '15:26:20', side: 'up' },
-  { price: 316500, qty: 15, rate: +2.26, time: '15:25:55', side: 'up' },
-  { price: 316000, qty: 4, rate: +2.10, time: '15:25:30', side: 'up' },
-  { price: 315500, qty: 8, rate: +1.94, time: '15:25:05', side: 'down' },
-]
+// 전용 체결(tick) API가 없어 가장 세밀한 실데이터인 1분봉으로 구성:
+// 체결가=종가, 체결량=분 거래량, 등락=전일대비, 시각=캔들 시각, 최신순.
+const trades = ref([])
+const tradesLoaded = ref(false)
+
+function fmtTradeTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+async function loadTrades(code) {
+  try {
+    const { candles = [] } = await fetchStockChart(code, { period: '1d', interval: '1m' })
+    const prev = Number(stock.value.prevClose) || 0
+    const rows = candles.map((c) => {
+      const price = Number(c.close)
+      const rate = prev ? ((price - prev) / prev) * 100 : 0
+      return { price, qty: Number(c.volume), rate, time: fmtTradeTime(c.time), side: rate >= 0 ? 'up' : 'down' }
+    })
+    trades.value = rows.reverse().slice(0, 30)   // 최신순 최근 30건
+  } catch {
+    // 분봉(KIS) 실패 등 → 빈 목록
+  } finally {
+    tradesLoaded.value = true
+  }
+}
 
 // ===== 종토방 커뮤니티 (BE /posts/ 응답으로 채움 — 목업 fallback 제거) =====
 const communityPosts = ref([])
@@ -276,6 +355,19 @@ const orderPrice = ref(317000)
 const orderQty = ref(0)
 const orderTotal = computed(() => orderPrice.value * orderQty.value)
 const orderFee = computed(() => orderTotal.value * 0.00015)
+
+// 가격 증감 단위 (USD는 0.5달러, KRW는 500원)
+const priceStep = computed(() => (stock.value.currency === 'USD' ? 0.5 : 500))
+function bumpPrice(dir) {
+  const next = orderPrice.value + dir * priceStep.value
+  orderPrice.value = Math.max(0, Math.round(next * 100) / 100)
+}
+function selectLimit() { orderType.value = 'limit' }
+// 시장가 선택 시 현재가에서 시작 → +/-로 조정 가능
+function selectMarket() {
+  orderType.value = 'market'
+  orderPrice.value = Math.round((Number(stock.value.price) || 0) * 100) / 100
+}
 
 const balance = ref(10000000) // 기본값 — /portfolio/balance/ 응답으로 교체
 const ordering = ref(false)
@@ -449,13 +541,40 @@ function fmtCompact(v) {
 // ===== 차트·재무·종토방 실데이터 로딩 =====
 const pct = (v, digits = 1) => (v == null ? null : (v * 100).toFixed(digits) + '%')
 
-// 기간 탭 → period/interval. 일·주·월·년봉은 DB(StockPrice), 3분봉은 KIS 라이브.
+// 기간 탭 → period/interval.
+// 1분·5분·일 = 오늘 장중(분봉, period=1d), 주 = 최근 7일·월 = 최근 30일 일봉(DB StockPrice).
 const CHART_PARAM = {
+  '1분': { period: '1d', interval: '1m' },
   '5분': { period: '1d', interval: '5m' },
-  '일': { period: '1y', interval: '1d' },
-  '주': { period: '5y', interval: '1w' },
-  '월': { period: '5y', interval: '1mo' },
-  '년': { period: '5y', interval: '1d' },
+  '일': { period: '1d', interval: '15m' },   // 하루(오늘) 기준 장중 추세
+  '주': { period: '1w', interval: '1d' },     // 최근 7일 일봉
+  '월': { period: '1m', interval: '1d' },     // 최근 30일 일봉
+}
+
+// 실데이터(캔들)가 없을 때 기간별로 모양이 다른 추세선을 합성한다.
+// 기간마다 포인트 수·변동성·시드가 달라 그래프가 겹치지 않으며, 마지막 값은 현재가로 수렴시켜 점/라벨과 맞춘다.
+function syntheticSeries(label) {
+  const cfg = {
+    '1분': { n: 200, vol: 0.0010 },   // 가장 상세한 장중
+    '5분': { n: 80, vol: 0.0022 },
+    '일': { n: 40, vol: 0.0045 },     // 하루 장중
+    '주': { n: 18, vol: 0.011 },      // 주간
+    '월': { n: 30, vol: 0.021 },      // 30일
+  }[label] || { n: 60, vol: 0.005 }
+  const base = Number(stock.value.price) || 100
+  let seed = 0
+  for (const ch of String(stock.value.code) + label) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0
+  const rand = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
+  const raw = []
+  const volumes = []
+  let p = base
+  for (let i = 0; i < cfg.n; i++) {
+    p *= 1 + (rand() - 0.5) * 2 * cfg.vol
+    raw.push(p)
+    volumes.push(Math.round(20 + rand() * 80))
+  }
+  const adj = base / raw[raw.length - 1]   // 마지막 값을 현재가에 맞춤
+  return { prices: raw.map((v) => Math.round(v * adj)), volumes }
 }
 
 async function loadChart(code, label) {
@@ -465,10 +584,15 @@ async function loadChart(code, label) {
     if (candles.length) {
       intradayPrices.value = candles.map((c) => Number(c.close))
       volumeData.value = candles.map((c) => Number(c.volume))
+      return
     }
   } catch {
-    // 분봉(KIS) 실패 등 → 기존 차트 유지
+    // 실패 → 아래 합성 폴백
   }
+  // 캔들 없음(분봉 KIS 미가동·일봉 미적재 등) → 기간별로 다른 추세선을 합성해 표시
+  const { prices, volumes } = syntheticSeries(label)
+  intradayPrices.value = prices
+  volumeData.value = volumes
 }
 
 async function loadFinancials(code) {
@@ -534,7 +658,13 @@ watch(selectedPeriod, (label) => loadChart(stock.value.code, label))
 onMounted(async () => {
   const code = route.params.code || '005930'
   await loadStock(code)
+  // 실데이터 로드 성공 시에만 최근 조회 종목으로 기록 (실패 시 목업 기록 방지)
+  if (!loadError.value) {
+    recentStore.visit({ code: stock.value.code, name: stock.value.name, market: stock.value.market })
+  }
   loadChart(code, selectedPeriod.value)
+  loadOrderbook(code)
+  loadTrades(code)
   loadFinancials(code)
   loadCommunity(code)
   loadNews(code)
@@ -575,10 +705,14 @@ onMounted(async () => {
             >{{ isWatched ? '★ 관심종목' : '☆ 관심종목 추가' }}</button>
           </div>
           <div class="sd-price-row">
-            <strong class="sd-price">{{ curSym }}{{ fmt(stock.price) }}</strong>
+            <strong class="sd-price">{{ fmtCcy(stock.price) }}</strong>
             <span class="sd-change" :class="change >= 0 ? 'is-up' : 'is-down'">
-              {{ change >= 0 ? '+' : '-' }}{{ curSym }}{{ fmt(Math.abs(change)) }} ({{ change >= 0 ? '+' : '' }}{{ changeRate.toFixed(2) }}%)
+              {{ change >= 0 ? '+' : '-' }}{{ fmtCcy(Math.abs(change)) }} ({{ change >= 0 ? '+' : '' }}{{ changeRate.toFixed(2) }}%)
             </span>
+            <div v-if="nativeCcy === 'USD'" class="ccy-toggle" role="group" aria-label="통화 표시 전환">
+              <button type="button" :class="{ 'is-active': !showAltCcy }" @click="showAltCcy = false">$</button>
+              <button type="button" :class="{ 'is-active': showAltCcy }" @click="showAltCcy = true">원</button>
+            </div>
           </div>
         </div>
 
@@ -632,53 +766,47 @@ onMounted(async () => {
 
           <!-- 가격 축 레이블 -->
           <div class="chart-area-wrap">
-            <div class="price-axis">
-              <span>319,000</span>
-              <span>315,000</span>
-              <span>311,000</span>
-              <span>307,000</span>
-              <span>305,500</span>
-            </div>
-
             <!-- 가격 라인 차트 -->
             <div class="chart-svg-wrap">
               <svg viewBox="0 0 560 200" preserveAspectRatio="none" class="price-chart-svg">
-                <defs>
-                  <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="rgba(var(--accent-rgb),0.22)" />
-                    <stop offset="100%" stop-color="rgba(var(--accent-rgb),0)" />
-                  </linearGradient>
-                </defs>
                 <!-- 그리드 -->
                 <line v-for="y in [40, 80, 120, 160]" :key="y" x1="0" :y1="y" x2="560" :y2="y"
                   stroke="rgba(180,200,255,0.25)" stroke-width="1" stroke-dasharray="4 4" />
-                <!-- 현재가 수평선 -->
-                <line x1="0" y1="92" x2="560" y2="92"
+                <!-- 현재가 수평선 (추세선 끝점 높이에 맞춤) -->
+                <line x1="0" :y1="chartDot.y" x2="560" :y2="chartDot.y"
                   stroke="rgba(var(--accent-rgb),0.5)" stroke-width="1" stroke-dasharray="6 3" />
-                <!-- 면적 -->
-                <path :d="chartPath.area" fill="url(#priceGrad)" />
                 <!-- 라인 -->
                 <path :d="chartPath.line" fill="none" stroke="var(--accent)" stroke-width="2"
                   stroke-linecap="round" stroke-linejoin="round" />
-                <!-- 현재가 점 -->
-                <circle cx="556" cy="92" r="4" fill="var(--accent)" />
               </svg>
 
-              <!-- 현재가 라벨 -->
-              <div class="current-price-label">{{ curSym }}{{ fmt(stock.price) }}</div>
+              <!-- 현재가 점 — HTML 오버레이(고정 px 정원). SVG는 preserveAspectRatio=none이라 내부 도형이 눌려서 밖으로 뺌 -->
+              <div
+                class="chart-dot-hit"
+                :style="{ left: labelLeft + '%', top: chartDot.y + 'px' }"
+                @mouseenter="showPriceLabel = true"
+                @mouseleave="showPriceLabel = false"
+              >
+                <span class="chart-dot"></span>
+              </div>
+
+              <!-- 현재가 라벨 — 평상시 숨김, 점 호버 시에만 표시 -->
+              <div
+                v-show="showPriceLabel"
+                class="current-price-label"
+                :style="{ left: labelLeft + '%', top: chartDot.y + 'px' }"
+              >{{ curSym }}{{ fmt(stock.price) }}</div>
+            </div>
+
+            <!-- 가격 축 (그래프 오른쪽) -->
+            <div class="price-axis">
+              <span v-for="(p, i) in priceAxis" :key="i">{{ p }}</span>
             </div>
           </div>
 
           <!-- 시간 축 -->
           <div class="time-axis">
-            <span>9:00</span>
-            <span>10:00</span>
-            <span>11:00</span>
-            <span>12:00</span>
-            <span>13:00</span>
-            <span>14:00</span>
-            <span>15:00</span>
-            <span>15:30</span>
+            <span v-for="(t, i) in timeAxis" :key="i">{{ t }}</span>
           </div>
 
           <!-- 거래량 차트 -->
@@ -742,17 +870,16 @@ onMounted(async () => {
             <h3>호가</h3>
             <div class="hoga-meta-tabs">
               <button class="is-active">실시간</button>
-              <button>일별</button>
             </div>
           </div>
 
           <!-- 매도 총잔량 -->
           <div class="hoga-total-row ask">
             <span class="hoga-total-label">매도잔량</span>
-            <span class="hoga-total-val">{{ fmt(asks.reduce((s,a)=>s+a.qty,0)) }}</span>
+            <span class="hoga-total-val">{{ fmt(totalAsk) }}</span>
           </div>
 
-          <!-- 매도 호가 (낮은 ask가 맨 아래, 현재가와 가까운 순) -->
+          <!-- 매도 호가 (높은 가격이 위, 낮은 가격이 아래 — 현재가와 가까운 호가가 맨 아래) -->
           <div class="hoga-asks">
             <div
               v-for="ask in asks"
@@ -770,10 +897,17 @@ onMounted(async () => {
             </div>
           </div>
 
+          <!-- 호가 없음(장 마감/미제공) -->
+          <p v-if="hogaEmpty" class="hoga-empty">
+            {{ obMarketOpen ? '실시간 호가 정보가 없어요.' : '장 마감 — 호가가 제공되지 않아요.' }}
+          </p>
+
           <!-- 현재가 -->
           <div class="hoga-current">
-            <span class="hoga-current-price">₩317,000</span>
-            <span class="hoga-current-change is-up">+2.42%</span>
+            <span class="hoga-current-price">{{ curSym }}{{ fmt(stock.price) }}</span>
+            <span class="hoga-current-change" :class="change >= 0 ? 'is-up' : 'is-down'">
+              {{ change >= 0 ? '+' : '' }}{{ changeRate.toFixed(2) }}%
+            </span>
           </div>
 
           <!-- 매수 호가 -->
@@ -796,7 +930,7 @@ onMounted(async () => {
 
           <!-- 매수 총잔량 -->
           <div class="hoga-total-row bid">
-            <span class="hoga-total-val">{{ fmt(bids.reduce((s,b)=>s+b.qty,0)) }}</span>
+            <span class="hoga-total-val">{{ fmt(totalBid) }}</span>
             <span class="hoga-total-label">매수잔량</span>
           </div>
         </div>
@@ -822,12 +956,13 @@ onMounted(async () => {
               <span class="trade-price" :class="t.side === 'up' ? 'is-up' : 'is-down'">
                 {{ fmt(t.price) }}
               </span>
-              <span class="trade-qty">{{ t.qty }}</span>
+              <span class="trade-qty">{{ fmt(t.qty) }}</span>
               <span class="trade-rate" :class="t.side === 'up' ? 'is-up' : 'is-down'">
-                +{{ t.rate.toFixed(2) }}%
+                {{ t.rate >= 0 ? '+' : '' }}{{ t.rate.toFixed(2) }}%
               </span>
               <span class="trade-time">{{ t.time }}</span>
             </div>
+            <p v-if="tradesLoaded && !trades.length" class="trade-empty">실시간 체결 정보가 없어요.</p>
           </div>
         </div>
       </div>
@@ -1117,30 +1252,30 @@ onMounted(async () => {
             <button
               class="order-type-btn"
               :class="{ 'is-selected': orderType === 'limit' }"
-              @click="orderType = 'limit'"
+              @click="selectLimit"
             >지정가</button>
             <button
               class="order-type-btn"
               :class="{ 'is-selected': orderType === 'market' }"
-              @click="orderType = 'market'"
+              @click="selectMarket"
             >시장가</button>
           </div>
 
           <!-- 구매 가격 -->
           <label class="order-field">
-            <span>구매 가격 (원)</span>
+            <span>구매 가격 ({{ stock.currency === 'USD' ? '$' : '원' }})</span>
             <div class="order-input-row">
               <input
                 v-if="orderType === 'limit'"
                 v-model.number="orderPrice"
                 type="number"
-                step="500"
+                :step="priceStep"
                 min="0"
               />
-              <div v-else class="market-price-display">시장가</div>
+              <div v-else class="market-price-display">{{ curSym }}{{ fmt(orderPrice) }}</div>
               <div class="price-stepper">
-                <button @click="orderPrice += 500">+</button>
-                <button @click="orderPrice = Math.max(0, orderPrice - 500)">−</button>
+                <button @click="bumpPrice(1)">+</button>
+                <button @click="bumpPrice(-1)">−</button>
               </div>
             </div>
           </label>
@@ -1364,6 +1499,31 @@ onMounted(async () => {
   font-weight: 900;
 }
 
+/* 달러/원화 토글 (세그먼트, 미국 주식만) */
+.ccy-toggle {
+  align-self: center;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--glass-subtle);
+  border: 1px solid var(--glass-border);
+}
+.ccy-toggle button {
+  min-width: 28px;
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s;
+}
+.ccy-toggle button.is-active { background: var(--glass-strong); color: var(--ink); }
+
 /* 키 메트릭 */
 .sd-key-metrics {
   display: flex;
@@ -1467,10 +1627,10 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 8px 8px 8px 0;
+  padding: 8px 0 8px 8px;
   width: 60px;
   flex-shrink: 0;
-  text-align: right;
+  text-align: left;
 }
 
 .price-axis span {
@@ -1491,24 +1651,57 @@ onMounted(async () => {
 
 .price-chart-svg { width: 100%; height: 100%; }
 
+/* 현재가 점 — SVG 밖 HTML 오버레이라 화면 크기와 무관하게 항상 정원 */
+.chart-dot-hit {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.chart-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
+}
+
 .current-price-label {
   position: absolute;
-  right: 6px;
-  top: 83px;
+  left: 0;                                          /* 실제 left/top은 인라인(점 x%·y px) */
+  top: 0;
+  transform: translate(-50%, calc(-100% - 13px));   /* 점 중앙 위 + 점과 살짝 간격 (아래로 향한 꼬리) */
   font-size: 11px;
   font-weight: 900;
-  color: var(--accent);
-  background: rgba(var(--accent-rgb),0.1);
-  padding: 1px 6px;
-  border-radius: 4px;
-  border: 1px solid rgba(var(--accent-rgb),0.25);
+  color: #fff;
+  background: var(--accent);
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+/* 말풍선 꼬리 — 기본(점 위): 아래쪽 가운데에서 점을 가리킴 */
+.current-price-label::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--accent);
 }
 
 /* 시간 축 */
 .time-axis {
   display: flex;
   justify-content: space-between;
-  padding: 4px 60px 6px 68px;
+  padding: 4px 60px 6px 0;
   font-size: 10px;
   font-weight: 700;
   color: var(--faint);
@@ -1516,12 +1709,13 @@ onMounted(async () => {
 
 /* 거래량 */
 .volume-label-row {
-  padding: 4px 68px 2px;
+  padding: 4px 60px 2px 0;
 }
 
 .volume-chart-wrap {
   height: 70px;
-  margin-left: 68px;
+  margin-left: 0;
+  margin-right: 60px;
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--surface-faint);
@@ -1721,6 +1915,15 @@ onMounted(async () => {
 .hoga-asks .hoga-qty { text-align: right; }
 .hoga-bids .hoga-qty { text-align: left; }
 
+.hoga-empty {
+  margin: 8px 0;
+  padding: 18px 8px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--faint);
+}
+
 /* 현재가 중간 */
 .hoga-current {
   display: flex;
@@ -1771,6 +1974,7 @@ onMounted(async () => {
 .trade-qty { font-size: 11px; font-weight: 700; color: var(--muted); text-align: right; }
 .trade-rate { font-size: 11px; font-weight: 900; text-align: right; }
 .trade-time { font-size: 10px; font-weight: 700; color: var(--faint); text-align: right; }
+.trade-empty { padding: 24px 8px; text-align: center; font-size: 12px; font-weight: 700; color: var(--faint); }
 
 /* ===== 주문 패널 ===== */
 .order-panel { padding: 16px 16px 18px; display: flex; flex-direction: column; gap: 16px; }
@@ -1862,8 +2066,6 @@ onMounted(async () => {
 .market-price-display {
   display: flex;
   align-items: center;
-  color: var(--muted);
-  font-size: 13px;
 }
 
 .price-stepper {
@@ -2239,9 +2441,9 @@ onMounted(async () => {
   .sd-grid.is-community { grid-template-columns: 1fr; }
 }
 
-/* ===== 색상 ===== */
-.is-up   { color: var(--positive); }
-.is-down { color: var(--negative); }
+/* ===== 색상 (한국식: 상승=빨강, 하락=파랑) — 전역 .is-up/.is-down(초록/빨강) !important 덮어쓰기 ===== */
+.is-up   { color: #e3344f !important; }
+.is-down { color: #2b59d6 !important; }
 .is-flat { color: var(--muted); }
 
 /* ===== 반응형 ===== */

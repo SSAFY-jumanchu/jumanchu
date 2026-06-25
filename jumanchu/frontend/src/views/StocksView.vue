@@ -1,9 +1,11 @@
 <script setup>
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import SparklineChart from '../components/SparklineChart.vue'
 import { fetchLongtermRanking } from '../api/recommend'
+import { fetchStockPrice, fetchStockChart } from '../api/stocks'
+import client, { retry } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import { useFavoritesStore } from '../stores/favorites'
 
 const router = useRouter()
 const route = useRoute()
@@ -203,24 +205,19 @@ const stocks = ref([
   },
 ])
 
-// ===== 스와이프로 관심종목 만들기 =====
-const SWIPE_GOAL = 10
-const swipeIndex = ref(0)
-const swipedCount = ref(0)
-const savedStocks = ref([]) // { ...stock, action: 'like' | 'save' }
-const swipeDone = computed(() => swipedCount.value >= SWIPE_GOAL)
-
-// 기존 종목 데이터 → 메인 페이지 궁합 카드 형태로 파생 (궁합점수·Stock DNA·관심 수)
+// 종목 데이터 → 궁합 카드 형태로 파생 (Stock DNA·궁합점수) — 궁합 랭킹 탭 computeLtc에서 사용
 function deriveCard(s) {
   if (!s) return s
-  const growth = Math.min(95, Math.round(s.buyRatio + 25))
-  const volatility = Math.min(95, 40 + Math.round(Math.abs(s.rate) * 4))
-  const value = Math.max(30, 70 - Math.round(Math.abs(s.rate) * 2))
+  const buyRatio = s.buyRatio ?? 55   // 랭킹 데이터엔 매수비율이 없어 중립값
+  const rate = s.rate ?? 0
+  const growth = Math.min(95, Math.round(buyRatio + 25))
+  const volatility = Math.min(95, 40 + Math.round(Math.abs(rate) * 4))
+  const value = Math.max(30, 70 - Math.round(Math.abs(rate) * 2))
   const stability = Math.max(35, Math.min(90, 120 - volatility))
   return {
     ...s,
-    score: Math.min(98, Math.max(62, Math.round(60 + s.buyRatio * 0.45))),
-    interest: 200 + Math.round(s.buyRatio * 9),
+    score: Math.min(98, Math.max(62, Math.round(60 + buyRatio * 0.45))),
+    interest: 200 + Math.round(buyRatio * 9),
     dna: [
       { label: '변동성', value: volatility },
       { label: '성장', value: growth },
@@ -229,130 +226,10 @@ function deriveCard(s) {
     ],
   }
 }
-const currentCard = computed(() => deriveCard(stocks.value[swipeIndex.value % stocks.value.length]))
-const dnaVertices = computed(() => {
-  const d = currentCard.value?.dna
-  if (!d) return []
-  const cx = 60, cy = 60, R = 46
-  return [
-    { x: cx, y: cy - (R * d[0].value) / 100 },
-    { x: cx + (R * d[1].value) / 100, y: cy },
-    { x: cx, y: cy + (R * d[2].value) / 100 },
-    { x: cx - (R * d[3].value) / 100, y: cy },
-  ]
-})
-const dnaPolygon = computed(() => dnaVertices.value.map(({ x, y }) => `${x},${y}`).join(' '))
-
-function cardGradient(s) {
-  if (!s) return ''
-  return s.rate >= 0
-    ? 'linear-gradient(135deg, #2563eb 0%, #7c3aed 55%, #06b6d4 100%)'
-    : 'linear-gradient(135deg, #db2777 0%, #7c3aed 55%, #2563eb 100%)'
-}
-
-const swipeCardEl = ref(null)
-const feedbackType = ref(null)
-const feedbackOpacity = ref(0)
-let dragging = false
-let animating = false
-let sx = 0, sy = 0, dx = 0, dy = 0
-const SWIPE_EXIT = 460
-
-function updateSwipeFeedback() {
-  if (dy < -50 && Math.abs(dy) > Math.abs(dx)) {
-    feedbackType.value = 'save'; feedbackOpacity.value = Math.min(Math.abs(dy) / 120, 1)
-  } else if (dx > 40) {
-    feedbackType.value = 'like'; feedbackOpacity.value = Math.min(dx / 120, 1)
-  } else if (dx < -40) {
-    feedbackType.value = 'pass'; feedbackOpacity.value = Math.min(Math.abs(dx) / 120, 1)
-  } else {
-    feedbackOpacity.value = 0
-  }
-}
-function enterSwipeCard() {
-  const el = swipeCardEl.value
-  if (!el) return
-  feedbackOpacity.value = 0
-  el.style.transition = 'none'
-  el.style.transform = 'translate3d(0,0,0) scale(.94)'
-  el.style.opacity = '0'
-  requestAnimationFrame(() => {
-    el.style.transition = 'transform .42s cubic-bezier(.2,.8,.2,1), opacity .3s ease'
-    el.style.transform = 'translate3d(0,0,0) scale(1)'
-    el.style.opacity = '1'
-  })
-}
-function swipeAction(action) {
-  const el = swipeCardEl.value
-  if (animating || !el || swipeDone.value) return
-  animating = true
-  const card = currentCard.value
-  if (action === 'like') savedStocks.value.push({ ...card, action: 'like' })
-  else if (action === 'save') savedStocks.value.push({ ...card, action: 'save' })
-  feedbackType.value = action === 'save' ? 'save' : action === 'like' ? 'like' : 'pass'
-  feedbackOpacity.value = 1
-  el.style.transition = `transform ${SWIPE_EXIT}ms cubic-bezier(.4,0,.2,1), opacity ${SWIPE_EXIT}ms ease`
-  if (action === 'save') {
-    el.style.transform = 'translate3d(0,-220px,0) scale(.9)'
-  } else {
-    const r = action === 'like'
-    el.style.transform = `translate3d(${r ? 460 : -460}px,40px,0) rotate(${r ? 16 : -16}deg)`
-  }
-  el.style.opacity = '0'
-  setTimeout(() => {
-    swipedCount.value += 1
-    swipeIndex.value += 1
-    animating = false
-    if (!swipeDone.value) requestAnimationFrame(enterSwipeCard)
-  }, SWIPE_EXIT)
-}
-function onSwipeDown(e) {
-  if (animating) return
-  dragging = true; sx = e.clientX; sy = e.clientY; dx = 0; dy = 0
-  swipeCardEl.value.style.transition = 'none'
-  swipeCardEl.value.setPointerCapture?.(e.pointerId)
-}
-function onSwipeMove(e) {
-  if (!dragging) return
-  dx = e.clientX - sx; dy = e.clientY - sy
-  const rot = dx / 20
-  const sc = Math.max(0.96, 1 - (Math.abs(dx) + Math.abs(dy)) / 2400)
-  swipeCardEl.value.style.transform = `translate3d(${dx}px,${dy}px,0) rotate(${rot}deg) scale(${sc})`
-  updateSwipeFeedback()
-}
-function onSwipeUp() {
-  if (!dragging) return
-  dragging = false
-  if (dy < -110 && Math.abs(dy) > Math.abs(dx)) return swipeAction('save')
-  if (dx > 110) return swipeAction('like')
-  if (dx < -110) return swipeAction('pass')
-  const el = swipeCardEl.value
-  el.style.transition = 'transform .35s cubic-bezier(.2,.8,.2,1)'
-  el.style.transform = 'translate3d(0,0,0) rotate(0deg) scale(1)'
-  feedbackOpacity.value = 0
-}
-function resetSwipe() {
-  swipeIndex.value = 0; swipedCount.value = 0; savedStocks.value = []
-}
-
-// ===== 결과 목록 필터링 (관심·저장한 종목) =====
-const filteredStocks = computed(() => {
-  let list = savedStocks.value
-  if (marketFilter.value === 'domestic') list = list.filter(s => s.market === 'KOSPI' || s.market === 'KOSDAQ')
-  if (marketFilter.value === 'overseas') list = list.filter(s => s.market === 'NASDAQ' || s.market === 'NYSE')
-  return list
-})
-
 // ===== 유틸 =====
 function fmtPrice(v, market) {
   const isKrw = market === 'KOSPI' || market === 'KOSDAQ'
   return isKrw ? v.toLocaleString('ko-KR') + '원' : '$' + (v / 1380).toLocaleString('en-US', { maximumFractionDigits: 2 })
-}
-
-function fmtChange(v, market) {
-  const isKrw = market === 'KOSPI' || market === 'KOSDAQ'
-  const prefix = v >= 0 ? '+' : ''
-  return isKrw ? prefix + v.toLocaleString('ko-KR') + '원' : prefix + '$' + Math.abs(v / 1380).toFixed(2)
 }
 
 // ===== 차트 포인트 → SVG path =====
@@ -365,9 +242,93 @@ function buildChartPath(pts, w, h) {
   return { line, area, lastY: ys[ys.length - 1] }
 }
 
+// 모바일(≤820px)에선 사이드 카드 대신 종목 상세 페이지로 바로 이동, 데스크탑은 카드 토글
+const isMobileView = () => window.matchMedia('(max-width: 820px)').matches
 function selectStock(s) {
+  if (isMobileView()) {
+    router.push(`/stocks/${s.code}`)
+    return
+  }
   selectedStock.value = selectedStock.value?.code === s.code ? null : s
 }
+
+// ===== 종목 상세 차트 (분봉/일봉 — GET /stocks/<code>/chart/) =====
+// 일·주봉은 DB라 항상 표시, 분봉은 KIS 라이브(장중에만 안정적) → 실패 시 안내 문구.
+const detailPeriods = [
+  { key: '1m', label: '1분', period: '1d', interval: '1m' },
+  { key: '5m', label: '5분', period: '1d', interval: '5m' },
+  { key: '1d', label: '일', period: '3m', interval: '1d', recentDays: 30 },  // 최근 30일 일봉
+  { key: '1w', label: '주', period: '5y', interval: '1w' },                   // 장기 주봉
+]
+const detailPeriod = ref('1d')           // 일봉 기본 — 클릭 즉시 차트가 뜨도록
+const detailCandles = ref([])
+const detailChartLoading = ref(false)
+const detailChartError = ref('')
+let detailChartLoadId = 0
+
+const detailChartPoints = computed(() => detailCandles.value.map((c) => Number(c.close)))
+const detailChartPath = computed(() => buildChartPath(detailChartPoints.value, 280, 120))
+const detailChartLabels = computed(() => {
+  const c = detailCandles.value
+  if (c.length < 2) return []
+  const intraday = ['1m', '5m', '15m', '1h'].includes(
+    detailPeriods.find((p) => p.key === detailPeriod.value)?.interval,
+  )
+  const fmt = (t) => {
+    const d = new Date(t)
+    return intraday
+      ? d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+      : `${d.getMonth() + 1}/${d.getDate()}`
+  }
+  const last = c.length - 1
+  return [...new Set([0, Math.round(last / 3), Math.round((last * 2) / 3), last])].map((i) => fmt(c[i].time))
+})
+
+// 일봉 N일 윈도우: 시드 일봉이 며칠 지연돼도 '최신 캔들' 기준 N일(달력)만 보여준다.
+// 큰 공백(>5일) 뒤에 떠 있는 today 합성 캔들은 추이를 왜곡하므로 제외하고,
+// 데이터가 적으면 최근 22캔들로 폴백 → 항상 추이가 보이게.
+function sliceDailyWindow(candles, days) {
+  const sorted = [...candles].sort((a, b) => new Date(a.time) - new Date(b.time))
+  if (sorted.length >= 2) {
+    const last = new Date(sorted[sorted.length - 1].time)
+    const prev = new Date(sorted[sorted.length - 2].time)
+    const gapDays = (last - prev) / 86400000
+    if (gapDays > 5 && last.toDateString() === new Date().toDateString()) sorted.pop()
+  }
+  if (!sorted.length) return sorted
+  const lastT = new Date(sorted[sorted.length - 1].time).getTime()
+  const win = sorted.filter((c) => new Date(c.time).getTime() >= lastT - days * 86400000)
+  return win.length >= 10 ? win : sorted.slice(-22)
+}
+
+async function loadDetailChart() {
+  const s = selectedStock.value
+  if (!s) return
+  const opt = detailPeriods.find((p) => p.key === detailPeriod.value) || detailPeriods[2]
+  const myId = ++detailChartLoadId
+  detailChartLoading.value = true
+  detailChartError.value = ''
+  detailCandles.value = []
+  try {
+    const { candles = [] } = await fetchStockChart(s.code, { period: opt.period, interval: opt.interval })
+    if (myId !== detailChartLoadId) return
+    detailCandles.value = opt.recentDays ? sliceDailyWindow(candles, opt.recentDays) : candles
+    if (!detailCandles.value.length) detailChartError.value = '해당 구간 데이터가 없어요.'
+  } catch {
+    if (myId !== detailChartLoadId) return
+    detailChartError.value = '차트를 불러오지 못했어요. (분봉은 장중에만 제공)'
+  } finally {
+    if (myId === detailChartLoadId) detailChartLoading.value = false
+  }
+}
+
+// 종목을 새로 선택하면 일봉부터, 기간 탭을 바꾸면 해당 봉으로 재로딩
+watch(selectedStock, (s) => {
+  if (!s) return
+  if (detailPeriod.value === '1d') loadDetailChart()  // 이미 일봉이면 watch가 안 떠서 직접 호출
+  else detailPeriod.value = '1d'                       // 바뀌면 아래 watch가 로드
+})
+watch(detailPeriod, () => { if (selectedStock.value) loadDetailChart() })
 
 const marketFilters = [
   { key: 'all', label: '전체' },
@@ -377,7 +338,6 @@ const marketFilters = [
 
 const periods = [
   { key: 'rt', label: '실시간' },
-  { key: '1d', label: '1일' },
   { key: '1w', label: '1주일' },
   { key: '1m', label: '1개월' },
   { key: '3m', label: '3개월' },
@@ -397,18 +357,278 @@ const popularSortOptions = [
   { key: 'up', label: '급상승' },
   { key: 'down', label: '급하락' },
 ]
-const liked = reactive({})
-function toggleLike(code) { liked[code] = !liked[code] }
+// 선호 종목(하트) — Pinia 스토어로 관리 (뷰 이동에도 유지)
+const favStore = useFavoritesStore()
+const favorites = computed(() => favStore.items)
+const isFav = (code) => favStore.isFav(code)
+const toggleFavorite = (stock) => favStore.toggle(stock)
 const nowLabel = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
 
+// ----- 실데이터: BE /markets/popular/ (시총상위100 + 실시간가 + 통화환산 + 체결강도) -----
+const popularReal = ref([])          // 가격 조회 성공한 행만 보관
+const popularLoading = ref(true)     // 첫 렌더부터 로딩 표시 (빈 표 깜빡임 방지)
+const popularError = ref('')
+let popularLoadId = 0                 // 동시/연속 호출 경합 방지 토큰
+let popularLoadedMarket = null        // 같은 시장 재요청 스킵용
+
+// ===== 표시 통화 (전체/국내=원화통일, 해외=₩/$ 토글) =====
+const usdKrwRate = ref(1350)              // BE usd_krw_rate 로 갱신
+const overseasCurrency = ref('usd')       // 해외 탭 토글: 'usd' | 'krw'
+const displayCurrency = computed(() =>    // 전체/국내는 항상 원화, 해외만 토글
+  marketFilter.value === 'overseas' ? overseasCurrency.value : 'krw')
+const isUsMarket = (m) => m === 'NASDAQ' || m === 'NYSE'
+function toDisp(v, market) {               // 표시 통화로 환산(krw 모드 & 미국주면 ×환율)
+  return displayCurrency.value === 'krw' && isUsMarket(market) ? v * usdKrwRate.value : v
+}
+function toKrwAlways(v, market) {          // 정렬용: 표시통화와 무관하게 항상 KRW
+  return isUsMarket(market) ? v * usdKrwRate.value : v
+}
+function fmtKrwAmt(n) {
+  if (n >= 1e12) return (n / 1e12).toFixed(1) + '조'
+  if (n >= 1e8) return Math.round(n / 1e8).toLocaleString('ko-KR') + '억'
+  return Math.round(n).toLocaleString('ko-KR')
+}
+function fmtUsdAmt(n) {
+  if (n >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'B'
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M'
+  return '$' + n.toLocaleString('en-US')
+}
+// 거래대금 → 표시 통화 환산·포맷 (인기 탭 전용)
+function dispAmount(v, market) {
+  if (v == null) return '—'
+  const dv = toDisp(Number(v), market)
+  return displayCurrency.value === 'krw' ? fmtKrwAmt(dv) : fmtUsdAmt(dv)
+}
+// 현재가 → 표시 통화 환산·포맷 (인기 탭·상세 패널 공통)
+function dispPrice(v, market) {
+  if (v == null) return '—'
+  const dv = toDisp(Number(v), market)
+  return displayCurrency.value === 'krw'
+    ? Math.round(dv).toLocaleString('ko-KR') + '원'
+    : '$' + dv.toLocaleString('en-US', { maximumFractionDigits: 2 })
+}
+// 등락액 → 표시 통화 환산·포맷 (상세 패널 — dispPrice와 동일 규칙)
+function dispChange(v, market) {
+  if (v == null || Number.isNaN(Number(v))) return '—'
+  const dv = toDisp(Number(v), market)
+  const sign = dv >= 0 ? '+' : '-'
+  const abs = Math.abs(dv)
+  return displayCurrency.value === 'krw'
+    ? sign + Math.round(abs).toLocaleString('ko-KR') + '원'
+    : sign + '$' + abs.toLocaleString('en-US', { maximumFractionDigits: 2 })
+}
+
+// 거래량(주식 수) → 사람이 읽는 단위 (KR: 만/억, US: K/M)
+function fmtVolume(v, market) {
+  if (v == null || Number.isNaN(Number(v))) return '—'
+  const n = Number(v)
+  if (market === 'KOSPI' || market === 'KOSDAQ') {
+    if (n >= 1e8) return (n / 1e8).toFixed(1) + '억'
+    if (n >= 1e4) return Math.round(n / 1e4).toLocaleString('ko-KR') + '만'
+    return n.toLocaleString('ko-KR')
+  }
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K'
+  return n.toLocaleString('en-US')
+}
+
+// 현재가 — KIS가 주는 원본 통화 그대로 (해외가는 이미 USD)
+function fmtPopPrice(v, market) {
+  if (v == null) return '—'
+  const n = Number(v)
+  return market === 'KOSPI' || market === 'KOSDAQ'
+    ? n.toLocaleString('ko-KR') + '원'
+    : '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 })
+}
+
+// 동시성 제한 allSettled — KIS가 동시 호출을 throttling(503)하므로 소수만 병렬로.
+async function mapLimit(arr, limit, fn) {
+  const out = new Array(arr.length)
+  let i = 0
+  const worker = async () => {
+    while (i < arr.length) {
+      const idx = i++
+      try { out[idx] = { status: 'fulfilled', value: await fn(arr[idx]) } }
+      catch (reason) { out[idx] = { status: 'rejected', reason } }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, arr.length) }, worker))
+  return out
+}
+
+// ===== 인기 종목: 거래대금 top 100 (무한 스크롤 X, 고정 100개) =====
+// 전체=국내+해외, 국내=KOSPI, 해외=NASDAQ. 시총 상위를 후보로 받아 실시간 거래대금으로 정렬.
+const POP_LIMIT = 100
+
+// 인기 응답 1건 → 행 (실시간가·거래대금·등락률·체결강도 모두 BE가 채워줌)
+function rowFromPopular(it) {
+  return {
+    code: it.code, name: it.name, market: it.market, sector: it.sector || '',
+    color: rankColor(it.code),
+    price: it.current == null ? null : Number(it.current),          // 원본 통화(표시 때 환산)
+    change: it.change == null ? null : Number(it.change),
+    rate: it.change_rate == null ? null : Number(it.change_rate),
+    rawValue: it.trading_value == null ? null : Number(it.trading_value),  // 원본 통화
+    rawValueKrw: it.trading_value_krw == null ? null : Number(it.trading_value_krw),  // 정렬용 KRW
+    rawVolume: it.volume == null ? null : Number(it.volume),
+    buyRatio: it.buy_ratio, sellRatio: it.sell_ratio,              // 체결강도(거래 비율)
+    aiNote: '',
+    // 상세 패널이 참조하는 필드 안전 기본값 (클릭 시 크래시 방지)
+    chartPoints: [], sparkline: [], aiReason: '', summary: [], community: [],
+  }
+}
+
+// 인기 랭킹 = BE GET /markets/popular/ 1콜 (시총상위100 + 실시간가 + 통화환산 + 체결강도).
+// 시세는 BE 워밍캐시(stock:rankprice:*)에서 옴 → FE는 종목당 호출 안 함(기존 100콜 → 1콜).
+async function loadPopular() {
+  const key = marketFilter.value
+  if (popularLoadedMarket === key && popularReal.value.length) return
+  const myId = ++popularLoadId
+  popularLoading.value = true
+  popularError.value = ''
+  popularReal.value = []
+  try {
+    const { data } = await retry(() => client.get('/markets/popular/', {
+      params: { market: key, sort: popularSort.value, size: POP_LIMIT },
+    }), { attempts: 3, delayMs: 500 })
+    if (myId !== popularLoadId) return
+    usdKrwRate.value = Number(data.usd_krw_rate) || usdKrwRate.value
+    popularReal.value = (data.items || []).map(rowFromPopular)
+    popularLoadedMarket = popularReal.value.length ? key : null
+    if (!popularReal.value.length) { popularError.value = '목록을 불러오지 못했어요.'; return }
+    ensurePeriodRates()                           // 기간 탭이면 일봉으로 기간 통계 계산
+  } catch (e) {
+    if (myId !== popularLoadId) return
+    popularError.value = e?.response?.data?.detail || '목록을 불러오지 못했어요.'
+  } finally {
+    if (myId === popularLoadId) popularLoading.value = false
+  }
+}
+
+// ===== 기간 통계 (실시간 = 실시간가, 그 외 = 일봉으로 등락률·거래대금·거래량 계산) =====
+const periodStatsCache = reactive({})   // `${code}:${period}` -> { rate, value, volume } | null
+const periodInFlight = new Set()        // 중복 호출 방지
+const periodLoading = ref(false)        // 기간 통계 계산 중 표시
+
+function periodStats(s) { return periodStatsCache[`${s.code}:${sortPeriod.value}`] }
+// 현재 선택 기간 기준 값 (실시간=실시간가, 그 외=캐시, 미계산=null)
+function popRate(s) {
+  if (sortPeriod.value === 'rt') return s.rate
+  const st = periodStats(s); return st ? st.rate : null
+}
+function popValue(s) {
+  if (sortPeriod.value === 'rt') return s.rawValue
+  const st = periodStats(s); return st ? st.value : null
+}
+// 정렬용 거래대금(KRW 통일) — 전체 탭에서 ₩/$ 섞여 순서 틀어지지 않게
+function popValueKrw(s) {
+  if (sortPeriod.value === 'rt') {
+    if (s.rawValueKrw != null) return s.rawValueKrw
+    return s.rawValue != null ? toKrwAlways(s.rawValue, s.market) : null
+  }
+  const st = periodStats(s)
+  return st && st.value != null ? toKrwAlways(st.value, s.market) : null
+}
+function popVolume(s) {
+  if (sortPeriod.value === 'rt') return s.rawVolume
+  const st = periodStats(s); return st ? st.volume : null
+}
+function popRateText(s) {
+  const v = popRate(s)
+  if (v == null) return periodLoading.value ? '…' : '—'
+  return (v >= 0 ? '+' : '') + v.toFixed(2) + '%'
+}
+function popValueText(s) {
+  const v = popValue(s)
+  return v == null ? (periodLoading.value ? '…' : '—') : dispAmount(v, s.market)
+}
+function popVolumeText(s) {
+  const v = popVolume(s)
+  return v == null ? (periodLoading.value ? '…' : '—') : fmtVolume(v, s.market)
+}
+
+// 각 기간 탭 → (받을 차트 period, 최신 캔들 기준 슬라이스 일수)
+// 시드 일봉이 며칠 지연돼도 today가 아닌 '최신 캔들' 기준으로 N일 전을 잡아 값이 나오게.
+// (백엔드 차트 window는 today 기준이라, 짧은 기간은 더 긴 period를 받아 직접 슬라이스)
+const PERIOD_SPEC = {
+  '1w': { fetch: '3m', days: 7 },
+  '1m': { fetch: '3m', days: 30 },
+  '3m': { fetch: '1y', days: 90 },
+  '6m': { fetch: '1y', days: 183 },
+  '1y': { fetch: '1y', days: 365 },
+}
+
+// 일봉 캔들 → 기간 통계: 등락률(최신 종가 vs N일 전) + 거래대금(Σ 종가×거래량) + 거래량(Σ 거래량)
+function computePeriodStats(candles, days) {
+  if (!Array.isArray(candles) || candles.length < 2) return null
+  const arr = [...candles].sort((a, b) => new Date(a.time) - new Date(b.time))
+  const lastT = new Date(arr[arr.length - 1].time).getTime()
+  const cutoff = lastT - days * 24 * 3600 * 1000   // 최신 캔들 기준 N일(달력) 전
+  let baseIdx = 0
+  for (let i = 0; i < arr.length; i++) {
+    if (new Date(arr[i].time).getTime() <= cutoff) baseIdx = i
+  }
+  const series = arr.slice(baseIdx)
+  if (series.length < 2) return null
+  const base = Number(series[0].close)
+  const last = Number(series[series.length - 1].close)
+  const rate = (base && !Number.isNaN(base) && !Number.isNaN(last)) ? ((last - base) / base) * 100 : null
+  let value = 0, volume = 0
+  for (const c of series) {
+    const vol = Number(c.volume) || 0
+    volume += vol
+    value += vol * (Number(c.close) || 0)   // 거래대금 ≈ Σ(종가×거래량)
+  }
+  return { rate, value, volume }
+}
+
+// 보이는 종목 중 선택 기간 통계가 없는 것들을 일봉으로 계산해 채움 (동시 2건 제한)
+async function ensurePeriodRates() {
+  const period = sortPeriod.value
+  if (period === 'rt') return                  // 실시간가로 충분
+  const spec = PERIOD_SPEC[period]
+  if (!spec) return
+  const targets = popularReal.value.filter((r) => {
+    const key = `${r.code}:${period}`
+    return periodStatsCache[key] === undefined && !periodInFlight.has(key)
+  })
+  if (!targets.length) return
+  targets.forEach((r) => periodInFlight.add(`${r.code}:${period}`))
+  periodLoading.value = true
+  try {
+    await mapLimit(targets, 2, async (r) => {
+      const key = `${r.code}:${period}`
+      try {
+        const { candles = [] } = await retry(
+          () => fetchStockChart(r.code, { period: spec.fetch, interval: '1d' }),
+          { attempts: 3, delayMs: 500 })
+        periodStatsCache[key] = computePeriodStats(candles, spec.days)
+      } catch (e) {
+        periodStatsCache[key] = null
+      } finally {
+        periodInFlight.delete(key)
+      }
+    })
+  } finally {
+    periodLoading.value = false
+  }
+}
+
 const popularStocks = computed(() => {
-  let list = stocks.value.filter((s) => {
+  // 실데이터 우선, 에러면 목업 폴백, 로딩중이면 빈 배열
+  let list = popularReal.value.length
+    ? popularReal.value
+    : (popularError.value ? stocks.value : [])
+  list = list.filter((s) => {
     if (marketFilter.value === 'domestic') return s.market === 'KOSPI' || s.market === 'KOSDAQ'
     if (marketFilter.value === 'overseas') return s.market === 'NASDAQ' || s.market === 'NYSE'
     return true
   })
-  if (popularSort.value === 'up') list = [...list].sort((a, b) => b.rate - a.rate)
-  else if (popularSort.value === 'down') list = [...list].sort((a, b) => a.rate - b.rate)
+  const n = (v) => (v == null || Number.isNaN(v) ? -Infinity : v)
+  if (popularSort.value === 'value') list = [...list].sort((a, b) => n(popValueKrw(b)) - n(popValueKrw(a)))
+  else if (popularSort.value === 'volume') list = [...list].sort((a, b) => n(popVolume(b)) - n(popVolume(a)))
+  else if (popularSort.value === 'up') list = [...list].sort((a, b) => n(popRate(b)) - n(popRate(a)))
+  else if (popularSort.value === 'down') list = [...list].sort((a, b) => n(popRate(a)) - n(popRate(b)))
   return list
 })
 
@@ -440,6 +660,147 @@ function ltcGradeColor(score) {
   return '#2b59d6'                          // 파랑
 }
 
+// ===== 선호 스와이프 (궁합 랭킹 기반, 홈과 동일한 궁합 카드) =====
+// 0개일 땐 자동 노출, 1개 이상이면 '스와이핑 주식매칭' 버튼으로 진입.
+// 10개 배치를 끝까지 넘겨야 종료(담은 게 있으면 목록, 없으면 다음 10개).
+const SWIPE_BATCH = 10
+const swipeActive = ref(false)
+const swipeBatch = ref([])        // 현재 배치(최대 10) 스냅샷
+const swipeIdx = ref(0)
+let swipeCursor = 0               // compatRanking 내 다음 배치 시작 위치
+
+const currentCardRaw = computed(() => swipeBatch.value[swipeIdx.value] || null)
+const currentCard = computed(() => deriveCard(currentCardRaw.value))
+const dnaVertices = computed(() => {
+  const d = currentCard.value?.dna
+  if (!d) return []
+  const cx = 60, cy = 60, R = 46
+  return [
+    { x: cx, y: cy - (R * d[0].value) / 100 },
+    { x: cx + (R * d[1].value) / 100, y: cy },
+    { x: cx, y: cy + (R * d[2].value) / 100 },
+    { x: cx - (R * d[3].value) / 100, y: cy },
+  ]
+})
+const dnaPolygon = computed(() => dnaVertices.value.map(({ x, y }) => `${x},${y}`).join(' '))
+function cardGradient(s) {
+  return (s?.rate ?? 0) >= 0
+    ? 'linear-gradient(135deg, #f43f5e 0%, #c026d3 55%, #7c3aed 100%)'
+    : 'linear-gradient(135deg, #2563eb 0%, #6d28d9 55%, #0ea5e9 100%)'
+}
+
+// compatRanking에서 아직 안 담은 종목으로 10개 배치 구성 (cursor로 매번 다른 10개)
+function loadSwipeBatch() {
+  const avail = compatRanking.value.filter((s) => !favStore.isFav(s.code))
+  if (!avail.length) { swipeBatch.value = []; swipeIdx.value = 0; return }
+  const batch = []
+  for (let i = 0; i < Math.min(SWIPE_BATCH, avail.length); i++) {
+    batch.push(avail[(swipeCursor + i) % avail.length])
+  }
+  swipeCursor = (swipeCursor + SWIPE_BATCH) % avail.length
+  swipeBatch.value = batch
+  swipeIdx.value = 0
+}
+function startSwipe() {
+  swipeCursor = 0
+  loadSwipeBatch()
+  swipeActive.value = true
+}
+
+// 드래그 제스처 + 종료 애니메이션 (홈과 동일 감성)
+const swipeCardEl = ref(null)
+const feedbackType = ref(null)     // 'like' | 'pass' | 'save'
+const feedbackOpacity = ref(0)
+let dragging = false, animating = false, sx = 0, sy = 0, dx = 0, dy = 0
+const SWIPE_EXIT = 460
+
+function updateFeedback() {
+  if (dy < -50 && Math.abs(dy) > Math.abs(dx)) { feedbackType.value = 'save'; feedbackOpacity.value = Math.min(Math.abs(dy) / 120, 1) }
+  else if (dx > 40) { feedbackType.value = 'like'; feedbackOpacity.value = Math.min(dx / 120, 1) }
+  else if (dx < -40) { feedbackType.value = 'pass'; feedbackOpacity.value = Math.min(Math.abs(dx) / 120, 1) }
+  else { feedbackOpacity.value = 0 }
+}
+function enterCard() {
+  const el = swipeCardEl.value
+  if (!el) return
+  feedbackOpacity.value = 0
+  el.style.transition = 'none'
+  el.style.transform = 'translate3d(0,0,0) scale(.94)'
+  el.style.opacity = '0'
+  requestAnimationFrame(() => {
+    el.style.transition = 'transform .42s cubic-bezier(.2,.8,.2,1), opacity .3s ease'
+    el.style.transform = 'translate3d(0,0,0) scale(1)'
+    el.style.opacity = '1'
+  })
+}
+function onSwipeDown(e) {
+  if (animating) return
+  dragging = true; sx = e.clientX; sy = e.clientY; dx = 0; dy = 0
+  swipeCardEl.value.style.transition = 'none'
+  swipeCardEl.value.setPointerCapture?.(e.pointerId)
+}
+function onSwipeMove(e) {
+  if (!dragging) return
+  dx = e.clientX - sx; dy = e.clientY - sy
+  const rot = dx / 20, scn = Math.max(0.96, 1 - (Math.abs(dx) + Math.abs(dy)) / 2400)
+  swipeCardEl.value.style.transform = `translate3d(${dx}px,${dy}px,0) rotate(${rot}deg) scale(${scn})`
+  updateFeedback()
+}
+function onSwipeUp() {
+  if (!dragging) return
+  dragging = false
+  if (dy < -110 && Math.abs(dy) > Math.abs(dx)) return commitSwipe('save')
+  if (dx > 110) return commitSwipe('like')
+  if (dx < -110) return commitSwipe('pass')
+  const el = swipeCardEl.value
+  el.style.transition = 'transform .35s cubic-bezier(.2,.8,.2,1)'
+  el.style.transform = 'translate3d(0,0,0) rotate(0deg) scale(1)'
+  feedbackOpacity.value = 0
+}
+
+// 현재 카드를 선호에 추가 + 실시간가 백그라운드 보강
+function addCurrentToFav() {
+  const raw = currentCardRaw.value
+  if (!raw || favStore.isFav(raw.code)) return
+  favStore.toggle({ code: raw.code, name: raw.name, market: raw.market, sector: raw.sector, color: raw.color, price: null, rate: null })
+  retry(() => fetchStockPrice(raw.code), { attempts: 3, delayMs: 500 })
+    .then(({ price }) => favStore.updatePrice(raw.code, Number(price.current), Number(price.change_rate)))
+    .catch(() => {})
+}
+// 배치 끝까지 넘겨야 종료: 담은 게 있으면 목록, 없으면 다음 10개
+function advanceSwipe() {
+  if (swipeIdx.value < swipeBatch.value.length - 1) {
+    swipeIdx.value += 1
+  } else if (favorites.value.length > 0) {
+    swipeActive.value = false
+  } else {
+    loadSwipeBatch()
+  }
+}
+// 버튼/드래그 공통 — 애니메이션 후 advance ('pass'=건너뜀, 'like'/'save'=담기)
+function commitSwipe(action) {
+  if (animating) return
+  animating = true
+  if (action !== 'pass') addCurrentToFav()
+  feedbackType.value = action
+  feedbackOpacity.value = 1
+  const el = swipeCardEl.value
+  if (el) {
+    el.style.transition = `transform ${SWIPE_EXIT}ms cubic-bezier(.4,0,.2,1), opacity ${SWIPE_EXIT}ms ease`
+    if (action === 'save') el.style.transform = 'translate3d(0,-220px,0) scale(.9)'
+    else el.style.transform = `translate3d(${action === 'pass' ? -460 : 460}px,40px,0) rotate(${action === 'pass' ? -16 : 16}deg)`
+    el.style.opacity = '0'
+  }
+  setTimeout(() => {
+    advanceSwipe()
+    animating = false
+    if (swipeActive.value && currentCardRaw.value) requestAnimationFrame(enterCard)
+  }, SWIPE_EXIT)
+}
+function passSwipe() { commitSwipe('pass') }
+function likeSwipe() { commitSwipe('like') }
+function saveSwipe() { commitSwipe('save') }
+
 async function loadRanking() {
   if (rankingLoaded.value || !auth.isAuthenticated) return
   rankingLoaded.value = true
@@ -452,9 +813,10 @@ async function loadRanking() {
       sector: r.sector,
       color: rankColor(r.stock_code),
       ltc: Math.round(r.longterm_total),
-      // 가격·거래 정보는 랭킹 엔드포인트에 없음 → 표에서 '—'
-      price: null,
-      rate: null,
+      // 현재가·등락률·거래대금은 BE longterm_ranking이 제공 (volume·거래비율은 미제공)
+      price: r.current_price ?? null,
+      rate: r.change_rate ?? null,
+      tradingValue: r.trading_value ?? null,
       volume: null,
       buyRatio: null,
       sellRatio: null,
@@ -465,9 +827,34 @@ async function loadRanking() {
   }
 }
 
-// 랭킹 탭으로 들어오면 로드
-watch(viewMode, (v) => { if (v === 'ranking') loadRanking() })
-onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
+// 선호 탭 진입: 로그인 시 실제 랭킹 로드 + 선호 유무로 스와이프/목록 결정
+function onEnterPreference() {
+  loadRanking()
+  if (favorites.value.length === 0) startSwipe()
+  else swipeActive.value = false
+}
+// 실제 랭킹 도착(로그인) 시 아직 안 넘긴 배치를 실데이터로 교체
+watch(rankingReal, () => { if (swipeActive.value && swipeIdx.value === 0) startSwipe() })
+// 선호를 모두 비우면 다시 스와이프 노출
+watch(() => favorites.value.length, (n) => {
+  if (n === 0 && viewMode.value === 'preference' && !swipeActive.value) startSwipe()
+})
+
+// 탭 진입 시 로드 (인기=실시간 시세, 랭킹=장투 랭킹)
+watch(viewMode, (v) => {
+  if (v === 'ranking') loadRanking()
+  if (v === 'popular') loadPopular()
+  if (v === 'preference') onEnterPreference()
+})
+// 인기 탭에서 시장 필터를 바꾸면 해당 시장 시총 상위로 다시 로드
+watch(marketFilter, () => { if (viewMode.value === 'popular') loadPopular() })
+// 기간 탭을 바꾸면 해당 기간 등락률 계산 (실시간/1일은 즉시 실시간가 사용)
+watch(sortPeriod, () => { if (viewMode.value === 'popular') ensurePeriodRates() })
+onMounted(() => {
+  if (viewMode.value === 'ranking') loadRanking()
+  if (viewMode.value === 'popular') loadPopular()
+  if (viewMode.value === 'preference') onEnterPreference()
+})
 </script>
 
 <template>
@@ -532,9 +919,18 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
                 @click="sortPeriod = p.key"
               >{{ p.label }}</button>
             </div>
+            <!-- 해외 탭에서만 통화 토글 (전체/국내는 원화 통일) -->
+            <div v-if="marketFilter === 'overseas'" class="segmented cur-seg">
+              <button type="button" :class="{ 'is-selected': overseasCurrency === 'usd' }" @click="overseasCurrency = 'usd'">$</button>
+              <button type="button" :class="{ 'is-selected': overseasCurrency === 'krw' }" @click="overseasCurrency = 'krw'">₩</button>
+            </div>
           </div>
 
-          <p class="pop-caption">순위 · 오늘 {{ nowLabel }} 기준</p>
+          <p class="pop-caption">
+            순위 · 오늘 {{ nowLabel }} 기준
+            <span v-if="popularError" class="pop-err">· {{ popularError }} (예시 데이터)</span>
+            <span v-else-if="periodLoading" class="pop-loading">· 기간 등락률 계산 중…</span>
+          </p>
 
           <div class="pop-table">
             <div class="pop-row pop-head">
@@ -542,10 +938,12 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
               <span>종목</span>
               <span class="pop-num">현재가</span>
               <span class="pop-num">등락률</span>
-              <span class="pop-num">거래대금</span>
+              <span class="pop-num">{{ popularSort === 'volume' ? '거래량' : '거래대금' }}</span>
               <span class="pop-ratio-h">거래 비율</span>
-              <span class="pop-ai-h">AI 요약</span>
             </div>
+
+            <div v-if="popularLoading && !popularStocks.length" class="pop-state">실시간 시세를 불러오는 중…</div>
+            <div v-else-if="!popularStocks.length" class="pop-state">표시할 종목이 없어요.</div>
 
             <div
               v-for="(s, i) in popularStocks"
@@ -555,8 +953,8 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
               @click="selectStock(s)"
             >
               <span class="pop-rank">
-                <button class="pop-heart" :class="{ on: liked[s.code] }" @click.stop="toggleLike(s.code)">
-                  {{ liked[s.code] ? '♥' : '♡' }}
+                <button class="pop-heart" :class="{ on: isFav(s.code) }" @click.stop="toggleFavorite(s)">
+                  {{ isFav(s.code) ? '♥' : '♡' }}
                 </button>
                 <span class="pop-rank-num">{{ i + 1 }}</span>
               </span>
@@ -567,37 +965,42 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
                   <span>{{ s.market }} · {{ s.sector }}</span>
                 </div>
               </div>
-              <span class="pop-num pop-price">{{ s.price.toLocaleString() }}원</span>
-              <span class="pop-num pop-rate" :class="s.rate >= 0 ? 'up' : 'down'">
-                {{ s.rate >= 0 ? '+' : '' }}{{ s.rate.toFixed(2) }}%
+              <span class="pop-num pop-price">{{ dispPrice(s.price, s.market) }}</span>
+              <span class="pop-num pop-rate" :class="{ up: popRate(s) != null && popRate(s) >= 0, down: popRate(s) != null && popRate(s) < 0 }">
+                {{ popRateText(s) }}
               </span>
-              <span class="pop-num pop-vol">{{ s.volume }}</span>
+              <span class="pop-num pop-vol">{{ popularSort === 'volume' ? popVolumeText(s) : popValueText(s) }}</span>
               <div class="pop-ratio">
-                <div class="pop-ratio-bar">
-                  <span class="buy" :style="{ width: s.buyRatio + '%' }"></span>
-                  <span class="sell" :style="{ width: s.sellRatio + '%' }"></span>
-                </div>
-                <div class="pop-ratio-nums">
-                  <span class="b">{{ s.buyRatio }}</span>
-                  <span class="s">{{ s.sellRatio }}</span>
-                </div>
+                <template v-if="s.buyRatio != null">
+                  <div class="pop-ratio-bar">
+                    <span class="buy" :style="{ width: s.buyRatio + '%' }"></span>
+                    <span class="sell" :style="{ width: s.sellRatio + '%' }"></span>
+                  </div>
+                  <div class="pop-ratio-nums">
+                    <span class="b">{{ s.buyRatio }}</span>
+                    <span class="s">{{ s.sellRatio }}</span>
+                  </div>
+                </template>
+                <span v-else class="pop-ratio-na">—</span>
               </div>
-              <span class="pop-ai">{{ s.aiNote }}</span>
             </div>
+
+            <div v-if="popularStocks.length" class="pop-state pop-end">거래대금 상위 {{ popularStocks.length }}개</div>
           </div>
         </template>
 
-        <!-- ===== 선호 종목 (스와이프 → 관심·저장) ===== -->
+        <!-- ===== 선호 종목 ===== -->
         <template v-else-if="viewMode === 'preference'">
-        <!-- ===== 스와이프 모드 (관심종목 고르기) ===== -->
-        <template v-if="!swipeDone">
+
+        <!-- 스와이프 모드: 궁합 랭킹 종목을 넘기며 선호에 담기 (10개 다 넘겨야 종료) -->
+        <template v-if="swipeActive">
           <div class="sv-match-header">
             <h2 class="sv-match-title">오늘의 궁합 추천 💝</h2>
-            <p class="sv-match-sub">당신의 투자 성향과 잘 맞는 종목이에요. 넘기면서 관심 종목을 골라보세요.</p>
-            <span class="sv-match-count">추천 {{ swipedCount + 1 }} / {{ SWIPE_GOAL }}</span>
+            <p class="sv-match-sub">궁합 랭킹 상위 종목이에요. 넘기면서 선호 종목을 골라보세요.</p>
+            <span class="sv-match-count">추천 {{ swipeIdx + 1 }} / {{ swipeBatch.length }}</span>
           </div>
 
-          <div class="sv-deck">
+          <div class="sv-deck" v-if="currentCard">
             <article
               ref="swipeCardEl"
               class="sv-card"
@@ -605,6 +1008,7 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
               @pointerdown="onSwipeDown"
               @pointermove="onSwipeMove"
               @pointerup="onSwipeUp"
+              @pointercancel="onSwipeUp"
             >
               <div class="sv-feedback" :class="feedbackType" :style="{ opacity: feedbackOpacity }">
                 <span v-if="feedbackType === 'like'">❤️ 관심</span>
@@ -625,11 +1029,11 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
               <div class="mc-prices">
                 <div class="mc-price-box">
                   <span>현재가</span>
-                  <strong>{{ currentCard.price.toLocaleString() }}원</strong>
+                  <strong>{{ currentCard.price != null ? fmtPopPrice(currentCard.price, currentCard.market) : '—' }}</strong>
                 </div>
                 <div class="mc-price-box">
                   <span>등락률</span>
-                  <strong :class="currentCard.rate >= 0 ? 'up' : 'down'">{{ currentCard.rate >= 0 ? '+' : '' }}{{ currentCard.rate.toFixed(2) }}%</strong>
+                  <strong :class="(currentCard.rate ?? 0) >= 0 ? 'up' : 'down'">{{ currentCard.rate != null ? ((currentCard.rate >= 0 ? '+' : '') + currentCard.rate.toFixed(2) + '%') : '—' }}</strong>
                 </div>
               </div>
 
@@ -668,14 +1072,7 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
                       <line class="dna-axis" x1="8" y1="60" x2="112" y2="60" />
                       <polygon class="dna-shape-glow" :points="dnaPolygon" />
                       <polygon class="dna-shape" :points="dnaPolygon" />
-                      <circle
-                        v-for="(point, pointIndex) in dnaVertices"
-                        :key="pointIndex"
-                        class="dna-point"
-                        :cx="point.x"
-                        :cy="point.y"
-                        r="2.8"
-                      />
+                      <circle v-for="(point, pi) in dnaVertices" :key="pi" class="dna-point" :cx="point.x" :cy="point.y" r="2.8" />
                       <circle class="dna-center" cx="60" cy="60" r="2" />
                     </svg>
                   </div>
@@ -685,9 +1082,7 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
                         <span class="dna-k">{{ d.label }}</span>
                         <strong class="dna-v">{{ d.value }}</strong>
                       </div>
-                      <div class="dna-track" aria-hidden="true">
-                        <i :style="{ width: `${d.value}%` }"></i>
-                      </div>
+                      <div class="dna-track" aria-hidden="true"><i :style="{ width: `${d.value}%` }"></i></div>
                     </div>
                   </div>
                 </div>
@@ -699,126 +1094,44 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
           </div>
 
           <div class="sv-controls">
-            <button class="sv-ctrl pass" type="button" @click="swipeAction('pass')">✕</button>
-            <button class="sv-ctrl save" type="button" @click="swipeAction('save')">♥</button>
-            <button class="sv-ctrl like" type="button" @click="swipeAction('like')">↗</button>
+            <button class="sv-ctrl pass" type="button" @click="passSwipe">✕</button>
+            <button class="sv-ctrl save" type="button" @click="saveSwipe">♥</button>
+            <button class="sv-ctrl like" type="button" @click="likeSwipe">↗</button>
           </div>
           <p class="sv-hint">카드를 좌우로 드래그하거나 버튼을 눌러 넘길 수 있어요</p>
         </template>
 
-        <!-- ===== 결과 모드 (관심·저장한 종목) ===== -->
+        <!-- 목록 모드: 선호 1개 이상 -->
         <template v-else>
-        <div class="sv-result-head">
-          <div>
-            <p class="eyebrow">스와이프 완료 🎉</p>
-            <h2>관심 · 저장한 종목 {{ savedStocks.length }}개</h2>
-          </div>
-          <button class="sv-reset" type="button" @click="resetSwipe">다시 고르기</button>
-        </div>
-
-        <!-- 필터 탭 -->
-        <div class="filter-row">
-          <div class="segmented">
-            <button
-              v-for="f in marketFilters"
-              :key="f.key"
-              type="button"
-              :class="{ 'is-selected': marketFilter === f.key }"
-              @click="marketFilter = f.key"
-            >{{ f.label }}</button>
-          </div>
-          <div class="period-tabs">
-            <button
-              v-for="p in periods"
-              :key="p.key"
-              type="button"
-              :class="{ 'is-selected': sortPeriod === p.key }"
-              @click="sortPeriod = p.key"
-            >{{ p.label }}</button>
-          </div>
-        </div>
-
-        <!-- 테이블 헤더 -->
-        <div class="stock-row stock-row-head">
-          <span class="col-rank">순위</span>
-          <span class="col-name">종목명</span>
-          <span class="col-price">현재가</span>
-          <span class="col-rate">등락률</span>
-          <span class="col-vol">거래대금</span>
-          <span class="col-bar">매수/매도</span>
-          <span class="col-note">AI 요약</span>
-          <span class="col-spark">추이</span>
-        </div>
-
-        <!-- 종목 행 -->
-        <div class="stock-list">
-          <div v-if="!filteredStocks.length" class="sv-empty">
-            선택한 종목이 없어요.
-            <button type="button" @click="resetSwipe">다시 고르기</button>
-          </div>
-          <div
-            v-for="s in filteredStocks"
-            :key="s.code"
-            class="stock-row stock-row-data"
-            :class="{ 'is-selected': selectedStock?.code === s.code }"
-            @click="selectStock(s)"
-          >
-            <!-- 순위 -->
-            <span class="col-rank rank-num">{{ s.rank }}</span>
-
-            <!-- 종목명 -->
-            <div class="col-name stock-name-cell">
-              <div class="stock-logo" :style="{ background: s.color }">
-                {{ s.name.slice(0, 1) }}
-              </div>
-              <div class="stock-name-info">
-                <strong>{{ s.name }}</strong>
-                <span>{{ s.market }} · {{ s.sector }}</span>
-              </div>
-              <span class="saved-tag" :class="s.action">{{ s.action === 'like' ? '관심' : '저장' }}</span>
+          <div class="sv-result-head">
+            <div>
+              <p class="eyebrow">내 선호 종목 ⭐</p>
+              <h2>선호 종목 {{ favorites.length }}개</h2>
             </div>
-
-            <!-- 현재가 -->
-            <span class="col-price price-val">{{ s.price.toLocaleString() }}<small>원</small></span>
-
-            <!-- 등락률 -->
-            <span
-              class="col-rate rate-pill"
-              :class="s.rate >= 0 ? 'up' : 'down'"
+          </div>
+          <div class="fav-list">
+            <div
+              v-for="s in favorites"
+              :key="s.code"
+              class="fav-row"
+              :class="{ active: selectedStock?.code === s.code }"
+              @click="selectStock(s)"
             >
-              {{ s.rate >= 0 ? '+' : '' }}{{ s.rate.toFixed(2) }}%
-            </span>
-
-            <!-- 거래대금 -->
-            <span class="col-vol vol-val">{{ s.volume }}</span>
-
-            <!-- 매수/매도 비율 바 -->
-            <div class="col-bar ratio-bar-wrap">
-              <div class="ratio-bar">
-                <div class="ratio-buy" :style="{ width: s.buyRatio + '%' }"></div>
-                <div class="ratio-sell" :style="{ width: s.sellRatio + '%' }"></div>
+              <button class="pop-heart on" type="button" @click.stop="toggleFavorite(s)" aria-label="선호 해제">♥</button>
+              <div class="fav-name">
+                <span class="fav-logo" :style="{ background: s.color }">{{ s.name.slice(0, 1) }}</span>
+                <div class="fav-name-info">
+                  <strong>{{ s.name }}</strong>
+                  <span>{{ s.market }} · {{ s.sector }}</span>
+                </div>
               </div>
-              <div class="ratio-labels">
-                <span class="buy-lbl">{{ s.buyRatio }}</span>
-                <span class="sell-lbl">{{ s.sellRatio }}</span>
-              </div>
-            </div>
-
-            <!-- AI 요약 -->
-            <span class="col-note ai-note">{{ s.aiNote }}</span>
-
-            <!-- 스파크라인 -->
-            <div class="col-spark">
-              <SparklineChart
-                :values="s.sparkline"
-                :width="72"
-                :height="28"
-                class="spark-mini"
-                :class="s.rate >= 0 ? 'spark-pos' : 'spark-neg'"
-              />
+              <span class="fav-price">{{ fmtPopPrice(s.price, s.market) }}</span>
+              <span class="fav-rate" :class="{ up: s.rate >= 0, down: s.rate != null && s.rate < 0 }">
+                {{ s.rate != null ? (s.rate >= 0 ? '+' : '') + s.rate.toFixed(2) + '%' : '—' }}
+              </span>
             </div>
           </div>
-        </div>
+          <button class="fav-match-btn" type="button" @click="startSwipe">🃏 스와이핑 주식매칭</button>
         </template>
         </template>
 
@@ -855,7 +1168,7 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
               <span class="rank-r rank-rate" :class="s.rate >= 0 ? 'up' : 'down'">
                 {{ s.rate != null ? (s.rate >= 0 ? '+' : '') + s.rate.toFixed(2) + '%' : '—' }}
               </span>
-              <span class="rank-r rank-vol">{{ s.volume ?? '—' }}</span>
+              <span class="rank-r rank-vol">{{ s.tradingValue != null ? dispAmount(s.tradingValue, s.market) : '—' }}</span>
               <div class="rank-ratio">
                 <template v-if="s.buyRatio != null">
                   <div class="rank-ratio-bar">
@@ -900,67 +1213,74 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
             <button class="detail-close" @click="selectedStock = null">✕</button>
           </div>
 
-          <div class="detail-price-row">
-            <strong class="detail-price">{{ selectedStock.price.toLocaleString() }}<small>원</small></strong>
-            <span
-              class="detail-rate"
-              :class="selectedStock.rate >= 0 ? 'is-up' : 'is-down'"
-            >
-              {{ selectedStock.rate >= 0 ? '+' : '' }}{{ selectedStock.rate.toFixed(2) }}%
-            </span>
-          </div>
-          <div class="detail-change" :class="selectedStock.rate >= 0 ? 'is-up' : 'is-down'">
-            {{ fmtChange(selectedStock.change, selectedStock.market) }}
-          </div>
+          <!-- 가격·등락 (궁합 랭킹 항목은 가격 데이터가 없어 가드) -->
+          <template v-if="selectedStock.price != null">
+            <div class="detail-price-row">
+              <strong class="detail-price">{{ dispPrice(selectedStock.price, selectedStock.market) }}</strong>
+              <span
+                class="detail-rate"
+                :class="selectedStock.rate >= 0 ? 'is-up' : 'is-down'"
+              >
+                {{ selectedStock.rate >= 0 ? '+' : '' }}{{ selectedStock.rate.toFixed(2) }}%
+              </span>
+            </div>
+            <div class="detail-change" :class="selectedStock.rate >= 0 ? 'is-up' : 'is-down'">
+              {{ dispChange(selectedStock.change, selectedStock.market) }}
+            </div>
+          </template>
 
-          <!-- 차트 -->
+          <!-- 차트 (분봉/일봉 — 백엔드 캔들) -->
           <div class="detail-chart-wrap">
             <div class="chart-period-tabs">
-              <button v-for="p in ['1분','3분','10분','일']" :key="p"
-                class="chart-tab" :class="{ 'is-active': p === '3분' }">{{ p }}</button>
+              <button v-for="p in detailPeriods" :key="p.key"
+                class="chart-tab" :class="{ 'is-active': detailPeriod === p.key }"
+                @click="detailPeriod = p.key">{{ p.label }}</button>
             </div>
-            <svg
-              class="detail-chart"
-              viewBox="0 0 280 120"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <!-- 그리드 라인 -->
-              <line v-for="y in [30,60,90]" :key="y" :x1="0" :y1="y" x2="280" :y2="y"
-                stroke="rgba(180,200,255,0.3)" stroke-width="1" stroke-dasharray="4 4" />
+            <div class="detail-chart-body">
+              <svg
+                v-if="detailChartPoints.length > 1"
+                class="detail-chart"
+                viewBox="0 0 280 120"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                <!-- 그리드 라인 -->
+                <line v-for="y in [30,60,90]" :key="y" :x1="0" :y1="y" x2="280" :y2="y"
+                  stroke="rgba(180,200,255,0.3)" stroke-width="1" stroke-dasharray="4 4" />
 
-              <!-- 면적 채우기 -->
-              <path
-                :d="buildChartPath(selectedStock.chartPoints, 280, 120).area"
-                :fill="selectedStock.rate >= 0 ? 'rgba(15,159,110,0.1)' : 'rgba(255,59,92,0.1)'"
-              />
-              <!-- 라인 -->
-              <path
-                :d="buildChartPath(selectedStock.chartPoints, 280, 120).line"
-                fill="none"
-                :stroke="selectedStock.rate >= 0 ? 'var(--positive)' : '#FF3B5C'"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <!-- 현재가 점 -->
-              <circle
-                :cx="280"
-                :cy="buildChartPath(selectedStock.chartPoints, 280, 120).lastY"
-                r="4"
-                :fill="selectedStock.rate >= 0 ? 'var(--positive)' : '#FF3B5C'"
-              />
-            </svg>
-            <div class="chart-time-labels">
-              <span>09:00</span>
-              <span>11:00</span>
-              <span>13:00</span>
-              <span>15:30</span>
+                <!-- 면적 채우기 -->
+                <path
+                  :d="detailChartPath.area"
+                  :fill="selectedStock.rate >= 0 ? 'rgba(15,159,110,0.1)' : 'rgba(255,59,92,0.1)'"
+                />
+                <!-- 라인 -->
+                <path
+                  :d="detailChartPath.line"
+                  fill="none"
+                  :stroke="selectedStock.rate >= 0 ? 'var(--positive)' : '#FF3B5C'"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <!-- 최신 종가 점 -->
+                <circle
+                  :cx="280"
+                  :cy="detailChartPath.lastY"
+                  r="4"
+                  :fill="selectedStock.rate >= 0 ? 'var(--positive)' : '#FF3B5C'"
+                />
+              </svg>
+              <div v-else class="detail-chart-state">
+                {{ detailChartLoading ? '차트 불러오는 중…' : (detailChartError || '차트 데이터가 없어요.') }}
+              </div>
+            </div>
+            <div class="chart-time-labels" v-if="detailChartLabels.length">
+              <span v-for="(t, i) in detailChartLabels" :key="i">{{ t }}</span>
             </div>
           </div>
 
           <!-- 매수/매도 비율 -->
-          <div class="detail-ratio-section">
+          <div class="detail-ratio-section" v-if="selectedStock.buyRatio != null">
             <div class="detail-ratio-bar">
               <div class="detail-ratio-buy" :style="{ width: selectedStock.buyRatio + '%' }">
                 {{ selectedStock.buyRatio }}
@@ -976,7 +1296,7 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
           </div>
 
           <!-- AI 분석 -->
-          <div class="detail-section">
+          <div class="detail-section" v-if="selectedStock.aiReason">
             <div class="detail-section-head">
               <strong>왜 {{ selectedStock.rate >= 0 ? '올랐을까' : '떨어졌을까' }}?</strong>
               <span class="detail-time">20분 전</span>
@@ -988,7 +1308,7 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
           </div>
 
           <!-- 한 줄 요약 -->
-          <div class="detail-section">
+          <div class="detail-section" v-if="selectedStock.summary?.length">
             <strong class="detail-section-label">한 줄 요약</strong>
             <ul class="detail-summary-list">
               <li v-for="(s, i) in selectedStock.summary" :key="i">
@@ -998,7 +1318,7 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
           </div>
 
           <!-- 커뮤니티 -->
-          <div class="detail-section" v-if="selectedStock.community.length">
+          <div class="detail-section" v-if="selectedStock.community?.length">
             <strong class="detail-section-label">커뮤니티</strong>
             <div class="detail-community">
               <div
@@ -1375,7 +1695,6 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
   letter-spacing: -0.5px;
 }
 
-.detail-price small { font-size: 13px; font-weight: 700; color: var(--faint); margin-left: 2px; }
 
 .detail-rate {
   font-size: 15px;
@@ -1421,6 +1740,20 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
   display: block;
   width: 100%;
   height: 120px;
+}
+
+.detail-chart-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+}
+.detail-chart-state {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--faint);
+  text-align: center;
+  padding: 0 12px;
 }
 
 .chart-time-labels {
@@ -1649,11 +1982,16 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
 .pop-sort button { padding: 5px 12px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 900; cursor: pointer; transition: background 0.15s, color 0.15s; }
 .pop-sort button.is-selected { background: var(--chip-active); color: var(--ink); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
 .pop-caption { margin: 0 0 8px; font-size: 12px; font-weight: 700; color: var(--faint); }
+.pop-err { color: #e3344f; font-weight: 800; }
+.pop-loading { color: var(--muted); font-weight: 800; }
+.pop-state { padding: 28px 12px; text-align: center; font-size: 13px; font-weight: 700; color: var(--faint); }
+.pop-end { opacity: 0.7; }
+.pop-ratio-na { color: var(--faint); font-weight: 700; justify-self: center; }
 
 .pop-table { display: flex; flex-direction: column; }
 .pop-row {
   display: grid;
-  grid-template-columns: 60px minmax(120px, 1.5fr) 92px 78px 80px 108px minmax(110px, 1.2fr);
+  grid-template-columns: 60px minmax(120px, 1.5fr) 92px 78px 80px 108px;
   align-items: center; gap: 10px;
   padding: 11px 8px; border-bottom: 1px solid var(--line);
   cursor: pointer; transition: background 0.14s;
@@ -1666,12 +2004,48 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
 
 .pop-num { text-align: right; }
 .pop-rank-h { text-align: left; }
-.pop-ratio-h, .pop-ai-h { text-align: left; }
+.pop-ratio-h { text-align: left; }
 
 .pop-rank { display: flex; align-items: center; gap: 8px; }
 .pop-heart { border: 0; background: none; padding: 0; font-size: 16px; color: var(--faint); cursor: pointer; line-height: 1; transition: color 0.14s, transform 0.12s; }
 .pop-heart.on { color: #e3344f; }
 .pop-heart:hover { transform: scale(1.15); }
+
+/* ===== 선호 종목 목록 ===== */
+.fav-list { display: flex; flex-direction: column; }
+.fav-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--glass-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.14s;
+}
+.fav-row:hover { background: var(--surface-soft); }
+.fav-row.active { background: rgba(var(--accent-rgb), 0.08); }
+.fav-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.fav-logo { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: #fff; font-weight: 900; font-size: 13px; flex-shrink: 0; }
+.fav-name-info { display: flex; flex-direction: column; min-width: 0; }
+.fav-name-info strong { font-size: 14px; font-weight: 900; color: var(--ink); }
+.fav-name-info span { font-size: 11px; color: var(--muted); font-weight: 700; }
+.fav-price { font-size: 14px; font-weight: 900; color: var(--ink); font-variant-numeric: tabular-nums; }
+.fav-rate { font-size: 13px; font-weight: 900; padding: 3px 8px; border-radius: 8px; justify-self: end; }
+.fav-rate.up { color: #e3344f; background: rgba(227,52,79,0.1); }
+.fav-rate.down { color: #2b59d6; background: rgba(43,89,214,0.1); }
+/* 선호 목록 하단 '스와이핑 주식매칭' 버튼 */
+.fav-match-btn {
+  display: block; width: 100%; margin-top: 14px; padding: 13px 18px;
+  border: 0; border-radius: 14px; cursor: pointer;
+  background: linear-gradient(135deg, #f43f5e 0%, #c026d3 55%, #7c3aed 100%);
+  color: #fff; font-size: 14px; font-weight: 900;
+  box-shadow: 0 6px 18px rgba(192,38,211,0.28);
+  transition: transform 0.12s, box-shadow 0.15s;
+}
+.fav-match-btn:hover { box-shadow: 0 8px 22px rgba(192,38,211,0.4); }
+.fav-match-btn:active { transform: scale(0.98); }
 .pop-rank-num { font-size: 14px; font-weight: 900; color: var(--ink); }
 
 .pop-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -1694,7 +2068,6 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
 .pop-ratio-nums .b { color: #2b59d6; }
 .pop-ratio-nums .s { color: #e3344f; }
 
-.pop-ai { font-size: 12px; font-weight: 700; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ===== 궁합 랭킹 테이블 ===== */
 .rank-table { display: flex; flex-direction: column; }
@@ -1747,7 +2120,9 @@ onMounted(() => { if (viewMode.value === 'ranking') loadRanking() })
 
 @media (max-width: 820px) {
   .pop-row { grid-template-columns: 52px minmax(110px, 1.4fr) 84px 70px; }
-  .pop-num.pop-vol, .pop-ratio, .pop-ratio-h, .pop-ai, .pop-ai-h { display: none; }
+  .pop-num.pop-vol, .pop-ratio, .pop-ratio-h { display: none; }
+  /* 모바일: 상세는 카드 대신 페이지 이동 → 빈 사이드 카드 숨김 */
+  .detail-panel { display: none; }
 }
 
 @media (max-width: 900px) {
