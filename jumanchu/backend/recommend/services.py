@@ -24,7 +24,7 @@ from recommend.longterm_report import (
     FinancialMetrics, GrowthMetrics, LongTermScores, StockMeta, UserProfile,
     build_longterm_report,
 )
-from recommend.matching import compute_match_score, recommend_for_user
+from recommend.matching import _match_components, compute_match_score, recommend_for_user
 from recommend.models import LongTermScore, RecommendationCache, StockDna, UserLikedStock
 from stocks.models import Stock, StockPrice
 from stocks.services.price_dispatch import fetch_price
@@ -371,3 +371,84 @@ def longterm_report(user, code, *, llm=None, force: bool = False) -> dict:
                       expires_at=timezone.now() + timedelta(days=1)),
     )
     return payload
+
+
+def longterm_total_history(user, code, limit: int = 12) -> list[dict]:
+    """장투 총점(최종 결과 = 상단 종합 점수) 히스토리.
+
+    총점 = 소계(재무0.3+성장0.4, LongTermScore 일배치)×0.7 + 궁합×0.3 (scoring.longterm_total).
+    궁합은 개인화(온보딩+종목 DNA) — 없으면 소계만(상단 점수와 동일 규칙).
+    소계 일자별 + 오늘(현재) 점을 함께 반환.
+    """
+    stock = Stock.objects.filter(code=code, is_active=True).first()
+    if stock is None:
+        raise StockNotFound()
+
+    # 궁합(개인) — 온보딩 + 종목 DNA 있어야. 없으면 None → 총점은 소계만
+    userfit = None
+    profile = getattr(user, "investment_profile", None)
+    if profile is not None and profile.profiled_at is not None:
+        dna = StockDna.objects.filter(stock=stock).order_by("-calculated_date").first()
+        if dna is not None:
+            sector_weights = {
+                p.sector: float(p.weight) for p in UserPreferredSector.objects.filter(user=user)
+            }
+            userfit = compute_match_score(profile, dna, sector_weights)
+
+    lt_rows = list(
+        LongTermScore.objects.filter(stock=stock).order_by("-calculated_date")[:limit]
+    )
+    lt_rows.reverse()  # 오래된→최신 (FE가 직전 대비 상승 ▲ 비교)
+
+    def _total(lt):
+        sub = float(lt.total_score) if lt.total_score is not None else None
+        return scoring.longterm_total(sub, userfit)
+
+    out = []
+    for lt in lt_rows:
+        total = _total(lt)
+        if total is None:
+            continue
+        out.append({
+            "date": lt.calculated_date.isoformat(),
+            "month": lt.calculated_date.strftime("%y.%m"),
+            "score": round(total, 1),
+        })
+    # 오늘 측정값(현재 장투 총점)도 마지막 점으로 — 최신 소계가 오늘이 아니면 추가
+    today = timezone.localdate()
+    if lt_rows and lt_rows[-1].calculated_date != today:
+        cur = _total(lt_rows[-1])
+        if cur is not None:
+            out.append({"date": today.isoformat(), "month": "오늘", "score": round(cur, 1)})
+    return out
+
+
+# 궁합 점수 5요소 라벨 (가중치: risk0.35/term0.20/sector0.20/exp0.15/style0.10)
+_USERFIT_COMP_LABEL = {
+    "risk": "위험성향", "term": "투자기간", "sector": "섹터", "exp": "경험", "style": "스타일",
+}
+
+
+def userfit_components(user, code) -> list[dict] | None:
+    """현재 궁합 점수의 5요소 분해 [{label, value(0~100)}] — 위험성향/투자기간/섹터/경험/스타일 매칭.
+
+    재무·성장처럼 궁합 카드에 근거를 보여주기 위함. 온보딩 전이거나 DNA 없으면 None.
+    LLM·리포트 캐시와 무관하게 즉석 계산(결정적, 비용 없음).
+    """
+    stock = Stock.objects.filter(code=code, is_active=True).first()
+    if stock is None:
+        return None
+    profile = getattr(user, "investment_profile", None)
+    if profile is None or profile.profiled_at is None:
+        return None
+    dna = StockDna.objects.filter(stock=stock).order_by("-calculated_date").first()
+    if dna is None:
+        return None
+    sector_weights = {
+        p.sector: float(p.weight) for p in UserPreferredSector.objects.filter(user=user)
+    }
+    comps = _match_components(profile, dna, sector_weights)
+    return [
+        {"label": f"{_USERFIT_COMP_LABEL[k]} 매칭", "value": round(comps[k] * 100)}
+        for k in ("risk", "term", "sector", "exp", "style")
+    ]

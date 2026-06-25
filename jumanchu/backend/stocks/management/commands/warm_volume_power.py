@@ -14,12 +14,14 @@ cron/스케줄러로 ~30s 주기 실행 권장 (KIS 분당 한도는 청크 페�
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from django.core.cache import cache
 from django.core.management.base import BaseCommand
 
 from stocks.services.market_summary import popular_universe
-from stocks.services.price_dispatch import VOLPOWER_TTL, fetch_volume_power, volpower_key
+from stocks.services.price_dispatch import (
+    VOLPOWER_EMPTY, VOLPOWER_TTL, fetch_volume_power, volpower_key)
 
 
 class Command(BaseCommand):
@@ -33,21 +35,22 @@ class Command(BaseCommand):
     def handle(self, *args, **opts):
         size, chunk, ttl = opts["size"], opts["chunk"], opts["ttl"]
         pairs = popular_universe(size)
-        self.stdout.write(f"[warm_volume_power] 대상 {len(pairs)}종목 (초당 ≤{chunk}, TTL {ttl}s)")
+        self.stdout.write(f"[warm_volume_power] 대상 {len(pairs)}종목 (초당 <={chunk}, TTL {ttl}s)")
 
         warmed = 0
-        for i in range(0, len(pairs), chunk):
-            t0 = time.monotonic()
-            for market, code in pairs[i:i + chunk]:
-                vp = fetch_volume_power(market, code)
-                if vp is not None:
-                    cache.set(volpower_key(market, code), vp, timeout=ttl)
-                    warmed += 1
-            # 다음 청크 전, 이 청크가 1초보다 빨리 끝났으면 남은 시간 sleep → 초당 ≤chunk 보장
-            if i + chunk < len(pairs):
-                elapsed = time.monotonic() - t0
-                if elapsed < 1.0:
-                    time.sleep(1.0 - elapsed)
+        # 청크를 동시 호출(스레드 안전) → 실제 초당 chunk. cache.set은 메인스레드에서.
+        with ThreadPoolExecutor(max_workers=min(chunk, 8)) as ex:   # 동시 TLS 제한 → 서버 경합↓
+            for i in range(0, len(pairs), chunk):
+                t0 = time.monotonic()
+                batch = pairs[i:i + chunk]
+                results = list(ex.map(lambda mc: fetch_volume_power(*mc), batch))
+                for (market, code), vp in zip(batch, results):
+                    # 음성(None: US 장마감 등)도 캐시 → 요청 경로가 라이브 재조회 안 하게
+                    cache.set(volpower_key(market, code), vp or VOLPOWER_EMPTY, timeout=ttl)
+                    if vp is not None:
+                        warmed += 1
+                if i + chunk < len(pairs):
+                    time.sleep(max(0.0, 1.0 - (time.monotonic() - t0)))
 
         self.stdout.write(self.style.SUCCESS(
             f"[warm_volume_power] 완료: {warmed}/{len(pairs)} 적재"))

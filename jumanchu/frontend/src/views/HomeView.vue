@@ -3,14 +3,17 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import SparklineChart from '../components/SparklineChart.vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { fetchMarketSummary } from '../api/stocks'
-import { fetchEconomyNews } from '../api/news'
-import { fetchRecommendations } from '../api/recommend'
-import { fetchPortfolioSummary } from '../api/portfolio'
+import { useFavoritesStore } from '../stores/favorites'
+import { fetchMarketSummary, fetchStockPrice, fetchPopularRanking, fetchStockDetail, fetchStocks } from '../api/stocks'
+import { fetchEconomyNews, fetchInterestNews } from '../api/news'
+import { fetchRecommendations, fetchLongtermRanking } from '../api/recommend'
+import { fetchPortfolioSummary, fetchMilestones, fetchOrders } from '../api/portfolio'
+import { fetchDiaries } from '../api/diary'
 import { retry } from '../api/client'
 
 const router = useRouter()
 const auth = useAuthStore()
+const favStore = useFavoritesStore()
 
 // 비로그인 랜딩 배너 캐러셀 (10초 자동 디졸브)
 const slides = [
@@ -27,7 +30,7 @@ function startSlideTimer() { clearInterval(slideTimer); slideTimer = setInterval
 function goPrev() { prevSlide(); startSlideTimer() }
 function goNext() { nextSlide(); startSlideTimer() }
 onMounted(() => {
-  if (!auth.isAuthenticated) startSlideTimer()
+  if (!auth.isAuthenticated) { startSlideTimer(); loadDemoSwipe() }
   else { startAchievedCarousel(); startRankTicker() }
   // 공개 데이터는 항상, 개인 데이터는 로그인 시에만
   loadMarket()
@@ -35,9 +38,13 @@ onMounted(() => {
   if (auth.isAuthenticated) {
     loadRecommendations()
     loadHomeHoldings()
+    loadWatchlistNews()   // 관심 종목 뉴스(보유+선호)는 로그인 시에만 — 비로그인은 스와이핑 맛보기 노출
+    loadMilestones()      // 자산 마일스톤(달성/다음 목표)
+    loadCompatRanking()   // 궁합 랭킹(내 장투 랭킹)
+    loadDiaryPending()    // 투자 일기 작성 대기 건수
   }
 })
-onUnmounted(() => { clearInterval(slideTimer); clearInterval(achievedTimer); clearInterval(rankTimer) })
+onUnmounted(() => { clearInterval(slideTimer); clearInterval(achievedTimer); clearInterval(rankTimer); clearTimeout(searchTimer) })
 
 // 검색 바
 const searchQuery = ref('')
@@ -45,6 +52,61 @@ const popularKeywords = ['SK하이닉스', '엔비디아', '삼성전자']
 function goSearch() {
   const q = searchQuery.value.trim()
   router.push({ path: '/stocks', query: q ? { q } : {} })
+}
+
+// 검색 드롭다운 — 포커스 시 인기 주식 top5 / 입력 시 검색 결과
+const searchOpen = ref(false)
+const searchResults = ref([])
+const popularStocks = ref([])   // 인기 top5
+const popularTime = ref('')
+let searchTimer = null
+
+function fmtRate(rate) {
+  const up = Number(rate) >= 0
+  return (up ? '+' : '') + Number(rate).toFixed(2) + '%'
+}
+
+async function loadPopularStocks() {
+  try {
+    const { items = [], fetched_at } = await fetchPopularRanking({ market: 'all', sort: 'value', size: 5 })
+    popularStocks.value = items.map((it) => ({
+      code: it.code,
+      name: it.name,
+      rate: fmtRate(it.change_rate),
+      up: Number(it.change_rate) >= 0,
+    }))
+    popularTime.value = fetched_at
+      ? new Date(fetched_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+      : ''
+  } catch {
+    // 실패 → 빈 목록
+  }
+}
+
+function openSearch() {
+  searchOpen.value = true
+  if (!popularStocks.value.length) loadPopularStocks()
+}
+function closeSearch() { searchOpen.value = false }
+
+function onSearchInput() {
+  clearTimeout(searchTimer)
+  const q = searchQuery.value.trim()
+  if (!q) { searchResults.value = []; return }
+  searchTimer = setTimeout(async () => {
+    try {
+      const { items = [] } = await fetchStocks({ q, size: 8 })
+      searchResults.value = items.map((s) => ({ code: s.code, name: s.name, market: s.market, sector: s.sector }))
+    } catch {
+      searchResults.value = []
+    }
+  }, 250)
+}
+
+// 결과 클릭 → 종목 상세로 (mousedown.prevent로 input blur보다 먼저 처리)
+function goStock(code) {
+  searchOpen.value = false
+  router.push(`/stocks/${code}`)
 }
 
 // ===== 홈 실데이터 로딩 헬퍼 =====
@@ -100,12 +162,30 @@ async function loadEconomyNews() {
       generalNews.value = items.slice(0, 6).map((n) => ({
         title: n.title,
         source: n.source,
+        url: n.url || '',
         time: timeAgo(n.published_at),
-        category: n.sectors?.[0] || n.categories?.[0] || '경제',
+        category: (n.sectors?.[0]?.sector ?? n.sectors?.[0]) || n.categories?.[0] || '경제',
       }))
     }
   } catch {
     // 실패 → 목업 유지
+  }
+}
+
+// 관심 종목 뉴스 = 보유 종목 뉴스 + 선호(스와이핑 저장) 종목 뉴스
+async function loadWatchlistNews() {
+  try {
+    const codes = favStore.items.map((s) => s.code)
+    const items = await fetchInterestNews(codes, { limit: 6, withHoldings: auth.isAuthenticated })
+    watchlistNews.value = items.map((n) => ({
+      title: n.title,
+      source: n.source,
+      url: n.url || '',
+      time: timeAgo(n.published_at),
+      ticker: n.stock?.name ?? '',
+    }))
+  } catch {
+    // 실패 → 빈 목록 유지
   }
 }
 
@@ -150,6 +230,7 @@ async function loadHomeHoldings() {
     const d = await retry(() => fetchPortfolioSummary(), { attempts: 4, delayMs: 250 })
     if (d.total_assets != null) totalAsset.value = Number(d.total_assets)
     if (d.total_profit_loss_rate != null) totalReturn.value = Number(d.total_profit_loss_rate)
+    if (d.total_profit_loss != null) totalProfit.value = Number(d.total_profit_loss)
     if (d.account?.balance != null) cash.value = Number(d.account.balance)
     if (d.total_current_value != null) stockValue.value = Number(d.total_current_value)
     const hp = d.holdings_preview || []
@@ -173,48 +254,85 @@ const hideAmount = ref(false)
 const assetReady = ref(false)    // 실데이터 로드 완료 여부 (로드 전엔 placeholder)
 const totalAsset = ref(0)        // 총 자산 (현금 + 주식)
 const totalReturn = ref(0)       // 총 수익률 (보유 평가손익률)
+const totalProfit = ref(0)       // 총 수익금 (평가손익 금액)
 const cash = ref(0)              // 예수금
 const stockValue = ref(0)        // 주식 평가액
-// 궁합 랭킹 — 장투 점수 상위 종목을 버튼에서 회전 표시 (목업)
-const compatRanking = [
-  { rank: 1, name: 'SK하이닉스', score: 86 },
-  { rank: 2, name: '삼성바이오로직스', score: 82 },
-  { rank: 3, name: 'NVIDIA', score: 80 },
-  { rank: 4, name: '삼성전자', score: 78 },
-  { rank: 5, name: '셀트리온', score: 75 },
-]
+// 궁합 랭킹 — 내 장투 랭킹(GET /longterm/ranking/) 상위 종목을 버튼에서 회전 표시
+const compatRanking = ref([])
 const rankIdx = ref(0)
 let rankTimer = null
-const rankPreview = computed(() => compatRanking[rankIdx.value])
+const rankPreview = computed(() => compatRanking.value[rankIdx.value] || { rank: '-', name: '집계 중', score: '–' })
 function startRankTicker() {
   clearInterval(rankTimer)
+  if (compatRanking.value.length < 2) return
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
-  rankTimer = setInterval(() => { rankIdx.value = (rankIdx.value + 1) % compatRanking.length }, 2200)
+  rankTimer = setInterval(() => { rankIdx.value = (rankIdx.value + 1) % compatRanking.value.length }, 2200)
+}
+async function loadCompatRanking() {
+  try {
+    const { items = [] } = await fetchLongtermRanking({ limit: 10 })
+    compatRanking.value = items.map((r, i) => ({
+      rank: i + 1,
+      name: r.stock_name,
+      score: Math.round(r.longterm_total),
+    }))
+    rankIdx.value = 0
+    startRankTicker()
+  } catch {
+    // 실패 → 빈 목록(집계 중 표시)
+  }
 }
 function goRanking() { router.push({ path: '/stocks', query: { view: 'ranking' } }) }
 
+// 투자 일기 작성 대기 — 일지(order_id) 없는 주문 수 (TradingDiaryView와 동일 기준)
+const diaryPendingCount = ref(null)   // null=확인 중, 숫자=대기 건수
+async function loadDiaryPending() {
+  try {
+    const [diaryRes, orderRes] = await Promise.all([
+      fetchDiaries({ size: 30 }),
+      fetchOrders({ size: 30 }),
+    ])
+    const journaled = new Set((diaryRes.items || []).map((d) => d.order_id).filter((x) => x != null))
+    diaryPendingCount.value = (orderRes.items || []).filter((o) => !journaled.has(o.id)).length
+  } catch {
+    // 실패 → null 유지(확인 중)
+  }
+}
+
+// 자산 마일스톤 (실데이터: GET /portfolio/milestones/, 수익금 기준)
+const achievedMilestones = ref([])   // 달성 완료 목표 [{ icon, name }]
+const nextMilestone = ref(null)      // 다음 목표 { icon, name, amount }
+const milestoneProgress = ref(0)     // 다음 목표까지 진행률 %
+async function loadMilestones() {
+  try {
+    const d = await fetchMilestones()
+    achievedMilestones.value = (d.achieved || []).map((g) => ({ icon: g.icon, name: g.name }))
+    nextMilestone.value = d.next
+      ? { icon: d.next.icon, name: d.next.name, amount: Number(d.next.target_amount) }
+      : null
+    milestoneProgress.value = d.progress_percent ?? 0
+    achievedIndex.value = 0
+    startAchievedCarousel()
+  } catch {
+    // 실패 → 빈 상태 유지
+  }
+}
+
 // 달성 완료 마일스톤 — 회전목마(코버플로)
-const achievedMilestones = [
-  { icon: '👜', name: '명품 가방' },
-  { icon: '💻', name: '노트북' },
-  { icon: '📺', name: 'TV' },
-  { icon: '📷', name: '카메라' },
-  { icon: '⌚', name: '스마트워치' },
-  { icon: '🎮', name: '게임기' },
-]
 const achievedIndex = ref(0)
 let achievedTimer = null
 function startAchievedCarousel() {
   clearInterval(achievedTimer)
+  if (achievedMilestones.value.length < 2) return   // 0~1개면 회전 불필요
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
   achievedTimer = setInterval(() => {
-    achievedIndex.value = (achievedIndex.value + 1) % achievedMilestones.length
+    achievedIndex.value = (achievedIndex.value + 1) % achievedMilestones.value.length
   }, 2500)
 }
 function pauseAchievedCarousel() { clearInterval(achievedTimer) }
 // 활성 항목 기준 좌우 오프셋 → 코버플로 위치/크기/투명도
 function carouselStyle(i) {
-  const n = achievedMilestones.length
+  const n = achievedMilestones.value.length
   let d = i - achievedIndex.value
   if (d > n / 2) d -= n
   if (d < -n / 2) d += n
@@ -333,11 +451,30 @@ function advance() {
   requestAnimationFrame(enterCard)
 }
 
+// 현재 덱 카드를 선호 종목에 추가 + 실시간가 백그라운드 보강 (StocksView 선호 담기와 동일)
+function saveCurrentToFav() {
+  const c = current.value
+  if (!c || favStore.isFav(c.code)) return
+  favStore.toggle({
+    code: c.code,
+    name: c.name,
+    market: c.market.split(' · ')[0],   // 카드의 'KOSPI · 섹터'에서 시장만 분리
+    sector: c.sector,
+    color: colorFor(c.code),
+    price: null,
+    rate: null,
+  })
+  retry(() => fetchStockPrice(c.code), { attempts: 3, delayMs: 500 })
+    .then(({ price }) => favStore.updatePrice(c.code, Number(price.current), Number(price.change_rate)))
+    .catch(() => {})
+}
+
 // direction: 'left'=관심없음, 'right'=관심, 'save'=관심 종목 저장(위로)
 function swipe(direction) {
   const el = cardEl.value
   if (!auth.isAuthenticated || animating || !el) return
   animating = true
+  if (direction !== 'left') saveCurrentToFav()   // 관심(우)·저장(위) = 선호 담기, 패스(좌)만 건너뜀
   feedbackType.value = direction === 'save' ? 'save' : direction === 'right' ? 'like' : 'pass'
   feedbackOpacity.value = 1
   el.style.transition = `transform ${EXIT_MS}ms cubic-bezier(.4,0,.2,1), opacity ${EXIT_MS}ms ease`
@@ -432,22 +569,167 @@ const generalNews = ref([
 // 보유 종목 (실데이터: /portfolio/ 요약 holdings_preview로 채움)
 const holdings = ref([])
 
-const recentDiaries = [
-  { date: '2026-06-10', stock: 'APPLE',    ticker: 'AAPL',   type: 'hold', title: 'WWDC 전 홀딩 전략' },
-  { date: '2026-06-05', stock: '삼성전자', ticker: '005930', type: 'buy',  title: '오늘 매수 이유' },
-  { date: '2026-06-04', stock: 'SK하이닉스', ticker: '000660', type: 'sell', title: '단기 수익 실현' },
-]
-const diaryTypeColor = { buy: '#315dff', sell: '#ef4444', hold: '#f59e0b' }
-const diaryTypeLabel = { buy: '매수', sell: '매도', hold: '홀딩' }
+function fmt(n) { return Math.round(n).toLocaleString('ko-KR') }   // 원화는 정수로 (해외 환산분 소수점 제거)
 
-function fmt(n) { return n.toLocaleString('ko-KR') }
+// 관심 종목 뉴스 (실데이터: 보유 종목 + 선호 종목 뉴스 병합)
+const watchlistNews = ref([])
 
-const watchlistNews = [
-  { title: 'SK하이닉스, HBM3E 양산 확대...AI 수요 견조', source: '이데일리', time: '30분 전', ticker: 'SK하이닉스' },
-  { title: '삼성전자, 파운드리 수주 회복세...2분기 기대감', source: '전자신문', time: '1시간 전', ticker: '삼성전자' },
-  { title: 'NVIDIA 실적 서프라이즈...관련 국내주 수혜', source: 'Bloomberg', time: '2시간 전', ticker: 'NVDA' },
-  { title: '애플 WWDC AI 기능 대거 공개 예정', source: '디지털데일리', time: '3시간 전', ticker: 'AAPL' },
+// ===== 비로그인 홈: 관심 종목 뉴스 자리에 보여줄 스와이핑 맛보기 (인기 종목 top 10) =====
+// 종목 코드 기반 안정 해시(0~1) — 렌더마다 흔들리지 않게 고정값
+function demoHash(seed) {
+  let h = 2166136261
+  for (const ch of String(seed)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) }
+  return ((h >>> 0) % 1000) / 1000
+}
+function demoClampPct(n) { return Math.max(8, Math.min(99, Math.round(n))) }
+// 등락률 + 코드로 4축 DNA 산출 (변동성↑→안정성↓, 등락↑→성장↑ 기준)
+function demoDna(rate, code) {
+  const a = Math.abs(rate)
+  return [
+    { label: '변동성', value: demoClampPct(46 + a * 9 + demoHash(code + 'v') * 14) },
+    { label: '성장',   value: demoClampPct(58 + rate * 5 + demoHash(code + 'g') * 12) },
+    { label: '가치',   value: demoClampPct(38 + demoHash(code + 'p') * 46) },
+    { label: '안정성', value: demoClampPct(86 - a * 7 - demoHash(code + 's') * 12) },
+  ]
+}
+// 궁합점수: 성장·안정성 비중 + 종목별 편차 (대략 70~95)
+function demoScore(dna, code) {
+  return demoClampPct(62 + dna[1].value * 0.18 + dna[3].value * 0.12 + demoHash(code + 'm') * 8)
+}
+function demoInterest(code) { return Math.round(120 + demoHash(code + 'i') * 1600) }
+
+// 원시 종목({name,code,market,sector,current,change_rate}) → 카드 데이터
+function makeDemoCard(raw, i) {
+  const rate = Number(raw.change_rate) || 0
+  const up = rate >= 0
+  const price = isKrMarket(raw.market)
+    ? Number(raw.current).toLocaleString('ko-KR') + '원'
+    : '$' + Number(raw.current).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const dna = demoDna(rate, raw.code)
+  return {
+    name: raw.name,
+    code: raw.code,
+    market: raw.sector ? `${raw.market} · ${raw.sector}` : raw.market,
+    sector: raw.sector || raw.market,
+    score: demoScore(dna, raw.code),
+    price,
+    change: (up ? '+' : '') + rate.toFixed(1) + '%',
+    up,
+    interest: demoInterest(raw.code),
+    dna,
+    gradient: CARD_GRADIENTS[i % CARD_GRADIENTS.length],
+  }
+}
+
+// API 실패 시 보여줄 정적 폴백(가격은 근사치) — 로드되면 실데이터로 교체됨
+const DEMO_FALLBACK = [
+  { name: '삼성전자', code: '005930', market: 'KOSPI', sector: '전기·전자', current: 78400, change_rate: 1.2 },
+  { name: 'SK하이닉스', code: '000660', market: 'KOSPI', sector: '전기·전자', current: 189300, change_rate: 2.1 },
+  { name: 'NAVER', code: '035420', market: 'KOSPI', sector: 'IT 서비스', current: 192500, change_rate: -0.6 },
+  { name: '카카오', code: '035720', market: 'KOSPI', sector: 'IT 서비스', current: 47150, change_rate: 0.9 },
+  { name: '현대차', code: '005380', market: 'KOSPI', sector: '운송장비', current: 246000, change_rate: 1.5 },
+  { name: '삼성바이오로직스', code: '207940', market: 'KOSPI', sector: '제약', current: 1042000, change_rate: 1.4 },
+  { name: 'LG에너지솔루션', code: '373220', market: 'KOSPI', sector: '전기·전자', current: 412000, change_rate: -1.1 },
+  { name: '셀트리온', code: '068270', market: 'KOSPI', sector: '제약', current: 168300, change_rate: 2.4 },
+  { name: 'NVIDIA', code: 'NVDA', market: 'NASDAQ', sector: '반도체', current: 134.80, change_rate: 3.1 },
+  { name: 'APPLE', code: 'AAPL', market: 'NASDAQ', sector: 'IT', current: 214.20, change_rate: 0.4 },
 ]
+const demoSwipeCards = ref(DEMO_FALLBACK.map(makeDemoCard))
+
+const demoIndex = ref(0)                                              // 0~10, 10이면 완료
+const demoDone = computed(() => demoIndex.value >= demoSwipeCards.value.length)
+const demoCurrent = computed(() => demoSwipeCards.value[demoIndex.value] || null)
+const demoCardEl = ref(null)
+let demoAnimating = false
+
+// 데모 카드용 DNA 레이더 좌표 (로그인 덱 dnaVertices와 동일 계산)
+const demoDnaVertices = computed(() => {
+  const c = demoCurrent.value
+  if (!c) return []
+  const d = c.dna
+  const cx = 60, cy = 60, R = 46
+  return [
+    { x: cx, y: cy - (R * d[0].value) / 100 },
+    { x: cx + (R * d[1].value) / 100, y: cy },
+    { x: cx, y: cy + (R * d[2].value) / 100 },
+    { x: cx - (R * d[3].value) / 100, y: cy },
+  ]
+})
+const demoDnaPolygon = computed(() => demoDnaVertices.value.map(({ x, y }) => `${x},${y}`).join(' '))
+
+// 인기 종목 top 10을 실시간가로 불러와 데모 덱 구성 (sector는 상세 조회로 보강, 공개 API)
+async function loadDemoSwipe() {
+  try {
+    const { items = [] } = await fetchPopularRanking({ market: 'all', sort: 'value', size: 10 })
+    if (!items.length) return
+    const cards = await Promise.all(items.map(async (it, i) => {
+      let sector = ''
+      try { const d = await fetchStockDetail(it.code); sector = d.stock?.sector || '' } catch { /* 섹터 없으면 시장만 */ }
+      return makeDemoCard(
+        { name: it.name, code: it.code, market: it.market, sector, current: it.current, change_rate: it.change_rate },
+        i,
+      )
+    }))
+    demoSwipeCards.value = cards
+    demoIndex.value = 0
+  } catch {
+    // 실패 → 정적 폴백 유지
+  }
+}
+
+// 버튼/드래그 공통 — 카드를 날리고 다음 장으로 (save=위, like=오른쪽, pass=왼쪽)
+function demoSwipe(dir) {
+  if (demoAnimating || demoDone.value) return
+  const el = demoCardEl.value
+  if (!el) { demoIndex.value += 1; return }
+  demoAnimating = true
+  el.style.transition = 'transform .46s cubic-bezier(.4,0,.2,1), opacity .46s ease'
+  if (dir === 'save') {
+    el.style.transform = 'translate3d(0,-240px,0) scale(.9)'
+  } else {
+    const right = dir === 'like'
+    el.style.transform = `translate3d(${right ? 380 : -380}px, 30px, 0) rotate(${right ? 15 : -15}deg)`
+  }
+  el.style.opacity = '0'
+  setTimeout(() => {
+    demoIndex.value += 1
+    demoAnimating = false
+    requestAnimationFrame(() => {
+      const e = demoCardEl.value
+      if (!e) return                       // 완료 화면으로 교체됐으면 리셋 불필요
+      e.style.transition = 'none'
+      e.style.transform = 'none'
+      e.style.opacity = '1'
+    })
+  }, 460)
+}
+
+// 드래그(스와이프) — 임계값 넘으면 demoSwipe, 아니면 제자리 복귀
+let demoDrag = false
+let demoStartX = 0
+let demoCurX = 0
+function onDemoDown(e) {
+  if (demoAnimating || demoDone.value) return
+  demoDrag = true
+  demoStartX = e.clientX
+  demoCurX = 0
+  demoCardEl.value.style.transition = 'none'
+  demoCardEl.value.setPointerCapture?.(e.pointerId)
+}
+function onDemoMove(e) {
+  if (!demoDrag) return
+  demoCurX = e.clientX - demoStartX
+  demoCardEl.value.style.transform = `translate3d(${demoCurX}px, 0, 0) rotate(${demoCurX / 22}deg)`
+}
+function onDemoUp() {
+  if (!demoDrag) return
+  demoDrag = false
+  if (demoCurX > 90) return demoSwipe('like')
+  if (demoCurX < -90) return demoSwipe('pass')
+  const el = demoCardEl.value
+  el.style.transition = 'transform .3s ease'
+  el.style.transform = 'none'
+}
 </script>
 
 <template>
@@ -465,6 +747,9 @@ const watchlistNews = [
           type="text"
           class="search-input"
           placeholder="종목명 또는 코드로 검색 (예: 삼성전자, 005930, NVDA)"
+          @focus="openSearch"
+          @blur="closeSearch"
+          @input="onSearchInput"
         />
       </form>
       <div class="search-popular">
@@ -477,6 +762,46 @@ const watchlistNews = [
           @click="goSearch"
         >{{ kw }}</button>
       </div>
+
+      <!-- 슬라이드 다운 드롭다운: 포커스 시 인기 주식 top5 / 입력 시 검색 결과 -->
+      <Transition name="sd">
+        <div v-if="searchOpen" class="search-dropdown">
+          <template v-if="!searchQuery.trim()">
+            <div class="sd-head">
+              <span class="sd-title">인기 주식</span>
+              <span v-if="popularTime" class="sd-time">오늘 {{ popularTime }} 기준</span>
+            </div>
+            <button
+              v-for="(s, i) in popularStocks"
+              :key="s.code"
+              type="button"
+              class="sd-row"
+              @mousedown.prevent="goStock(s.code)"
+            >
+              <span class="sd-rank">{{ i + 1 }}</span>
+              <span class="sd-avatar" :style="{ background: colorFor(s.code) }">{{ s.name.charAt(0) }}</span>
+              <span class="sd-name">{{ s.name }}</span>
+              <span class="sd-rate" :class="s.up ? 'sd-up' : 'sd-down'">{{ s.rate }}</span>
+            </button>
+            <p v-if="!popularStocks.length" class="sd-empty">인기 주식을 불러오는 중…</p>
+          </template>
+          <template v-else>
+            <div class="sd-head"><span class="sd-title">검색 결과</span></div>
+            <button
+              v-for="s in searchResults"
+              :key="s.code"
+              type="button"
+              class="sd-row"
+              @mousedown.prevent="goStock(s.code)"
+            >
+              <span class="sd-avatar" :style="{ background: colorFor(s.code) }">{{ s.name.charAt(0) }}</span>
+              <span class="sd-name">{{ s.name }}</span>
+              <span class="sd-meta">{{ s.market }}<template v-if="s.sector"> · {{ s.sector }}</template></span>
+            </button>
+            <p v-if="!searchResults.length" class="sd-empty">검색 결과가 없어요.</p>
+          </template>
+        </div>
+      </Transition>
     </section>
 
     <!-- ===== 섹션 1: 자산 목표 + 스와이핑 추천 (로그인 시) ===== -->
@@ -504,6 +829,12 @@ const watchlistNews = [
             <span class="asset-return-label">총 수익률</span>
             <strong class="asset-return-value" :class="totalReturn >= 0 ? 'is-up' : 'is-down'">
               <template v-if="assetReady">{{ totalReturn >= 0 ? '+' : '' }}{{ totalReturn.toFixed(2) }}%</template>
+            </strong>
+          </div>
+          <div class="asset-return">
+            <span class="asset-return-label">총 수익금</span>
+            <strong class="asset-return-value" :class="totalProfit >= 0 ? 'is-up' : 'is-down'">
+              <template v-if="assetReady">{{ hideAmount ? '••••' : (totalProfit >= 0 ? '+' : '') + fmt(totalProfit) + '원' }}</template>
             </strong>
           </div>
         </div>
@@ -568,7 +899,7 @@ const watchlistNews = [
             <span class="aac-icon">📓</span>
             <span class="aac-body">
               <strong>투자 일기 쓰러 가기</strong>
-              <small>작성 대기 1건 (매매 후 미작성)</small>
+              <small>{{ diaryPendingCount === null ? '작성 대기 확인 중…' : diaryPendingCount === 0 ? '전체 작성 완료' : `작성 대기 ${diaryPendingCount}건` }}</small>
             </span>
             <span class="aac-arrow">→</span>
           </button>
@@ -586,40 +917,49 @@ const watchlistNews = [
         <div class="milestone-block">
           <span class="asset-block-title">🎯 현재 자산 마일스톤</span>
           <div class="milestone-grid">
-            <!-- 다음 목표 (넓게) -->
+            <!-- 다음 목표 (넓게) — 현재 수익금에 맞는 다음 마일스톤 -->
             <div class="milestone-card target">
               <div class="milestone-top">
-                <span class="milestone-icon">✈️</span>
-                <span class="goal-badge in-progress">진행중</span>
+                <span class="milestone-icon">{{ nextMilestone ? nextMilestone.icon : '🏁' }}</span>
+                <span class="goal-badge in-progress">{{ nextMilestone ? '진행중' : '완료' }}</span>
               </div>
               <span class="milestone-label">다음 목표</span>
-              <strong class="milestone-name">유럽 여행</strong>
-              <span class="milestone-amount">목표 5,000,000원</span>
-              <div class="milestone-track">
-                <div class="milestone-track-bar"><div style="width: 13%"></div></div>
-                <span class="milestone-track-pct">13%</span>
-              </div>
+              <template v-if="nextMilestone">
+                <strong class="milestone-name">{{ nextMilestone.name }}</strong>
+                <span class="milestone-amount">목표 {{ fmt(nextMilestone.amount) }}원</span>
+                <div class="milestone-track">
+                  <div class="milestone-track-bar"><div :style="{ width: milestoneProgress + '%' }"></div></div>
+                  <span class="milestone-track-pct">{{ milestoneProgress }}%</span>
+                </div>
+              </template>
+              <template v-else>
+                <strong class="milestone-name">목표 전부 달성! 🎉</strong>
+                <span class="milestone-amount">새로운 목표가 곧 추가돼요</span>
+              </template>
             </div>
-            <!-- 달성 완료 (회전목마) -->
+            <!-- 달성 완료 (회전목마) — 수익금이 목표를 넘긴 마일스톤 -->
             <div class="milestone-card achieved milestone-carousel">
               <span class="milestone-done-title">달성 완료</span>
-              <div
-                class="carousel-stage"
-                @mouseenter="pauseAchievedCarousel"
-                @mouseleave="startAchievedCarousel"
-              >
-                <button
-                  v-for="(m, i) in achievedMilestones"
-                  :key="m.name"
-                  type="button"
-                  class="carousel-item"
-                  :class="{ active: i === achievedIndex }"
-                  :style="carouselStyle(i)"
-                  :title="m.name"
-                  @click="achievedIndex = i"
-                >{{ m.icon }}</button>
-              </div>
-              <span class="carousel-name">{{ achievedMilestones[achievedIndex].name }}</span>
+              <template v-if="achievedMilestones.length">
+                <div
+                  class="carousel-stage"
+                  @mouseenter="pauseAchievedCarousel"
+                  @mouseleave="startAchievedCarousel"
+                >
+                  <button
+                    v-for="(m, i) in achievedMilestones"
+                    :key="m.name"
+                    type="button"
+                    class="carousel-item"
+                    :class="{ active: i === achievedIndex }"
+                    :style="carouselStyle(i)"
+                    :title="m.name"
+                    @click="achievedIndex = i"
+                  >{{ m.icon }}</button>
+                </div>
+                <span class="carousel-name">{{ achievedMilestones[achievedIndex]?.name }}</span>
+              </template>
+              <span v-else class="carousel-empty">아직 달성한<br />목표가 없어요</span>
             </div>
           </div>
         </div>
@@ -760,6 +1100,9 @@ const watchlistNews = [
                 type="text"
                 class="search-input"
                 placeholder="종목명 또는 코드로 검색 (예: 삼성전자, 005930, NVDA)"
+                @focus="openSearch"
+                @blur="closeSearch"
+                @input="onSearchInput"
               />
             </form>
             <div class="search-popular">
@@ -772,6 +1115,46 @@ const watchlistNews = [
                 @click="goSearch"
               >{{ kw }}</button>
             </div>
+
+            <!-- 슬라이드 다운 드롭다운: 포커스 시 인기 주식 top5 / 입력 시 검색 결과 -->
+            <Transition name="sd">
+              <div v-if="searchOpen" class="search-dropdown">
+                <template v-if="!searchQuery.trim()">
+                  <div class="sd-head">
+                    <span class="sd-title">인기 주식</span>
+                    <span v-if="popularTime" class="sd-time">오늘 {{ popularTime }} 기준</span>
+                  </div>
+                  <button
+                    v-for="(s, i) in popularStocks"
+                    :key="s.code"
+                    type="button"
+                    class="sd-row"
+                    @mousedown.prevent="goStock(s.code)"
+                  >
+                    <span class="sd-rank">{{ i + 1 }}</span>
+                    <span class="sd-avatar" :style="{ background: colorFor(s.code) }">{{ s.name.charAt(0) }}</span>
+                    <span class="sd-name">{{ s.name }}</span>
+                    <span class="sd-rate" :class="s.up ? 'sd-up' : 'sd-down'">{{ s.rate }}</span>
+                  </button>
+                  <p v-if="!popularStocks.length" class="sd-empty">인기 주식을 불러오는 중…</p>
+                </template>
+                <template v-else>
+                  <div class="sd-head"><span class="sd-title">검색 결과</span></div>
+                  <button
+                    v-for="s in searchResults"
+                    :key="s.code"
+                    type="button"
+                    class="sd-row"
+                    @mousedown.prevent="goStock(s.code)"
+                  >
+                    <span class="sd-avatar" :style="{ background: colorFor(s.code) }">{{ s.name.charAt(0) }}</span>
+                    <span class="sd-name">{{ s.name }}</span>
+                    <span class="sd-meta">{{ s.market }}<template v-if="s.sector"> · {{ s.sector }}</template></span>
+                  </button>
+                  <p v-if="!searchResults.length" class="sd-empty">검색 결과가 없어요.</p>
+                </template>
+              </div>
+            </Transition>
           </section>
         </div>
 
@@ -892,96 +1275,179 @@ const watchlistNews = [
             <p class="eyebrow">최신 경제 뉴스</p>
             <h2>종합 뉴스</h2>
           </div>
-          <button class="more-btn">더보기 →</button>
+          <button class="more-btn" @click="router.push({ name: 'news', query: { tab: 'general' } })">더보기 →</button>
         </div>
 
         <div class="news-list">
-          <article v-for="item in generalNews" :key="item.title" class="news-item">
+          <a
+            v-for="item in generalNews"
+            :key="item.url || item.title"
+            class="news-item"
+            :href="item.url || undefined"
+            :target="item.url ? '_blank' : undefined"
+            rel="noopener"
+          >
             <div class="news-meta">
               <span class="news-category">{{ item.category }}</span>
               <span class="news-time">{{ item.time }}</span>
             </div>
             <h4 class="news-title">{{ item.title }}</h4>
             <span class="news-source">{{ item.source }}</span>
-          </article>
+          </a>
         </div>
       </section>
 
-      <!-- 관심 종목 뉴스 -->
-      <section class="panel news-panel" aria-label="관심 종목 뉴스">
+      <!-- 관심 종목 뉴스 (로그인 시) -->
+      <section v-if="auth.isAuthenticated" class="panel news-panel" aria-label="관심 종목 뉴스">
         <div class="panel-head">
           <div>
             <p class="eyebrow">내 관심 종목 소식</p>
             <h2>관심 종목 뉴스</h2>
           </div>
-          <button class="more-btn">더보기 →</button>
+          <button class="more-btn" @click="router.push({ name: 'news', query: { tab: 'watchlist' } })">더보기 →</button>
         </div>
 
         <div class="news-list">
-          <article v-for="item in watchlistNews" :key="item.title" class="news-item">
+          <a
+            v-for="item in watchlistNews"
+            :key="item.url || item.title"
+            class="news-item"
+            :href="item.url || undefined"
+            :target="item.url ? '_blank' : undefined"
+            rel="noopener"
+          >
             <div class="news-meta">
               <span class="news-ticker">{{ item.ticker }}</span>
               <span class="news-time">{{ item.time }}</span>
             </div>
             <h4 class="news-title">{{ item.title }}</h4>
             <span class="news-source">{{ item.source }}</span>
-          </article>
-        </div>
-      </section>
-    </div>
-
-    <!-- ===== 섹션 4: 보유 종목 + 매매 일기 ===== -->
-    <div class="bottom-grid">
-
-      <!-- 보유 종목 -->
-      <section class="panel bottom-panel" aria-label="보유 종목">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">내 포트폴리오</p>
-            <h2>보유 종목</h2>
-          </div>
-          <button class="more-btn" @click="router.push('/holdings')">더보기 →</button>
-        </div>
-        <div class="holdings-list">
-          <div v-for="h in holdings" :key="h.ticker" class="holding-row">
-            <div class="hr-dot" :style="{ background: h.color }"></div>
-            <div class="hr-info">
-              <span class="hr-name">{{ h.name }}</span>
-              <span class="hr-ticker">{{ h.ticker }}</span>
-            </div>
-            <div class="hr-qty">{{ h.qty }}주</div>
-            <div class="hr-price">{{ fmt(h.cur) }}원</div>
-            <div class="hr-pnl" :class="h.cur >= h.avg ? 'is-up' : 'is-down'">
-              {{ h.cur >= h.avg ? '+' : '' }}{{ ((h.cur - h.avg) / h.avg * 100).toFixed(1) }}%
-            </div>
-          </div>
+          </a>
+          <p v-if="!watchlistNews.length" class="news-empty">
+            보유 종목이나 관심 종목을 담으면 관련 뉴스를 모아드려요.
+          </p>
         </div>
       </section>
 
-      <!-- 매매 일기 -->
-      <section class="panel bottom-panel" aria-label="매매 일기">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">나의 투자 기록</p>
-            <h2>매매 일기</h2>
-          </div>
-          <button class="more-btn" @click="router.push('/trading-diary')">더보기 →</button>
+      <!-- 관심 종목 뉴스 (비로그인): 인기 종목 top10 스와이핑 맛보기 (로그인 덱과 동일 디자인) -->
+      <section v-else class="panel demo-swipe-panel" aria-label="스와이핑 추천 맛보기">
+        <div class="match-header">
+          <h2 class="match-title">오늘의 궁합 추천 💝</h2>
+          <p class="match-sub">로그인 전 미리 체험해보세요. 지금 인기 있는 종목으로 넘겨보는 궁합 맛보기예요.</p>
+          <span v-if="!demoDone" class="match-count">{{ Math.min(demoIndex + 1, demoSwipeCards.length) }} / {{ demoSwipeCards.length }}</span>
         </div>
-        <div class="diary-list">
-          <div v-for="d in recentDiaries" :key="d.date + d.ticker" class="diary-row" @click="router.push('/trading-diary')">
-            <div class="diary-date">{{ d.date }}</div>
-            <div class="diary-info">
-              <span class="diary-type-badge" :style="{ background: diaryTypeColor[d.type] + '22', color: diaryTypeColor[d.type] }">
-                {{ diaryTypeLabel[d.type] }}
-              </span>
-              <span class="diary-stock">{{ d.stock }}</span>
-            </div>
-            <div class="diary-title">{{ d.title }}</div>
-          </div>
-        </div>
-        <button class="diary-write-btn" @click="router.push('/trading-diary')">+ 오늘 일지 작성</button>
-      </section>
 
+        <template v-if="!demoDone">
+          <div class="deck-wrap">
+            <article
+              ref="demoCardEl"
+              class="match-card"
+              :style="{ background: demoCurrent.gradient }"
+              @pointerdown="onDemoDown"
+              @pointermove="onDemoMove"
+              @pointerup="onDemoUp"
+            >
+              <div class="mc-top">
+                <span class="mc-badge">{{ demoCurrent.market }}</span>
+                <div class="mc-score">{{ demoCurrent.score }}<span>궁합점수</span></div>
+              </div>
+
+              <div class="mc-name-block">
+                <h3 class="mc-name">{{ demoCurrent.name }}</h3>
+                <div class="mc-code">{{ demoCurrent.code }}</div>
+              </div>
+
+              <div class="mc-prices">
+                <div class="mc-price-box">
+                  <span>현재가</span>
+                  <strong>{{ demoCurrent.price }}</strong>
+                </div>
+                <div class="mc-price-box">
+                  <span>등락률</span>
+                  <strong :class="demoCurrent.up ? 'up' : 'down'">{{ demoCurrent.change }}</strong>
+                </div>
+              </div>
+
+              <!-- Stock DNA -->
+              <div class="mc-dna">
+                <div class="dna-head">
+                  <span class="dna-head-icon" aria-hidden="true">✦</span>
+                  <div>
+                    <strong class="dna-title">Stock DNA</strong>
+                    <span class="dna-caption">투자 성향 밸런스</span>
+                  </div>
+                </div>
+                <div class="dna-body">
+                  <div class="dna-chart-shell">
+                    <svg class="dna-radar" viewBox="0 0 120 120" aria-hidden="true">
+                      <defs>
+                        <linearGradient id="dnaAreaGradient" x1="0" y1="0" x2="1" y2="1">
+                          <stop offset="0%" stop-color="#8b5cf6" stop-opacity=".9" />
+                          <stop offset="55%" stop-color="#4f7cff" stop-opacity=".7" />
+                          <stop offset="100%" stop-color="#22d3ee" stop-opacity=".82" />
+                        </linearGradient>
+                        <linearGradient id="dnaStrokeGradient" x1="0" y1="0" x2="1" y2="1">
+                          <stop offset="0%" stop-color="#a78bfa" />
+                          <stop offset="50%" stop-color="#4f7cff" />
+                          <stop offset="100%" stop-color="#22d3ee" />
+                        </linearGradient>
+                        <filter id="dnaGlow" x="-50%" y="-50%" width="200%" height="200%">
+                          <feGaussianBlur stdDeviation="2.5" result="blur" />
+                          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                        </filter>
+                      </defs>
+                      <polygon class="dna-grid dna-grid-outer" points="60,8 112,60 60,112 8,60" />
+                      <polygon class="dna-grid" points="60,25 95,60 60,95 25,60" />
+                      <polygon class="dna-grid" points="60,42 78,60 60,78 42,60" />
+                      <line class="dna-axis" x1="60" y1="8" x2="60" y2="112" />
+                      <line class="dna-axis" x1="8" y1="60" x2="112" y2="60" />
+                      <polygon class="dna-shape-glow" :points="demoDnaPolygon" />
+                      <polygon class="dna-shape" :points="demoDnaPolygon" />
+                      <circle
+                        v-for="(point, pointIndex) in demoDnaVertices"
+                        :key="pointIndex"
+                        class="dna-point"
+                        :cx="point.x"
+                        :cy="point.y"
+                        r="2.8"
+                      />
+                      <circle class="dna-center" cx="60" cy="60" r="2" />
+                    </svg>
+                  </div>
+                  <div class="dna-metrics">
+                    <div v-for="d in demoCurrent.dna" :key="d.label" class="dna-metric">
+                      <div class="dna-metric-head">
+                        <span class="dna-k">{{ d.label }}</span>
+                        <strong class="dna-v">{{ d.value }}</strong>
+                      </div>
+                      <div class="dna-track" aria-hidden="true">
+                        <i :style="{ width: `${d.value}%` }"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mc-reason">🐤 성장 선호와 {{ demoCurrent.sector }} 모멘텀(성장 {{ demoCurrent.dna[1].value }})이 맞아요.</div>
+              <div class="mc-interest">❤️ {{ demoCurrent.interest.toLocaleString('ko-KR') }}명이 이 종목에 관심 있어요</div>
+            </article>
+          </div>
+
+          <!-- 액션 버튼 -->
+          <div class="match-controls">
+            <button class="match-btn pass" type="button" aria-label="관심없음" @click="demoSwipe('pass')">✕</button>
+            <button class="match-btn save" type="button" aria-label="관심 종목 저장" @click="demoSwipe('save')">♥</button>
+            <button class="match-btn like" type="button" aria-label="관심" @click="demoSwipe('like')">↗</button>
+          </div>
+          <p class="match-hint">카드를 좌우로 드래그하거나 버튼을 눌러 넘길 수 있어요</p>
+        </template>
+
+        <!-- 10개 완료: 로그인 CTA -->
+        <div v-else class="demo-done">
+          <p class="demo-done-text">나만의 주식 매칭</p>
+          <button class="demo-login-btn" type="button" @click="router.push('/login')">로그인</button>
+        </div>
+      </section>
     </div>
 
   </div>
@@ -1218,11 +1684,73 @@ html[data-theme='dark'] .lp-slide.th-ai { background: linear-gradient(135deg, #1
 
 /* ===== 검색 바 ===== */
 .home-search {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 12px 20px;
 }
+
+/* 검색 드롭다운 (슬라이드 다운) */
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  padding: 8px;
+  border-radius: var(--radius);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 18px 44px rgba(17, 24, 39, 0.16);
+  max-height: 380px;
+  overflow-y: auto;
+}
+.sd-enter-active, .sd-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
+.sd-enter-from, .sd-leave-to { opacity: 0; transform: translateY(-8px); }
+
+.sd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 10px;
+}
+.sd-title { font-size: 13px; font-weight: 900; color: var(--ink); }
+.sd-time { font-size: 11px; font-weight: 700; color: var(--faint); }
+
+.sd-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+.sd-row:hover { background: var(--surface-soft); }
+.sd-rank { width: 16px; flex-shrink: 0; font-size: 13px; font-weight: 900; color: var(--muted); text-align: center; }
+.sd-avatar {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+}
+.sd-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sd-meta { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--faint); }
+.sd-rate { flex-shrink: 0; font-size: 13px; font-weight: 900; }
+.sd-up { color: var(--krx-up); }
+.sd-down { color: var(--krx-down); }
+.sd-empty { margin: 0; padding: 18px 10px; text-align: center; font-size: 13px; font-weight: 700; color: var(--muted); }
 
 .search-box {
   flex: 1;
@@ -1339,6 +1867,7 @@ html[data-theme='dark'] .lp-slide.th-ai { background: linear-gradient(135deg, #1
 /* 달성 완료 — 회전목마(코버플로) */
 .milestone-carousel { gap: 6px; text-align: center; }
 .milestone-done-title { font-size: 12px; font-weight: 900; color: var(--muted); }
+.carousel-empty { display: flex; flex: 1; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--faint); line-height: 1.4; }
 .carousel-stage {
   position: relative;
   flex: 1;
@@ -1417,7 +1946,8 @@ html[data-theme='dark'] .lp-slide.th-ai { background: linear-gradient(135deg, #1
 .asset-summary {
   display: flex;
   align-items: flex-end;
-  gap: 18px;
+  flex-wrap: wrap;
+  gap: 12px 18px;
 }
 .asset-total { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .asset-total-label { font-size: 12px; font-weight: 900; color: var(--muted); }
@@ -2032,10 +2562,11 @@ html[data-palette='love'] .match-btn.save {
 
 .index-spark { flex-shrink: 0; width: 72px; height: 32px; }
 
-.index-card.is-up-card :deep(.sparkline-line) { stroke: var(--accent); }
-.index-card.is-up-card :deep(.sparkline-fill) { fill: rgba(var(--accent-rgb), 0.08); }
-.index-card.is-down-card :deep(.sparkline-line) { stroke: var(--negative); }
-.index-card.is-down-card :deep(.sparkline-fill) { fill: rgba(207, 61, 61, 0.08); }
+/* 지수 스파크라인 — KRX 컨벤션: 우상향=빨강, 우하향=파랑 */
+.index-card.is-up-card :deep(.sparkline-line) { stroke: var(--krx-up); }
+.index-card.is-up-card :deep(.sparkline-fill) { fill: rgba(255, 59, 92, 0.08); }
+.index-card.is-down-card :deep(.sparkline-line) { stroke: var(--krx-down); }
+.index-card.is-down-card :deep(.sparkline-fill) { fill: rgba(0, 102, 204, 0.08); }
 
 .index-value {
   font-size: 20px;
@@ -2097,11 +2628,14 @@ html[data-palette='love'] .match-btn.save {
 .news-list { display: grid; gap: 2px; }
 
 .news-item {
+  display: block;
   padding: 14px 12px;
   border-radius: calc(var(--radius) - 2px);
   transition: background 0.15s ease;
   cursor: pointer;
   border-bottom: 1px solid var(--line);
+  text-decoration: none;
+  color: inherit;
 }
 
 .news-item:last-child { border-bottom: 0; }
@@ -2158,54 +2692,27 @@ html[data-palette='love'] .match-btn.save {
   font-weight: 700;
 }
 
-/* ===== 섹션 4: 보유종목 + 매매일기 ===== */
-.bottom-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
+.news-empty {
+  padding: 28px 12px;
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
 }
-.bottom-panel { display: flex; flex-direction: column; gap: 0; }
 
-.holdings-list { display: flex; flex-direction: column; }
-.holding-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 0; border-bottom: 1px solid var(--line);
-  font-size: 13px; cursor: pointer;
-  transition: background 0.15s;
+/* ===== 비로그인: 스와이핑 맛보기 (로그인 덱 디자인 재사용) ===== */
+.demo-swipe-panel { display: flex; flex-direction: column; justify-content: center; }
+.demo-done { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; padding: 40px 20px; }
+.demo-done-text { margin: 0; font-size: 18px; font-weight: 900; color: var(--ink); letter-spacing: -0.3px; }
+.demo-login-btn {
+  height: 48px; padding: 0 24px; border: 0; border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), var(--purple) 70%, #ff5b8f);
+  color: #fff; font-size: 15px; font-weight: 900; cursor: pointer;
+  box-shadow: 0 12px 30px rgba(var(--accent-rgb), 0.4);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
-.holding-row:last-child { border-bottom: none; }
-.holding-row:hover { background: var(--glass-subtle); border-radius: var(--radius); padding-left: 6px; }
-.hr-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.hr-info { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.hr-name { font-weight: 800; color: var(--ink); font-size: 13px; }
-.hr-ticker { font-size: 11px; color: var(--muted); }
-.hr-qty { color: var(--muted); font-size: 12px; white-space: nowrap; }
-.hr-price { font-size: 13px; font-weight: 700; color: var(--ink); white-space: nowrap; min-width: 80px; text-align: right; }
-.hr-pnl { font-weight: 900; font-size: 13px; min-width: 50px; text-align: right; }
-.hr-pnl.is-up { color: var(--krx-up) !important; }
-.hr-pnl.is-down { color: var(--krx-down) !important; }
-
-.diary-list { display: flex; flex-direction: column; }
-.diary-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 0; border-bottom: 1px solid var(--line);
-  cursor: pointer; transition: background 0.15s;
-}
-.diary-row:last-child { border-bottom: none; }
-.diary-row:hover { background: var(--glass-subtle); border-radius: var(--radius); padding-left: 6px; }
-.diary-date { font-size: 11px; color: var(--muted); font-weight: 700; white-space: nowrap; min-width: 80px; }
-.diary-info { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.diary-type-badge { padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 900; }
-.diary-stock { font-size: 12px; font-weight: 800; color: var(--ink); white-space: nowrap; }
-.diary-title { flex: 1; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.diary-write-btn {
-  margin-top: 14px; height: 34px; border-radius: 8px;
-  border: 1px dashed rgba(var(--accent-rgb), 0.3);
-  background: rgba(var(--accent-rgb), 0.04);
-  color: var(--accent); font-size: 13px; font-weight: 900;
-  cursor: pointer; transition: background 0.15s;
-}
-.diary-write-btn:hover { background: rgba(var(--accent-rgb), 0.1); }
+.demo-login-btn:hover { transform: translateY(-2px); box-shadow: 0 16px 38px rgba(var(--accent-rgb), 0.5); }
 
 /* ===== 반응형 ===== */
 @media (max-width: 1100px) {
@@ -2223,7 +2730,6 @@ html[data-palette='love'] .match-btn.save {
   .index-card:nth-child(2n) { border-right: 0; }
   .index-card:nth-child(n+3) { border-top: 1px solid var(--line); }
   .news-grid { grid-template-columns: 1fr; }
-  .bottom-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 600px) {

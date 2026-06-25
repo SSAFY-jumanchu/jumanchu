@@ -22,3 +22,7 @@ export const fetchLongtermRanking = (params) =>
 // 장투 케어 AI 리포트
 export const fetchLongtermReport = (code) =>
   client.get(`/longterm/${code}/report/`).then((r) => r.data)
+
+// 종목 장투 총점 히스토리 (소계×0.7 + 궁합×0.3, 상단 종합점수와 동일) → { items: [{ date, month, score }] }
+export const fetchLongtermHistory = (code) =>
+  client.get(`/longterm/${code}/history/`).then((r) => r.data)

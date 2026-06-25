@@ -32,6 +32,10 @@ export const fetchStockPosts = (code, params) =>
 export const fetchMarketSummary = () =>
   client.get('/markets/summary/').then((r) => r.data)
 
+// 인기 종목 랭킹. params: { market: all|domestic|overseas, sort: value|volume|up|down, size } → { items, ... }
+export const fetchPopularRanking = (params) =>
+  client.get('/markets/popular/', { params }).then((r) => r.data)
+
 // 경제 이벤트 캘린더
 export const fetchEconomicEvents = (params) =>
   client.get('/economic-events/', { params }).then((r) => r.data)

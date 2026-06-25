@@ -22,11 +22,13 @@ const periods = [
 ]
 const selectedSectors = ref([])
 const selectedPeriod = ref(null)
+const sectorWarning = ref(false)   // 섹터 미선택 상태로 진행 시도 시 경고
 
 function toggleSector(s) {
   const idx = selectedSectors.value.indexOf(s)
   if (idx === -1) selectedSectors.value.push(s)
   else selectedSectors.value.splice(idx, 1)
+  if (selectedSectors.value.length > 0) sectorWarning.value = false
 }
 
 // ===== Step 1~6: 투자 성향 설문 =====
@@ -115,9 +117,36 @@ const currentAnswer = computed(() => {
   return answers.value[currentQuestion.value.id] ?? null
 })
 
+// 사전 설정(step 0): 섹터 선택 후 '다음' → 기간 선택 노출, 기간 선택 시 설문으로 자동 진행
+const periodOpen = ref(false)
+function openPeriod() {
+  if (selectedSectors.value.length === 0) return
+  periodOpen.value = true
+}
+
+// 설문 옵션/기간 선택 → 선택 애니메이션을 보여준 뒤 자동으로 다음 단계로
+const advancing = ref(false)
 function selectOption(score) {
-  if (!currentQuestion.value) return
+  if (!currentQuestion.value || advancing.value) return
   answers.value[currentQuestion.value.id] = score
+  advancing.value = true
+  setTimeout(() => {
+    step.value = step.value < 6 ? step.value + 1 : 7
+    advancing.value = false
+  }, 450)
+}
+function selectPeriod(value) {
+  if (advancing.value) return
+  if (selectedSectors.value.length === 0) {   // 섹터 미선택이면 진행 차단 + 경고
+    sectorWarning.value = true
+    return
+  }
+  selectedPeriod.value = value
+  advancing.value = true
+  setTimeout(() => {
+    step.value = 1
+    advancing.value = false
+  }, 450)
 }
 
 const riskResult = computed(() => {
@@ -126,17 +155,6 @@ const riskResult = computed(() => {
   if (s <= 22) return { label: '중립형', emoji: '⚖️', colorVar: 'var(--accent)', desc: '수익과 안정성의 균형을 추구하는 균형형 투자자입니다.' }
   return { label: '공격형', emoji: '🚀', colorVar: 'var(--purple)', desc: '높은 수익을 위해 위험도 기꺼이 감수하는 공격형 투자자입니다.' }
 })
-
-const canProceed = computed(() => {
-  if (step.value === 0) return selectedSectors.value.length > 0 && selectedPeriod.value !== null
-  if (currentQuestion.value) return currentAnswer.value !== null
-  return true
-})
-
-function next() {
-  if (!canProceed.value) return
-  step.value = step.value < 6 ? step.value + 1 : 7
-}
 
 function prev() {
   if (step.value > 0) step.value--
@@ -215,6 +233,8 @@ function displayScore(q, score) {
       <div class="ob-progress-track">
         <div class="ob-progress-fill" :style="{ width: `${(step / 6) * 100}%` }"></div>
       </div>
+
+      <!-- 문항 표시 -->
       <div class="ob-step-indicator">
         <span>{{ step === 0 ? '사전 설정' : `문항 ${step} / 6` }}</span>
         <span v-if="step >= 1" class="ob-score-inline">누적 점수 {{ accumulatedScore }}점</span>
@@ -250,24 +270,33 @@ function displayScore(q, score) {
             </div>
           </div>
 
-          <div class="ob-section">
-            <p class="ob-section-label">
-              선호 보유 기간
-              <span class="ob-hint">단일 선택</span>
-            </p>
-            <div class="period-chips">
-              <button
-                v-for="p in periods"
-                :key="p.value"
-                type="button"
-                class="period-chip"
-                :class="{ 'is-selected': selectedPeriod === p.value }"
-                @click="selectedPeriod = p.value"
-              >
-                {{ p.label }}
-              </button>
-            </div>
+          <!-- 섹터 선택 후 '다음' 버튼 (기간 자리에 표시) → 누르면 기간 선택 노출 -->
+          <div v-if="!periodOpen && selectedSectors.length > 0" class="ob-section">
+            <button class="ob-btn-next ob-inline-next" type="button" @click="openPeriod">다음</button>
           </div>
+
+          <!-- 선호 보유 기간 ('다음' 누른 후, 선택 시 자동 진행) -->
+          <Transition name="ob-reveal">
+            <div v-if="periodOpen" class="ob-section">
+              <p class="ob-section-label">
+                선호 보유 기간
+                <span class="ob-hint">단일 선택 · 선택 시 다음으로</span>
+              </p>
+              <div class="period-chips">
+                <button
+                  v-for="p in periods"
+                  :key="p.value"
+                  type="button"
+                  class="period-chip"
+                  :class="{ 'is-selected': selectedPeriod === p.value }"
+                  @click="selectPeriod(p.value)"
+                >
+                  {{ p.label }}
+                </button>
+              </div>
+              <p v-if="sectorWarning" class="ob-warn">관심 섹터를 선택해 주세요</p>
+            </div>
+          </Transition>
         </div>
 
         <!-- Step 1~6: 설문 문항 -->
@@ -299,6 +328,7 @@ function displayScore(q, score) {
                 <strong class="ob-option-title">{{ opt.title }}</strong>
                 <p class="ob-option-desc">{{ opt.desc }}</p>
               </div>
+              <span class="ob-option-check" aria-hidden="true">✓</span>
             </button>
           </div>
 
@@ -308,16 +338,12 @@ function displayScore(q, score) {
         </div>
       </div>
 
-      <!-- 네비게이션 -->
-      <div class="ob-nav">
-        <button v-if="step > 0" class="ob-btn-back" type="button" @click="prev">이전</button>
-        <button
-          class="ob-btn-next"
-          type="button"
-          :disabled="!canProceed"
-          @click="next"
-        >
-          {{ step === 6 ? '결과 확인' : '다음' }}
+      <!-- 이전으로 가기 (박스 아래 가운데, 설문/기간 단계에서만) -->
+      <div v-if="step > 0" class="ob-back-row">
+        <button class="ob-back-btn" type="button" aria-label="이전으로 가기" @click="prev">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
         </button>
       </div>
     </div>
@@ -345,7 +371,7 @@ function displayScore(q, score) {
 }
 
 /* ===== 페이지 헤더 ===== */
-.ob-page-header { text-align: center; }
+.ob-page-header { text-align: center; margin-bottom: 16px; }
 
 .ob-page-title {
   font-size: 38px;
@@ -388,6 +414,25 @@ function displayScore(q, score) {
   color: var(--accent);
   font-weight: 900;
 }
+
+/* 이전으로 가기 ('<' 버튼, 카드 아래 가운데) */
+.ob-back-row { display: flex; justify-content: center; }
+.ob-back-btn {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--surface-soft);
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: var(--glass-shadow);
+  transition: background 0.18s, color 0.18s, transform 0.18s;
+}
+.ob-back-btn:hover { background: var(--surface-hover); color: var(--ink); transform: translateX(-2px); }
+.ob-back-btn svg { width: 20px; height: 20px; }
 
 /* ===== 카드 (panel 재사용) ===== */
 .ob-card { padding: 24px; }
@@ -542,6 +587,20 @@ function displayScore(q, score) {
   background: rgba(var(--purple-rgb), 0.1);
   color: var(--purple);
   box-shadow: 0 0 0 1px rgba(var(--purple-rgb), 0.15), var(--glass-shadow);
+  animation: obSelectPop 0.42s ease;
+}
+
+/* 기간 선택 영역 등장 트랜지션 ('다음' 누른 뒤 펼쳐짐) */
+.ob-reveal-enter-active { transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.ob-reveal-enter-from { opacity: 0; transform: translateY(-8px); }
+
+/* 섹터 미선택 경고 */
+.ob-warn {
+  margin: 14px 0 0;
+  text-align: center;
+  color: var(--negative, #cf3d3d);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 /* ===== 설문 옵션 (Step 1~6) ===== */
@@ -578,6 +637,37 @@ function displayScore(q, score) {
   background: rgba(var(--accent-rgb), 0.07);
   box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.2), var(--glass-shadow), var(--glass-inset);
   transform: translateY(-1px);
+  animation: obSelectPop 0.42s ease;
+}
+
+@keyframes obSelectPop {
+  0% { transform: translateY(-1px) scale(1); }
+  40% { transform: translateY(-1px) scale(1.025); }
+  100% { transform: translateY(-1px) scale(1); }
+}
+
+/* 선택 체크 표시 (선택 시 팝업 등장) */
+.ob-option-check {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  opacity: 0;
+  transform: scale(0.3);
+  transition: opacity 0.2s ease, transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.5);
+}
+.ob-option.is-selected .ob-option-check { opacity: 1; transform: scale(1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-option.is-selected { animation: none; }
+  .ob-option-check { transition: opacity 0.15s ease; }
 }
 
 .ob-option-badge {
@@ -633,33 +723,8 @@ function displayScore(q, score) {
   text-align: center;
 }
 
-/* ===== 네비게이션 ===== */
-.ob-nav {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.ob-btn-back {
-  min-height: 46px;
-  padding: 0 22px;
-  border-radius: var(--radius);
-  border: 1px solid var(--glass-border);
-  background: var(--surface-soft);
-  backdrop-filter: var(--glass-blur-sm);
-  -webkit-backdrop-filter: var(--glass-blur-sm);
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 900;
-  flex-shrink: 0;
-  box-shadow: var(--glass-shadow), var(--glass-inset);
-  transition: background 0.18s, color 0.18s;
-}
-
-.ob-btn-back:hover {
-  background: var(--surface-hover);
-  color: var(--ink);
-}
+/* ===== 다음 버튼 ===== */
+.ob-inline-next { width: 100%; }
 
 .ob-btn-next {
   flex: 1;
