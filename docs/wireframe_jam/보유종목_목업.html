@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1200">
+<title>주만추 — 보유 종목 목업</title>
+<style>
+  :root{
+    --accent:#315dff; --purple:#7d4ee8; --ink:#1f2a4d; --muted:#5a6a8a; --faint:#9aa8c4;
+    --line:rgba(150,175,235,.30); --glass:rgba(255,255,255,.55); --glass-border:rgba(255,255,255,.65);
+    --radius:16px; --rise:#e84057; --fall:#3b6fd4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Pretendard','Apple SD Gothic Neo',system-ui,-apple-system,sans-serif;
+    background:linear-gradient(135deg,#e9e4ff 0%,#dceeff 46%,#dff5ec 100%);color:var(--ink);min-height:100vh;padding:0 0 50px}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 18px}
+  .panel{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border:1px solid var(--glass-border);border-radius:var(--radius);box-shadow:0 8px 30px rgba(60,80,160,.08)}
+  .pad{padding:18px}
+  .eyebrow{font-size:12px;font-weight:800;color:var(--muted);margin:0 0 6px}
+  .is-up{color:var(--rise)} .is-down{color:var(--fall)}
+
+  nav{background:rgba(255,255,255,.6);backdrop-filter:blur(10px);border-bottom:1px solid var(--glass-border);position:sticky;top:0;z-index:10}
+  .nav-in{max-width:1160px;margin:0 auto;display:flex;align-items:center;gap:22px;padding:12px 18px}
+  .logo{font-size:20px;font-weight:900;color:var(--accent);border:2px solid var(--accent);border-radius:8px;padding:2px 8px}
+  .nav-menu{display:flex;gap:20px;font-size:14px;font-weight:800;color:var(--muted)}
+  .nav-menu .on{color:var(--accent);background:rgba(49,93,255,.1);padding:4px 12px;border-radius:999px}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-weight:700}
+  .logo-mini{border-radius:7px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0}
+
+  .page-head{display:flex;align-items:flex-end;gap:12px;margin:20px 0 14px}
+  .page-head h1{font-size:24px;font-weight:900;margin:0}
+  .page-head .badge{font-size:11px;font-weight:800;color:var(--muted);background:rgba(255,255,255,.5);border:1px solid var(--glass-border);padding:4px 10px;border-radius:999px;margin-bottom:4px}
+
+  .layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:16px;align-items:start}
+
+  /* 상단: 요약(세로) + 바로가기 */
+  .top-row{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:14px;margin-bottom:16px}
+  .sum-item{display:flex;align-items:baseline;justify-content:space-between;padding:10px 0;border-top:1px solid var(--line)}
+  .sum-item:first-of-type{border-top:0;padding-top:2px}
+  .sum-label{font-size:13px;font-weight:800;color:var(--muted)}
+  .sum-value{font-size:18px;font-weight:900}
+  .sum-value.big{font-size:25px}
+  .sum-value small{font-size:13px;font-weight:700;margin-left:1px}
+  .act-btns{display:flex;flex-direction:column;gap:8px;margin-top:2px}
+  .act-btns button{display:flex;align-items:center;gap:7px;border:1px solid var(--glass-border);background:rgba(255,255,255,.62);border-radius:10px;padding:12px;font-size:13.5px;font-weight:800;color:var(--ink);cursor:pointer;text-align:left}
+  .act-btns button:hover{background:#fff}
+
+  /* 보유 목록 */
+  .panel-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 10px}
+  .panel-head h2{font-size:15px;font-weight:900;margin:0}
+  .seg{display:inline-flex;background:rgba(255,255,255,.5);border:1px solid var(--glass-border);border-radius:999px;padding:3px}
+  .seg button{border:0;background:transparent;font-size:12px;font-weight:800;color:var(--muted);padding:5px 13px;border-radius:999px;cursor:pointer}
+  .seg button.on{background:var(--accent);color:#fff}
+
+  .hrow{display:grid;grid-template-columns:minmax(0,1fr) 76px 132px;gap:12px;align-items:center;
+    padding:13px 18px;border-top:1px solid var(--line);cursor:pointer;transition:background .12s}
+  .hrow:hover{background:rgba(255,255,255,.4)}
+  .hrow.sel{background:rgba(49,93,255,.08);box-shadow:inset 3px 0 0 var(--accent)}
+  .hname{display:flex;align-items:center;gap:9px}
+  .hname .logo-mini{width:30px;height:30px;font-size:12px}
+  .hnm{font-size:15px;font-weight:900}
+  .hsub{font-size:11px;color:var(--faint);font-weight:700;margin-top:2px}
+  .hqty{font-size:11.5px;color:var(--muted);font-weight:700;margin-top:3px}
+  .spark{height:34px}
+  .hval{text-align:right}
+  .heval{font-size:15px;font-weight:900}
+  .hpnl{font-size:12px;font-weight:800;margin-top:2px}
+
+  /* 자산 구성 */
+  .alloc-bar{display:flex;height:14px;border-radius:8px;overflow:hidden;margin:10px 0 10px}
+  .alloc-row{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;font-weight:800;padding:5px 0}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+
+  /* 상세 */
+  .dt-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+  .dt-name{font-size:18px;font-weight:900}
+  .dt-code{font-size:11px;color:var(--faint);font-weight:700}
+  .dt-rows{margin-top:6px}
+  .dt-r{display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-top:1px solid var(--line)}
+  .dt-r .k{color:var(--muted);font-weight:700}
+  .dt-r .v{font-weight:900}
+  .dt-btns{display:flex;gap:8px;margin-top:14px}
+  .dt-btns button{flex:1;border:0;border-radius:10px;padding:11px;font-size:13px;font-weight:900;cursor:pointer}
+  .b-buy{background:var(--rise);color:#fff} .b-sell{background:var(--fall);color:#fff}
+  .b-detail{display:block;width:100%;margin-top:8px;text-align:center;font-size:13px;font-weight:900;color:var(--accent);background:rgba(49,93,255,.09);border:1px solid rgba(49,93,255,.22);border-radius:10px;padding:10px;cursor:pointer}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <span class="logo">주만추</span>
+    <div class="nav-menu"><span>홈</span><span>피드</span><span>주식 조회</span><span class="on">보유 종목</span><span>매매일기</span><span>장투 케어</span></div>
+    <div class="nav-right"><span class="logo-mini" style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple))">김</span> 김주만</div>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="page-head">
+    <h1>보유 종목</h1>
+    <span class="badge">● 가상 계좌 기준</span>
+  </div>
+
+  <div class="layout">
+    <!-- ===== 왼쪽: 요약+바로가기 / 보유목록 ===== -->
+    <div>
+      <div class="top-row">
+        <section class="panel pad" id="summary"></section>
+        <section class="panel pad">
+          <p class="eyebrow">바로가기</p>
+          <div class="act-btns">
+            <button>📋 주문내역</button>
+            <button>📓 매매일지</button>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>보유 종목 목록</h2>
+          <div class="seg"><button class="on">전체</button><button>국내</button><button>해외</button></div>
+        </div>
+        <div id="list"></div>
+      </section>
+    </div>
+
+    <!-- ===== 오른쪽: 자산구성 / 상세 ===== -->
+    <div>
+      <section class="panel pad">
+        <p class="eyebrow">자산 구성 (국내·해외)</p>
+        <div id="alloc"></div>
+      </section>
+      <section class="panel pad" style="margin-top:16px" id="detail"></section>
+    </div>
+  </div>
+</div>
+
+<script>
+const RISE='#e84057', FALL='#3b6fd4', FX=1380;
+const holdings=[
+  {code:'000660',name:'SK하이닉스',logo:'SK',lc:'#e1331a',market:'KOSPI',sector:'전기·전자',qty:15,avg:172000,cur:189300,spark:[68,70,67,72,74,71,75,73,76,79,78,81]},
+  {code:'005930',name:'삼성전자',logo:'삼',lc:'#1428a0',market:'KOSPI',sector:'전기·전자',qty:40,avg:73500,cur:71200,spark:[82,80,78,75,77,74,72,73,70,68,66,64]},
+  {code:'NVDA',name:'NVIDIA',logo:'NV',lc:'#76b900',market:'NASDAQ',sector:'반도체',qty:8,avg:820,cur:1074,spark:[55,57,56,59,61,63,62,65,67,69,71,73]},
+  {code:'AAPL',name:'Apple',logo:'A',lc:'#555',market:'NASDAQ',sector:'IT·소비재',qty:20,avg:185,cur:192,spark:[50,53,52,56,58,61,60,64,66,69,71,74]},
+  {code:'035420',name:'NAVER',logo:'N',lc:'#03c75a',market:'KOSPI',sector:'IT·소프트웨어',qty:5,avg:195000,cur:214000,spark:[44,48,47,52,55,58,62,65,68,72,75,79]},
+];
+
+const krw=h=>h.market==='KOSPI'||h.market==='KOSDAQ';
+const evalAmt=h=>h.qty*h.cur;
+const cost=h=>h.qty*h.avg;
+const pnl=h=>(h.cur-h.avg)*h.qty;
+const rate=h=>(h.cur-h.avg)/h.avg*100;
+const evalKRW=h=>krw(h)?evalAmt(h):evalAmt(h)*FX;
+const costKRW=h=>krw(h)?cost(h):cost(h)*FX;
+const col=v=>v>0?RISE:(v<0?FALL:'#888');
+const sign=v=>v>0?'+':'';
+function money(v,isk){return isk? Math.round(v).toLocaleString('ko-KR')+'원' : '$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function man(v){return Math.round(v/10000).toLocaleString();}
+
+function sparkSVG(pts){
+  const w=78,h=34,min=Math.min(...pts),max=Math.max(...pts),rng=max-min||1;
+  const up=pts[pts.length-1]>=pts[0], c=up?RISE:FALL;
+  const d=pts.map((p,i)=>`${i?'L':'M'}${(i/(pts.length-1)*w).toFixed(1)},${(h-3-(p-min)/rng*(h-6)).toFixed(1)}`).join(' ');
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="${d}" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+const totalEval=holdings.reduce((s,h)=>s+evalKRW(h),0);
+const totalCost=holdings.reduce((s,h)=>s+costKRW(h),0);
+const totalPnl=totalEval-totalCost;
+const totalRet=totalPnl/totalCost*100;
+
+function renderSummary(){
+  const up=totalPnl>=0;
+  document.getElementById('summary').innerHTML=`
+    <p class="eyebrow">내 자산 요약</p>
+    <div class="sum-item"><span class="sum-label">현재 총 평가액</span><span class="sum-value big">${man(totalEval)}<small>만원</small></span></div>
+    <div class="sum-item"><span class="sum-label">총 평가 손익</span><span class="sum-value ${up?'is-up':'is-down'}">${sign(totalPnl)}${man(totalPnl)}만원 (${sign(totalRet)}${totalRet.toFixed(2)}%)</span></div>
+    <div class="sum-item"><span class="sum-label">총 투자원금</span><span class="sum-value">${man(totalCost)}만원</span></div>`;
+}
+
+function renderAlloc(){
+  const dom=holdings.filter(krw).reduce((s,h)=>s+evalKRW(h),0);
+  const ovs=totalEval-dom;
+  const dp=dom/totalEval*100, op=ovs/totalEval*100;
+  document.getElementById('alloc').innerHTML=`
+    <div class="alloc-bar"><div style="width:${dp}%;background:var(--accent)"></div><div style="width:${op}%;background:var(--purple)"></div></div>
+    <div class="alloc-row"><span><span class="dot" style="background:var(--accent)"></span>국내주식</span><span>${man(dom)}만원 · ${dp.toFixed(1)}%</span></div>
+    <div class="alloc-row"><span><span class="dot" style="background:var(--purple)"></span>해외주식</span><span>${man(ovs)}만원 · ${op.toFixed(1)}%</span></div>`;
+}
+
+let sel=0;
+function renderList(){
+  document.getElementById('list').innerHTML=holdings.map((h,i)=>{
+    const p=pnl(h), r=rate(h), isk=krw(h);
+    return `<div class="hrow ${i===sel?'sel':''}" data-i="${i}">
+      <div class="hname">
+        <span class="logo-mini" style="background:${h.lc}">${h.logo}</span>
+        <div>
+          <div class="hnm">${h.name}</div>
+          <div class="hsub">${h.market} · ${h.sector}</div>
+          <div class="hqty">${h.qty}주 · 평단 ${money(h.avg,isk)}</div>
+        </div>
+      </div>
+      <div>${sparkSVG(h.spark)}</div>
+      <div class="hval">
+        <div class="heval">${money(evalAmt(h),isk)}</div>
+        <div class="hpnl" style="color:${col(p)}">${sign(p)}${money(Math.abs(p),isk)} (${sign(r)}${r.toFixed(2)}%)</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderDetail(){
+  const h=holdings[sel], isk=krw(h), p=pnl(h), r=rate(h);
+  document.getElementById('detail').innerHTML=`
+    <div class="dt-top">
+      <div><div class="dt-name">${h.name}</div><span class="dt-code">${h.code} · ${h.market}</span></div>
+      <span class="logo-mini" style="width:34px;height:34px;font-size:13px;background:${h.lc}">${h.logo}</span>
+    </div>
+    <div class="dt-rows">
+      <div class="dt-r"><span class="k">보유 수량</span><span class="v">${h.qty.toLocaleString()}주</span></div>
+      <div class="dt-r"><span class="k">평균 단가</span><span class="v">${money(h.avg,isk)}</span></div>
+      <div class="dt-r"><span class="k">현재가</span><span class="v">${money(h.cur,isk)}</span></div>
+      <div class="dt-r"><span class="k">평가 금액</span><span class="v">${money(evalAmt(h),isk)}</span></div>
+      <div class="dt-r"><span class="k">평가 손익</span><span class="v" style="color:${col(p)}">${sign(p)}${money(Math.abs(p),isk)}</span></div>
+      <div class="dt-r"><span class="k">수익률</span><span class="v" style="color:${col(p)}">${sign(r)}${r.toFixed(2)}%</span></div>
+    </div>
+    <div class="dt-btns"><button class="b-buy">매수</button><button class="b-sell">매도</button></div>
+    <button class="b-detail">종목 상세 보기 →</button>`;
+}
+
+document.getElementById('list').addEventListener('click',e=>{
+  const row=e.target.closest('[data-i]');
+  if(row){sel=+row.dataset.i; renderList(); renderDetail();}
+});
+
+renderSummary(); renderAlloc(); renderList(); renderDetail();
+</script>
+</body>
+</html>

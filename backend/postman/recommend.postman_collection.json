@@ -1,0 +1,167 @@
+{
+  "info": {
+    "name": "주만추 추천·재무 (Recommend & Financials)",
+    "description": "스와이프 궁합 추천(SCRUM-25) + 재무 요약(SCRUM-138) end-to-end. 1~8을 순서대로 실행하면 회원가입→로그인→온보딩→재무조회→추천→관심추가→추천에서 제외까지 검증됩니다.\n\n전제: runserver(:8000) 실행 + DB(stock_dna/StockPrice 적재)·온보딩 가능 상태. 추천은 온보딩 완료가 필요하므로 반드시 3번(온보딩) 후 5번을 실행하세요.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000/api/v1" },
+    { "key": "password", "value": "Jumanchu2026!" },
+    { "key": "email", "value": "" },
+    { "key": "username", "value": "" },
+    { "key": "nickname", "value": "" },
+    { "key": "accessToken", "value": "" },
+    { "key": "stockCode", "value": "005930" },
+    { "key": "topStockCode", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. 회원가입 (201)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": { "type": "text/javascript", "exec": [
+            "const n = Math.floor(Math.random() * 1000000);",
+            "pm.collectionVariables.set('username', 'rec_user_' + n);",
+            "pm.collectionVariables.set('nickname', 'rec' + n);",
+            "pm.collectionVariables.set('email', 'rec_user_' + n + '@test.com');"
+          ] }
+        },
+        {
+          "listen": "test",
+          "script": { "type": "text/javascript", "exec": [
+            "pm.test('상태코드 201', () => pm.response.to.have.status(201));"
+          ] }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"password_confirm\": \"{{password}}\",\n  \"username\": \"{{username}}\",\n  \"nickname\": \"{{nickname}}\",\n  \"birth_year\": 1995,\n  \"agree_terms\": true\n}" },
+        "url": "{{baseUrl}}/auth/signup/"
+      }
+    },
+    {
+      "name": "2. 로그인 (200, accessToken 저장)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const body = pm.response.json();",
+          "pm.test('access 토큰 존재', () => pm.expect(body.access).to.be.a('string'));",
+          "pm.collectionVariables.set('accessToken', body.access);"
+        ] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}" },
+        "url": "{{baseUrl}}/auth/login/"
+      }
+    },
+    {
+      "name": "3. 온보딩 (200, 공격형 + 관심섹터 전기·전자)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const body = pm.response.json();",
+          "pm.test('investor_type 존재', () => pm.expect(body.investor_type).to.have.property('type'));"
+        ] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"q1\": 5, \"q2\": 5, \"q3\": 5, \"q4\": 5, \"q5\": 5, \"q6\": 5,\n  \"preferred_sectors\": [\"전기·전자\", \"제약\"],\n  \"preferred_period\": 12\n}" },
+        "url": "{{baseUrl}}/auth/onboarding/"
+      }
+    },
+    {
+      "name": "4. 재무 요약 (200) /stocks/{code}/financials/",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const body = pm.response.json();",
+          "pm.test('indicator 존재', () => pm.expect(body).to.have.property('indicator'));",
+          "pm.test('summaries 배열', () => pm.expect(body.summaries).to.be.an('array'));"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/{{stockCode}}/financials/"
+      }
+    },
+    {
+      "name": "5. 스와이프 추천 (200, 정렬·dna·reason)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const body = pm.response.json();",
+          "pm.test('items 배열', () => pm.expect(body.items).to.be.an('array'));",
+          "if (body.items.length) {",
+          "  pm.collectionVariables.set('topStockCode', body.items[0].stock_code);",
+          "  const scores = body.items.map(x => x.match_score);",
+          "  const sorted = [...scores].sort((a, b) => b - a);",
+          "  pm.test('궁합점수 내림차순', () => pm.expect(scores).to.eql(sorted));",
+          "  pm.test('카드에 DNA 4축', () => pm.expect(body.items[0].dna).to.have.all.keys('volatility', 'value_score', 'growth_score', 'stability'));",
+          "  pm.test('reason 존재', () => pm.expect(body.items[0].reason).to.be.a('string').and.to.have.length.above(1));",
+          "  pm.test('rank=1', () => pm.expect(body.items[0].rank).to.eql(1));",
+          "}"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{accessToken}}" } ],
+        "url": "{{baseUrl}}/recommendations/?limit=30"
+      }
+    },
+    {
+      "name": "6. 추천 1등을 관심종목 추가 (201)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 201', () => pm.response.to.have.status(201));"
+        ] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"stock_code\": \"{{topStockCode}}\"\n}" },
+        "url": "{{baseUrl}}/watchlist/"
+      }
+    },
+    {
+      "name": "7. 추천 재요청 → 담은 종목 제외 확인 (200)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const body = pm.response.json();",
+          "const codes = body.items.map(x => x.stock_code);",
+          "pm.test('담은 종목은 추천에서 제외됨', () => pm.expect(codes).to.not.include(pm.collectionVariables.get('topStockCode')));"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{accessToken}}" } ],
+        "url": "{{baseUrl}}/recommendations/?limit=30"
+      }
+    },
+    {
+      "name": "8. 인증 없이 추천 (401)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 401', () => pm.response.to.have.status(401));"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/recommendations/"
+      }
+    }
+  ]
+}

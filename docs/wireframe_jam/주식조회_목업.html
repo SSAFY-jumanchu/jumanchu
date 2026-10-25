@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1200">
+<title>주만추 — 주식 조회 목업 (뉴스 기반 AI)</title>
+<style>
+  :root{
+    --accent:#315dff; --purple:#7d4ee8; --ink:#1f2a4d; --muted:#5a6a8a; --faint:#9aa8c4;
+    --line:rgba(150,175,235,.30); --glass:rgba(255,255,255,.55); --glass-border:rgba(255,255,255,.65);
+    --radius:16px; --rise:#e84057; --fall:#3b6fd4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Pretendard','Apple SD Gothic Neo',system-ui,-apple-system,sans-serif;
+    background:linear-gradient(135deg,#e9e4ff 0%,#dceeff 46%,#dff5ec 100%);color:var(--ink);min-height:100vh;padding:0 0 50px}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 18px}
+  .panel{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border:1px solid var(--glass-border);border-radius:var(--radius);box-shadow:0 8px 30px rgba(60,80,160,.08)}
+  .pad{padding:18px}
+  .eyebrow{font-size:12px;font-weight:800;color:var(--muted);margin:0}
+  .av{border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0}
+
+  nav{background:rgba(255,255,255,.6);backdrop-filter:blur(10px);border-bottom:1px solid var(--glass-border);position:sticky;top:0;z-index:10}
+  .nav-in{max-width:1160px;margin:0 auto;display:flex;align-items:center;gap:22px;padding:12px 18px}
+  .logo{font-size:20px;font-weight:900;color:var(--accent);border:2px solid var(--accent);border-radius:8px;padding:2px 8px}
+  .nav-menu{display:flex;gap:20px;font-size:14px;font-weight:800;color:var(--muted)}
+  .nav-menu .on{color:var(--accent);background:rgba(49,93,255,.1);padding:4px 12px;border-radius:999px}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-weight:700}
+
+  /* 헤더 + 필터 */
+  .page-head{display:flex;align-items:flex-end;gap:14px;margin:20px 0 14px}
+  .page-head h1{font-size:24px;font-weight:900;margin:0}
+  .page-head .sub{font-size:12px;color:var(--faint);font-weight:700;margin-bottom:3px}
+  .filters{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .seg{display:inline-flex;background:rgba(255,255,255,.5);border:1px solid var(--glass-border);border-radius:999px;padding:3px}
+  .seg button{border:0;background:transparent;font-size:13px;font-weight:800;color:var(--muted);padding:6px 14px;border-radius:999px;cursor:pointer}
+  .seg button.on{background:var(--accent);color:#fff}
+  .sort-pills{display:flex;gap:6px;margin-left:auto}
+  .sort-pills button{border:1px solid var(--glass-border);background:rgba(255,255,255,.5);font-size:12px;font-weight:800;color:var(--muted);padding:6px 12px;border-radius:999px;cursor:pointer}
+  .sort-pills button.on{background:rgba(49,93,255,.12);color:var(--accent);border-color:rgba(49,93,255,.3)}
+
+  .grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:16px;align-items:start}
+
+  /* 랭킹 리스트 */
+  .list-head{display:grid;grid-template-columns:34px minmax(0,1fr) 88px 116px;gap:10px;padding:6px 14px;font-size:11px;font-weight:800;color:var(--faint)}
+  .list-head .r{text-align:right}
+  .row{display:grid;grid-template-columns:34px minmax(0,1fr) 88px 116px;gap:10px;align-items:center;
+    padding:12px 14px;border-top:1px solid var(--line);cursor:pointer;transition:background .12s}
+  .row:hover{background:rgba(255,255,255,.4)}
+  .row.sel{background:rgba(49,93,255,.08);box-shadow:inset 3px 0 0 var(--accent)}
+  .rk{font-size:15px;font-weight:900;color:var(--muted);text-align:center}
+  .nm{font-size:15px;font-weight:900;display:flex;align-items:center;gap:6px}
+  .logo-mini{width:22px;height:22px;border-radius:6px;font-size:10px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0}
+  .meta{font-size:11px;color:var(--faint);font-weight:700;margin-top:2px}
+  .ai-line{font-size:12px;color:var(--ink);font-weight:600;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .spark{height:30px}
+  .pblock{text-align:right}
+  .price{font-size:14px;font-weight:900}
+  .chg{font-size:12px;font-weight:800;margin-top:2px}
+  .vol{font-size:10px;color:var(--faint);font-weight:700;margin-top:2px}
+  .heart{font-size:15px;color:var(--faint);cursor:pointer;margin-left:4px}
+  .heart.on{color:var(--rise)}
+
+  /* 상세 패널 */
+  .dt-top{display:flex;align-items:center;justify-content:space-between}
+  .dt-name{font-size:19px;font-weight:900}
+  .dt-code{font-size:11px;color:var(--faint);font-weight:700}
+  .dt-price{font-size:24px;font-weight:900;margin:10px 0 1px}
+  .dt-chg{font-size:14px;font-weight:900}
+  .dt-chart{margin-top:14px;padding:10px 12px 6px;border-radius:12px;background:rgba(255,255,255,.42);border:1px solid var(--line)}
+  .dt-chart-tabs{display:flex;gap:12px;font-size:11px;font-weight:800;color:var(--faint);margin-bottom:4px}
+  .dt-chart-tabs .on{color:var(--accent)}
+  .ai-card{margin-top:14px;padding:13px 14px;border-radius:12px;background:linear-gradient(135deg,rgba(125,78,232,.1),rgba(49,93,255,.08));border:1px solid rgba(125,78,232,.18)}
+  .ai-card .tag{font-size:11px;font-weight:900;color:var(--purple)}
+  .ai-card .txt{font-size:14px;font-weight:700;line-height:1.5;margin-top:5px}
+  .sec-title{font-size:13px;font-weight:900;margin:18px 0 8px;display:flex;align-items:center;gap:6px}
+  .news-item{padding:9px 0;border-top:1px solid var(--line)}
+  .news-item .t{font-size:13px;font-weight:700;line-height:1.45}
+  .news-item .s{font-size:11px;color:var(--faint);font-weight:700;margin-top:3px}
+  .cm-item{display:flex;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+  .cm-item .av{width:28px;height:28px;font-size:11px}
+  .cm-item .cu{font-size:12px;font-weight:800}
+  .cm-item .ct{font-size:11px;color:var(--faint);font-weight:700;margin-left:5px}
+  .cm-item .cc{font-size:12.5px;color:var(--ink);margin-top:2px;line-height:1.4}
+  .dt-btn{display:block;width:100%;margin-top:16px;text-align:center;font-size:13px;font-weight:900;color:#fff;background:var(--accent);border:0;border-radius:10px;padding:12px;cursor:pointer}
+  .empty{font-size:12px;color:var(--faint);padding:8px 0}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <span class="logo">주만추</span>
+    <div class="nav-menu"><span>홈</span><span>피드</span><span class="on">주식 조회</span><span>보유 종목</span><span>매매일기</span><span>장투 케어</span></div>
+    <div class="nav-right"><span class="av" style="width:26px;height:26px">김</span> 김주만</div>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="page-head">
+    <h1>주식 조회</h1>
+    <span class="sub">종목별 시세와 최신 뉴스를 한눈에</span>
+  </div>
+
+  <div class="filters">
+    <div class="seg" id="marketSeg">
+      <button class="on" data-m="all">전체</button>
+      <button data-m="dom">국내</button>
+      <button data-m="ovs">해외</button>
+    </div>
+    <div class="sort-pills" id="sortSeg">
+      <button class="on" data-s="rt">실시간</button>
+      <button data-s="up">상승률</button>
+      <button data-s="down">하락률</button>
+      <button data-s="vol">거래대금</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- 랭킹 리스트 -->
+    <section class="panel">
+      <div class="list-head">
+        <span>#</span><span>종목 · 최신 뉴스</span><span>차트</span><span class="r">현재가 · 등락</span>
+      </div>
+      <div id="list"></div>
+    </section>
+
+    <!-- 상세 패널 -->
+    <section class="panel pad" id="detail"></section>
+  </div>
+</div>
+
+<script>
+const RISE='#e84057', FALL='#3b6fd4';
+const stocks=[
+  {rank:1,code:'000660',name:'SK하이닉스',logo:'SK',lc:'#e1331a',market:'KOSPI',sector:'반도체',price:2031000,change:-239200,rate:-11.61,vol:'748억',
+   spark:[90,88,86,84,82,79,76,72,68,64,60,56],
+   ai:'브로드컴 실적 쇼크로 반도체 동반 약세',
+   news:[{t:'브로드컴 4분기 실적 쇼크…반도체株 일제히 급락',s:'한국경제 · 12분 전'},{t:'SK하이닉스 외국인 매도세 지속',s:'연합뉴스 · 38분 전'},{t:'"HBM은 견조" 증권가 저가매수 의견도',s:'머니투데이 · 1시간 전'}],
+   community:[{u:'TECL미친놈',t:'6분',c:'지금 들어가도 되는 자리인가요?'}]},
+  {rank:2,code:'005930',name:'삼성전자',logo:'삼',lc:'#1428a0',market:'KOSPI',sector:'전기·전자',price:325500,change:-26000,rate:-7.39,vol:'467억',
+   spark:[85,83,82,80,78,75,72,70,68,65,63,61],
+   ai:'브로드컴 쇼크 여파로 반도체 전반 하락',
+   news:[{t:'반도체 투심 위축…삼성전자 7% 급락',s:'한국경제 · 22분 전'},{t:'美 관세 우려에 IT 대형주 약세',s:'서울경제 · 51분 전'}],
+   community:[{u:'장기투자자',t:'12분',c:'담기 좋은 가격인가요?'}]},
+  {rank:3,code:'009150',name:'삼성전기',logo:'전',lc:'#1428a0',market:'KOSPI',sector:'전기·전자',price:1704000,change:-11800,rate:-0.69,vol:'137억',
+   spark:[72,73,71,72,70,71,69,70,71,70,69,71],
+   ai:'외국인 순매도 지속으로 소폭 하락',
+   news:[{t:'전장·MLCC 수요 둔화 우려',s:'전자신문 · 40분 전'},{t:'삼성전기 외국인 6일째 순매도',s:'이데일리 · 1시간 전'}],
+   community:[]},
+  {rank:4,code:'066570',name:'LG전자',logo:'LG',lc:'#a50034',market:'KOSPI',sector:'전기·전자',price:293500,change:-34200,rate:-10.51,vol:'93억',
+   spark:[88,86,83,80,77,74,72,70,67,65,63,61],
+   ai:'아이폰 부품 수요 감소 우려',
+   news:[{t:'아이폰 출하 둔화 전망에 부품주 약세',s:'디지털타임스 · 33분 전'},{t:'LG전자 가전 비수기 진입',s:'아시아경제 · 2시간 전'}],
+   community:[]},
+  {rank:5,code:'215380',name:'로보스타',logo:'로',lc:'#0a7',market:'KOSPI',sector:'기계',price:140300,change:1100,rate:0.79,vol:'75억',
+   spark:[60,61,62,61,63,62,63,64,63,64,65,64],
+   ai:'로봇 수요 기대감에 소폭 상승',
+   news:[{t:'휴머노이드 로봇 테마 다시 부각',s:'머니투데이 · 28분 전'},{t:'로보스타 신규 수주 기대감',s:'파이낸셜뉴스 · 1시간 전'}],
+   community:[]},
+  {rank:6,code:'005380',name:'현대차',logo:'현',lc:'#002c5f',market:'KOSPI',sector:'자동차',price:675000,change:-24900,rate:-3.57,vol:'58억',
+   spark:[80,79,77,76,75,74,73,72,71,70,69,68],
+   ai:'미국 관세 우려 지속으로 하락',
+   news:[{t:'美 자동차 관세 리스크 부각',s:'연합뉴스 · 45분 전'},{t:'현대차, 외국인은 순매수 전환',s:'한국경제 · 2시간 전'}],
+   community:[]},
+  {rank:7,code:'SOXL',name:'SOXL',logo:'SX',lc:'#444',market:'NASDAQ',sector:'반도체 ETF',price:365778,change:-35900,rate:-8.91,vol:'40억',
+   spark:[85,82,79,76,73,70,68,65,63,61,59,57],
+   ai:'필라델피아 반도체 지수 급락에 3배 ETF 약세',
+   news:[{t:'필라델피아 반도체 지수 급락',s:'Bloomberg · 1시간 전'},{t:'레버리지 ETF 변동성 확대 주의',s:'Reuters · 3시간 전'}],
+   community:[]},
+  {rank:8,code:'035420',name:'NAVER',logo:'N',lc:'#03c75a',market:'KOSPI',sector:'IT·소프트웨어',price:248500,change:-19100,rate:-7.10,vol:'37억',
+   spark:[82,80,78,76,74,72,70,68,66,64,62,60],
+   ai:'AI 경쟁 심화·광고 둔화 우려',
+   news:[{t:'플랫폼 광고 매출 둔화 우려',s:'전자신문 · 36분 전'},{t:'NAVER AI 투자 부담 부각',s:'이데일리 · 1시간 전'}],
+   community:[]},
+];
+
+const fmt=v=>v.toLocaleString('ko-KR');
+const col=r=>r>0?RISE:(r<0?FALL:'#888');
+const arrow=r=>r>0?'▲':(r<0?'▼':'-');
+
+function sparkSVG(pts){
+  const w=80,h=30,min=Math.min(...pts),max=Math.max(...pts),rng=max-min||1;
+  const up=pts[pts.length-1]>=pts[0];
+  const c=up?RISE:FALL;
+  const d=pts.map((p,i)=>`${i?'L':'M'}${(i/(pts.length-1)*w).toFixed(1)},${(h-2-(p-min)/rng*(h-4)).toFixed(1)}`).join(' ');
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="${d}" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function bigChartSVG(pts){
+  const w=320,h=84,padT=8,padB=8;
+  const min=Math.min(...pts),max=Math.max(...pts),rng=max-min||1;
+  const up=pts[pts.length-1]>=pts[0], c=up?RISE:FALL;
+  const P=pts.map((p,i)=>({x:i/(pts.length-1)*w, y:padT+(1-(p-min)/rng)*(h-padT-padB)}));
+  const line=P.map((p,i)=>`${i?'L':'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const area=`${line} L${w},${h} L0,${h} Z`;
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="84" preserveAspectRatio="none">
+    <defs><linearGradient id="dcg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c}" stop-opacity="0.18"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></linearGradient></defs>
+    <path d="${area}" fill="url(#dcg)"/>
+    <path d="${line}" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+let selected=0;
+const liked=new Set();
+
+function renderList(){
+  document.getElementById('list').innerHTML=stocks.map((s,i)=>`
+    <div class="row ${i===selected?'sel':''}" data-i="${i}">
+      <div class="rk">${s.rank}</div>
+      <div>
+        <div class="nm"><span class="logo-mini" style="background:${s.lc}">${s.logo}</span>${s.name}</div>
+        <div class="meta">${s.market} · ${s.sector} · 거래대금 ${s.vol}</div>
+        <div class="ai-line">📰 ${s.news[0] ? s.news[0].t : '관련 뉴스 없음'}</div>
+      </div>
+      <div>${sparkSVG(s.spark)}</div>
+      <div class="pblock">
+        <div class="price">₩${fmt(s.price)}</div>
+        <div class="chg" style="color:${col(s.rate)}">${arrow(s.rate)} ${fmt(Math.abs(s.change))} (${s.rate>0?'+':''}${s.rate}%)</div>
+        <span class="heart ${liked.has(i)?'on':''}" data-h="${i}">${liked.has(i)?'♥':'♡'}</span>
+      </div>
+    </div>`).join('');
+}
+
+function renderDetail(){
+  const s=stocks[selected];
+  document.getElementById('detail').innerHTML=`
+    <div class="dt-top">
+      <div><div class="dt-name">${s.name}</div><span class="dt-code">${s.code} · ${s.market}</span></div>
+      <span class="logo-mini" style="width:36px;height:36px;font-size:14px;background:${s.lc}">${s.logo}</span>
+    </div>
+    <div class="dt-price">₩${fmt(s.price)}</div>
+    <div class="dt-chg" style="color:${col(s.rate)}">${arrow(s.rate)} ${fmt(Math.abs(s.change))} (${s.rate>0?'+':''}${s.rate}%)</div>
+
+    <div class="dt-chart">
+      <div class="dt-chart-tabs"><span class="on">일</span><span>주</span><span>월</span><span>년</span></div>
+      ${bigChartSVG(s.spark)}
+    </div>
+
+    <div class="sec-title">📰 관련 뉴스</div>
+    ${s.news.map(n=>`<div class="news-item"><div class="t">${n.t}</div><div class="s">${n.s}</div></div>`).join('')}
+
+    <div class="sec-title">💬 종목토론방</div>
+    ${s.community.length?s.community.map(c=>`
+      <div class="cm-item"><div class="av">${c.u[0]}</div><div><div><span class="cu">${c.u}</span><span class="ct">${c.t} 전</span></div><div class="cc">${c.c}</div></div></div>`).join('')
+      :'<div class="empty">아직 글이 없어요. 첫 글을 남겨보세요!</div>'}
+
+    <button class="dt-btn">종목 상세 보기 →</button>`;
+}
+
+document.getElementById('list').addEventListener('click',e=>{
+  const h=e.target.closest('[data-h]');
+  if(h){const i=+h.dataset.h; liked.has(i)?liked.delete(i):liked.add(i); renderList(); e.stopPropagation(); return;}
+  const row=e.target.closest('[data-i]');
+  if(row){selected=+row.dataset.i; renderList(); renderDetail();}
+});
+// 필터 토글(시각용)
+document.querySelectorAll('#marketSeg button,#sortSeg button').forEach(b=>b.addEventListener('click',()=>{
+  b.parentElement.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+}));
+
+renderList(); renderDetail();
+</script>
+</body>
+</html>

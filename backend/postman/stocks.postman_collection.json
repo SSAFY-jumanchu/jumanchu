@@ -1,0 +1,305 @@
+{
+  "info": {
+    "name": "주만추 Stocks (구현분)",
+    "description": "주식 조회 API 중 현재 구현된 엔드포인트(목록/상세/현재가/차트) 테스트. 1~7은 DB 기반이라 항상 동작. 8~11(현재가/분봉)은 KIS 실시간 호출 → 장외/키 문제 시 503이 날 수 있어 200|503 분기 검증. 12~15는 잘못된 파라미터(400) + 미구현 스텁(501) 확인. baseUrl·krCode·usCode 변수는 필요 시 바꿔 쓰세요. (서버: python manage.py runserver, DB 컨테이너 필요)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000/api/v1" },
+    { "key": "krCode", "value": "005930" },
+    { "key": "usCode", "value": "AAPL" }
+  ],
+  "item": [
+    {
+      "name": "1. 종목 목록 (200)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const b = pm.response.json();",
+          "pm.test('items 배열 + 페이지 메타', () => {",
+          "  pm.expect(b.items).to.be.an('array');",
+          "  ['page','size','total'].forEach(k => pm.expect(b[k]).to.be.a('number'));",
+          "});",
+          "pm.test('항목에 code/name/market 존재', () => {",
+          "  if (b.items.length) ['code','name','market'].forEach(k => pm.expect(b.items[0]).to.have.property(k));",
+          "});"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/?size=20"
+      }
+    },
+    {
+      "name": "2. 종목 검색 q=삼성 (200)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const b = pm.response.json();",
+          "pm.test('검색 결과 존재', () => pm.expect(b.total).to.be.above(0));",
+          "pm.test('이름/코드에 검색어 포함', () => {",
+          "  pm.expect(b.items.some(s => (s.name + s.code).includes('삼성'))).to.be.true;",
+          "});"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/?q=삼성&size=20"
+      }
+    },
+    {
+      "name": "3. 종목 목록 필터 market=KOSPI (200)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const b = pm.response.json();",
+          "pm.test('모든 항목 market=KOSPI', () => {",
+          "  pm.expect(b.items.every(s => s.market === 'KOSPI')).to.be.true;",
+          "});"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/?market=KOSPI&size=10"
+      }
+    },
+    {
+      "name": "4. 종목 목록 필터 is_sp500=true (200, 미국 인덱스)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const b = pm.response.json();",
+          "pm.test('모든 항목 is_sp500=true', () => {",
+          "  pm.expect(b.items.every(s => s.is_sp500 === true)).to.be.true;",
+          "});"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/?is_sp500=true&size=10"
+      }
+    },
+    {
+      "name": "5. 잘못된 market 값 (400)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 400', () => pm.response.to.have.status(400));"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/?market=INVALID"
+      }
+    },
+    {
+      "name": "6. 종목 상세 — KR (200)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const b = pm.response.json();",
+          "pm.test('stock.code 일치', () => pm.expect(b.stock.code).to.eql(pm.collectionVariables.get('krCode')));",
+          "pm.test('상세 필드 존재', () => {",
+          "  ['sector','industry','market_cap','description','homepage_url','is_in_watchlist'].forEach(k => pm.expect(b.stock).to.have.property(k));",
+          "});"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/{{krCode}}/"
+      }
+    },
+    {
+      "name": "7. 종목 상세 — US (200)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 200', () => pm.response.to.have.status(200));",
+          "const b = pm.response.json();",
+          "pm.test('stock.code 일치', () => pm.expect(b.stock.code).to.eql(pm.collectionVariables.get('usCode')));",
+          "pm.test('미국 시장(NASDAQ/NYSE)', () => pm.expect(['NASDAQ','NYSE']).to.include(b.stock.market));"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/{{usCode}}/"
+      }
+    },
+    {
+      "name": "8. 종목 상세 — 없는 코드 (404)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 404', () => pm.response.to.have.status(404));"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/000000/"
+      }
+    },
+    {
+      "name": "9. 현재가 — KR (200 | 503)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "// KIS 실시간 호출. 장외/키/한도 문제면 503 → 분기 검증.",
+          "if (pm.response.code === 200) {",
+          "  const b = pm.response.json();",
+          "  pm.test('price.stock_code 일치', () => pm.expect(b.price.stock_code).to.eql(pm.collectionVariables.get('krCode')));",
+          "  pm.test('현재가/등락 필드 존재', () => {",
+          "    ['current','open','high','low','prev_close','change','change_rate','volume','warnings'].forEach(k => pm.expect(b.price).to.have.property(k));",
+          "  });",
+          "} else {",
+          "  pm.test('KIS 외부 API 이슈면 503', () => pm.expect(pm.response.code).to.eql(503));",
+          "  console.log('현재가 503 — 장외이거나 KIS 키/한도 확인 필요');",
+          "}"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/{{krCode}}/price/"
+      }
+    },
+    {
+      "name": "10. 현재가 — US (200 | 503)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "if (pm.response.code === 200) {",
+          "  const b = pm.response.json();",
+          "  pm.test('price.stock_code 일치', () => pm.expect(b.price.stock_code).to.eql(pm.collectionVariables.get('usCode')));",
+          "  pm.test('change_rate 숫자', () => pm.expect(b.price.change_rate).to.be.a('number'));",
+          "} else {",
+          "  pm.test('KIS 외부 API 이슈면 503', () => pm.expect(pm.response.code).to.eql(503));",
+          "  console.log('현재가(US) 503 — 미국 장외이거나 KIS 키/한도 확인');",
+          "}"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/{{usCode}}/price/"
+      }
+    },
+    {
+      "name": "11. 차트 — 일봉 1년 (200, DB)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "// 일/주/월봉은 DB StockPrice 기반. 장중이면 today 한 칸을 KIS로 합성(드물게 503).",
+          "if (pm.response.code === 200) {",
+          "  const b = pm.response.json();",
+          "  pm.test('period/interval echo', () => { pm.expect(b.period).to.eql('1y'); pm.expect(b.interval).to.eql('1d'); });",
+          "  pm.test('candles 배열 + 데이터 존재', () => {",
+          "    pm.expect(b.candles).to.be.an('array');",
+          "    pm.expect(b.candles.length).to.be.above(0);",
+          "  });",
+          "  pm.test('candle OHLCV 필드', () => {",
+          "    const c = b.candles[0];",
+          "    ['time','open','high','low','close','volume'].forEach(k => pm.expect(c).to.have.property(k));",
+          "  });",
+          "} else {",
+          "  pm.test('장중 today 합성 실패 시 503', () => pm.expect(pm.response.code).to.eql(503));",
+          "}"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/{{krCode}}/chart/?period=1y&interval=1d"
+      }
+    },
+    {
+      "name": "12. 차트 — 분봉 5m (200 | 503, KIS)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "// 분봉은 KIS 실시간. 장외엔 빈 배열/503 가능.",
+          "if (pm.response.code === 200) {",
+          "  const b = pm.response.json();",
+          "  pm.test('interval=5m echo', () => pm.expect(b.interval).to.eql('5m'));",
+          "  pm.test('candles 배열', () => pm.expect(b.candles).to.be.an('array'));",
+          "} else {",
+          "  pm.test('KIS 분봉 이슈면 503', () => pm.expect(pm.response.code).to.eql(503));",
+          "}"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/{{krCode}}/chart/?period=1d&interval=5m"
+      }
+    },
+    {
+      "name": "13. 차트 — period에 안 맞는 interval (400)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 400', () => pm.response.to.have.status(400));",
+          "pm.test('code=INVALID_INTERVAL_FOR_PERIOD', () => pm.expect(pm.response.json().code).to.eql('INVALID_INTERVAL_FOR_PERIOD'));"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/{{krCode}}/chart/?period=1y&interval=1m"
+      }
+    },
+    {
+      "name": "14. 차트 — 잘못된 period (400)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 400', () => pm.response.to.have.status(400));",
+          "pm.test('code=INVALID_PERIOD', () => pm.expect(pm.response.json().code).to.eql('INVALID_PERIOD'));"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/{{krCode}}/chart/?period=10y&interval=1d"
+      }
+    },
+    {
+      "name": "15. [미구현] 호가창 (501)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "// 아직 stub. 구현되면 200 + orderbook 으로 바뀜.",
+          "pm.test('상태코드 501 (미구현)', () => pm.response.to.have.status(501));"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/{{krCode}}/orderbook/"
+      }
+    },
+    {
+      "name": "16. [미구현] 재무 (501)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 501 (미구현)', () => pm.response.to.have.status(501));"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/stocks/{{krCode}}/financials/"
+      }
+    },
+    {
+      "name": "17. [미구현] 시장 요약 (501)",
+      "event": [
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('상태코드 501 (미구현)', () => pm.response.to.have.status(501));"
+        ] } }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/markets/summary/"
+      }
+    }
+  ]
+}

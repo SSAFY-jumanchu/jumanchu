@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1100">
+<title>주만추 — 스와이프 추천 카드 목업</title>
+<style>
+  :root{
+    --accent:#315dff; --purple:#7d4ee8; --ink:#1f2a4d; --muted:#5a6a8a; --faint:#9aa8c4;
+    --line:rgba(150,175,235,.30); --glass:rgba(255,255,255,.55); --glass-border:rgba(255,255,255,.65);
+    --radius:16px; --rise:#e84057; --fall:#3b6fd4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Pretendard','Apple SD Gothic Neo',system-ui,-apple-system,sans-serif;
+    background:linear-gradient(135deg,#e9e4ff 0%,#dceeff 46%,#dff5ec 100%);color:var(--ink);min-height:100vh;padding:0 0 50px}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 18px}
+  .logo-mini{border-radius:7px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0}
+
+  nav{background:rgba(255,255,255,.6);backdrop-filter:blur(10px);border-bottom:1px solid var(--glass-border);position:sticky;top:0;z-index:10}
+  .nav-in{max-width:1060px;margin:0 auto;display:flex;align-items:center;gap:22px;padding:12px 18px}
+  .logo{font-size:20px;font-weight:900;color:var(--accent);border:2px solid var(--accent);border-radius:8px;padding:2px 8px}
+  .nav-menu{display:flex;gap:20px;font-size:14px;font-weight:800;color:var(--muted)}
+  .nav-menu .on{color:var(--accent);background:rgba(49,93,255,.1);padding:4px 12px;border-radius:999px}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-weight:700}
+
+  .page-head{text-align:center;margin:24px 0 6px}
+  .page-head h1{font-size:23px;font-weight:900;margin:0}
+  .page-head .sub{font-size:13px;color:var(--muted);font-weight:700;margin-top:5px}
+  .progress{text-align:center;font-size:12px;font-weight:800;color:var(--faint);margin-bottom:12px}
+
+  /* 카드 스택 */
+  .stage{position:relative;width:380px;margin:0 auto;height:520px}
+  .ghost{position:absolute;left:50%;top:0;width:360px;border-radius:24px;background:rgba(255,255,255,.45);border:1px solid var(--glass-border)}
+  .ghost.g1{transform:translateX(-50%) scale(.95) translateY(14px);height:480px;opacity:.6}
+  .ghost.g2{transform:translateX(-50%) scale(.9) translateY(28px);height:480px;opacity:.35}
+
+  .card{position:absolute;left:50%;top:0;transform:translateX(-50%);width:380px;height:496px;border-radius:24px;
+    color:#fff;padding:22px;box-shadow:0 20px 50px rgba(80,40,140,.3);display:flex;flex-direction:column;
+    background:linear-gradient(140deg,#6d28d9 0%,#a855f7 48%,#db2777 100%)}
+  .c-top{display:flex;align-items:flex-start;justify-content:space-between}
+  .c-badge{font-size:11px;font-weight:800;background:rgba(255,255,255,.22);padding:4px 11px;border-radius:999px}
+  .c-score{text-align:center;background:rgba(255,255,255,.16);border-radius:14px;padding:6px 12px}
+  .c-score b{font-size:26px;font-weight:900;display:block;line-height:1}
+  .c-score span{font-size:10px;font-weight:800;opacity:.85}
+  .c-name{font-size:27px;font-weight:900;margin:14px 0 2px}
+  .c-code{font-size:12px;opacity:.8;font-weight:700}
+  .c-prices{display:flex;gap:10px;margin-top:13px}
+  .c-pb{flex:1;background:rgba(255,255,255,.14);border-radius:12px;padding:9px 12px}
+  .c-pb span{font-size:10.5px;opacity:.85;font-weight:700}
+  .c-pb strong{display:block;font-size:16px;font-weight:900;margin-top:2px}
+
+  .dna{margin-top:14px;background:rgba(255,255,255,.92);border-radius:16px;padding:10px 12px;color:var(--ink);display:flex;align-items:center;gap:8px}
+  .dna .rwrap{flex-shrink:0}
+  .dna-info{flex:1}
+  .dna-title{font-size:11px;font-weight:900;color:var(--purple)}
+  .dna-legend{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:6px}
+  .dna-leg{display:flex;justify-content:space-between;font-size:11px;font-weight:800}
+  .dna-leg .lv{color:var(--accent)}
+
+  .c-reason{margin-top:13px;font-size:13px;font-weight:800;line-height:1.45}
+  .c-social{margin-top:auto;display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:800;opacity:.95}
+
+  /* 액션 */
+  .actions{display:flex;justify-content:center;gap:18px;margin-top:18px}
+  .abtn{width:60px;height:60px;border-radius:50%;border:0;font-size:24px;font-weight:900;cursor:pointer;box-shadow:0 8px 20px rgba(80,60,140,.18);display:flex;align-items:center;justify-content:center}
+  .abtn.pass{background:#fff;color:var(--muted)}
+  .abtn.like{width:70px;height:70px;font-size:30px;background:linear-gradient(135deg,#e84057,#db2777);color:#fff}
+  .abtn.detail{background:#fff;color:var(--accent)}
+  .alabel{display:flex;justify-content:center;gap:30px;font-size:11px;font-weight:800;color:var(--muted);margin-top:7px}
+  .done{text-align:center;padding:60px 20px;font-size:15px;font-weight:800;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <span class="logo">주만추</span>
+    <div class="nav-menu"><span>홈</span><span>피드</span><span>주식 조회</span><span>보유 종목</span><span>매매일기</span><span>장투 케어</span></div>
+    <div class="nav-right"><span class="logo-mini" style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple))">김</span> 김주만</div>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="page-head">
+    <h1>오늘의 궁합 추천 💘</h1>
+    <p class="sub">당신의 투자 성향과 잘 맞는 종목이에요. 넘기면서 관심 종목을 골라보세요.</p>
+  </div>
+  <div class="progress" id="progress"></div>
+
+  <div class="stage" id="stage">
+    <div class="ghost g2"></div>
+    <div class="ghost g1"></div>
+    <div id="card"></div>
+  </div>
+  <div id="actions"></div>
+</div>
+
+<script>
+const ACCENT='#315dff';
+// dna: [변동성, 가치, 성장, 안정성] 0~100
+const cards=[
+  {name:'SK하이닉스',code:'000660',badge:'KOSPI · 전기·전자',score:94,price:'189,300원',rate:'+2.1%',up:true,
+   dna:[78,55,90,50], reason:'🤝 공격형 성향 + 반도체 선호에 성장성(90)이 딱 맞아요.', likes:'1,284'},
+  {name:'삼성전자',code:'005930',badge:'KOSPI · 전기·전자',score:89,price:'71,200원',rate:'-3.1%',up:false,
+   dna:[55,70,60,75], reason:'🤝 균형형 성향에 안정성(75)·가치(70)가 두루 맞아요.', likes:'2,950'},
+  {name:'삼성바이오로직스',code:'207940',badge:'KOSPI · 바이오',score:86,price:'1,042,000원',rate:'+1.4%',up:true,
+   dna:[63,45,85,60], reason:'🤝 성장 선호와 바이오 모멘텀(성장 85)이 맞아요.', likes:'612'},
+  {name:'현대차',code:'005380',badge:'KOSPI · 자동차',score:83,price:'675,000원',rate:'-0.6%',up:false,
+   dna:[50,82,55,78], reason:'🤝 가치(82)·안정(78) 선호와 배당 매력이 맞아요.', likes:'745'},
+];
+
+function radarSVG(dna){
+  const cx=64,cy=64,R=46;
+  const ax=[[cx,cy-R],[cx+R,cy],[cx,cy+R],[cx-R,cy]];           // top,right,bottom,left
+  const half=[[cx,cy-R/2],[cx+R/2,cy],[cx,cy+R/2],[cx-R/2,cy]];
+  const grid=a=>`M${a[0][0]},${a[0][1]} L${a[1][0]},${a[1][1]} L${a[2][0]},${a[2][1]} L${a[3][0]},${a[3][1]} Z`;
+  const pts=[[cx,cy-R*dna[0]/100],[cx+R*dna[1]/100,cy],[cx,cy+R*dna[2]/100],[cx-R*dna[3]/100,cy]];
+  const poly=`M${pts[0][0]},${pts[0][1]} L${pts[1][0]},${pts[1][1]} L${pts[2][0]},${pts[2][1]} L${pts[3][0]},${pts[3][1]} Z`;
+  const axes=ax.map(a=>`<line x1="${cx}" y1="${cy}" x2="${a[0]}" y2="${a[1]}" stroke="#c9d4f0" stroke-width="1"/>`).join('');
+  return `<svg width="128" height="128" viewBox="0 0 128 128" class="rwrap">
+    <path d="${grid(ax)}" fill="none" stroke="#dfe6f7" stroke-width="1"/>
+    <path d="${grid(half)}" fill="none" stroke="#eef2fb" stroke-width="1"/>
+    ${axes}
+    <path d="${poly}" fill="${ACCENT}33" stroke="${ACCENT}" stroke-width="2" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+let i=0;
+function render(){
+  const prog=document.getElementById('progress');
+  if(i>=cards.length){
+    document.getElementById('card').innerHTML='';
+    document.querySelectorAll('.ghost').forEach(g=>g.style.display='none');
+    document.getElementById('actions').innerHTML='';
+    prog.textContent='';
+    document.getElementById('stage').innerHTML='<div class="done">오늘 추천을 다 봤어요! 🎉<br>관심 담은 종목은 관심 목록에서 확인하세요.</div>';
+    return;
+  }
+  const c=cards[i];
+  prog.textContent=`추천 ${i+1} / ${cards.length}`;
+  const legend=[['변동성',c.dna[0]],['성장',c.dna[2]],['가치',c.dna[1]],['안정성',c.dna[3]]]
+    .map(l=>`<div class="dna-leg"><span>${l[0]}</span><span class="lv">${l[1]}</span></div>`).join('');
+  document.getElementById('card').innerHTML=`
+    <article class="card">
+      <div class="c-top">
+        <span class="c-badge">${c.badge}</span>
+        <div class="c-score"><b>${c.score}</b><span>궁합점수</span></div>
+      </div>
+      <div class="c-name">${c.name}</div>
+      <div class="c-code">${c.code}</div>
+      <div class="c-prices">
+        <div class="c-pb"><span>현재가</span><strong>${c.price}</strong></div>
+        <div class="c-pb"><span>등락률</span><strong style="color:${c.up?'#ffd1d8':'#cfe0ff'}">${c.rate}</strong></div>
+      </div>
+      <div class="dna">
+        ${radarSVG(c.dna)}
+        <div class="dna-info"><div class="dna-title">🧬 Stock DNA</div><div class="dna-legend">${legend}</div></div>
+      </div>
+      <div class="c-reason">${c.reason}</div>
+      <div class="c-social">❤️ ${c.likes}명이 이 종목에 관심 있어요</div>
+    </article>`;
+  document.getElementById('actions').innerHTML=`
+    <div class="actions">
+      <button class="abtn pass" onclick="next()">✕</button>
+      <button class="abtn like" onclick="next()">♥</button>
+      <button class="abtn detail" onclick="next()">↗</button>
+    </div>
+    <div class="alabel"><span>패스</span><span>관심 추가</span><span>상세</span></div>`;
+}
+function next(){ i++; render(); }
+render();
+</script>
+</body>
+</html>

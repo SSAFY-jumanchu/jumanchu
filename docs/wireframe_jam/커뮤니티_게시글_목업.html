@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1100">
+<title>주만추 — 커뮤니티 게시글 상세 목업</title>
+<style>
+  :root{
+    --accent:#315dff; --purple:#7d4ee8; --positive:#0f9f6e; --negative:#cf3d3d; --warning:#e58b10;
+    --ink:#1f2a4d; --muted:#5a6a8a; --faint:#9aa8c4; --line:rgba(150,175,235,.30);
+    --glass:rgba(255,255,255,.55); --glass-border:rgba(255,255,255,.65); --radius:16px;
+    --rise:#e84057; --fall:#3b6fd4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Pretendard','Apple SD Gothic Neo',system-ui,-apple-system,sans-serif;
+    background:linear-gradient(135deg,#e9e4ff 0%,#dceeff 46%,#dff5ec 100%);color:var(--ink);min-height:100vh;padding:0 0 50px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 18px}
+  .panel{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border:1px solid var(--glass-border);border-radius:var(--radius);box-shadow:0 8px 30px rgba(60,80,160,.08)}
+  .pad{padding:20px}
+  .eyebrow{font-size:12px;font-weight:800;color:var(--muted);margin:0}
+
+  /* nav */
+  nav{background:rgba(255,255,255,.6);backdrop-filter:blur(10px);border-bottom:1px solid var(--glass-border);position:sticky;top:0;z-index:10}
+  .nav-in{max-width:1080px;margin:0 auto;display:flex;align-items:center;gap:22px;padding:12px 18px}
+  .logo{font-size:20px;font-weight:900;color:var(--accent);border:2px solid var(--accent);border-radius:8px;padding:2px 8px}
+  .nav-menu{display:flex;gap:20px;font-size:14px;font-weight:800;color:var(--muted)}
+  .nav-menu .on{color:var(--accent);background:rgba(49,93,255,.1);padding:4px 12px;border-radius:999px}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-weight:700}
+  .av{border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0}
+
+  .back{display:inline-flex;align-items:center;gap:6px;margin:18px 0 14px;font-size:13px;font-weight:800;color:var(--muted);cursor:pointer}
+  .grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:16px;align-items:start}
+
+  /* 게시글 */
+  .post-head{display:flex;align-items:center;gap:11px;margin-bottom:14px}
+  .post-head .av{width:42px;height:42px;font-size:15px}
+  .ph-name{font-size:15px;font-weight:900}
+  .ph-sub{font-size:12px;color:var(--faint);font-weight:700;margin-top:1px}
+  .badge{display:inline-flex;align-items:center;font-size:11px;font-weight:900;padding:1px 7px;border-radius:6px;margin-left:5px;background:rgba(125,78,232,.13);color:var(--purple);vertical-align:middle}
+  .post-meta-right{margin-left:auto;display:flex;gap:6px;align-items:center}
+  .chip{font-size:11px;font-weight:900;padding:4px 10px;border-radius:999px}
+  .chip-cat{background:rgba(49,93,255,.1);color:var(--accent)}
+  .chip-stock{background:rgba(15,159,110,.12);color:var(--positive);cursor:pointer}
+  .post-title{font-size:23px;font-weight:900;line-height:1.35;margin:4px 0 14px}
+  .post-body{font-size:15px;line-height:1.75;color:var(--ink);white-space:pre-line}
+  .post-foot{display:flex;align-items:center;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
+  .act-btn{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:900;padding:8px 16px;border-radius:999px;border:1px solid var(--glass-border);background:rgba(255,255,255,.5);color:var(--muted);cursor:pointer}
+  .act-btn.like.on{background:rgba(232,64,87,.1);border-color:rgba(232,64,87,.3);color:var(--rise)}
+  .views{margin-left:auto;font-size:12px;color:var(--faint);font-weight:700}
+
+  /* 댓글 */
+  .cmt-count{font-size:15px;font-weight:900;margin-bottom:14px}
+  .cmt-write{display:flex;gap:10px;align-items:center;margin-bottom:16px}
+  .cmt-write .av{width:36px;height:36px;font-size:13px}
+  .cmt-write input{flex:1;height:42px;padding:0 14px;border-radius:999px;border:1px solid var(--glass-border);background:rgba(255,255,255,.6);font-size:14px;font-weight:600;color:var(--ink);outline:none}
+  .cmt-write input::placeholder{color:var(--faint)}
+  .cmt-submit{height:42px;padding:0 18px;border-radius:999px;border:0;background:var(--accent);color:#fff;font-size:14px;font-weight:900;cursor:pointer}
+  .cmt{display:flex;gap:11px;padding:14px 2px;border-top:1px solid var(--line)}
+  .cmt .av{width:36px;height:36px;font-size:13px;flex-shrink:0}
+  .cmt-name{font-size:13.5px;font-weight:900}
+  .cmt-time{font-size:11px;color:var(--faint);font-weight:700;margin-left:6px}
+  .cmt-body{font-size:14px;line-height:1.6;color:var(--ink);margin-top:4px}
+  .cmt-mini{display:flex;align-items:center;gap:12px;margin-top:7px}
+  .cmt-mini button{border:0;background:transparent;font-size:12px;font-weight:800;color:var(--faint);cursor:pointer}
+
+  /* 사이드: 종목 미니 + 인기글 */
+  .stock-mini-top{display:flex;align-items:center;justify-content:space-between}
+  .sm-name{font-size:17px;font-weight:900}
+  .sm-code{font-size:11px;color:var(--faint);font-weight:700}
+  .sm-price{font-size:20px;font-weight:900;margin:10px 0 2px}
+  .sm-chg{font-size:13px;font-weight:900;color:var(--rise)}
+  .sm-btn{display:block;width:100%;margin-top:14px;text-align:center;font-size:13px;font-weight:900;color:var(--accent);background:rgba(49,93,255,.09);border:1px solid rgba(49,93,255,.22);border-radius:10px;padding:10px;cursor:pointer}
+  .hot-item{display:flex;gap:10px;align-items:flex-start;padding:11px 2px;border-top:1px solid var(--line);cursor:pointer}
+  .hot-rank{font-size:13px;font-weight:900;color:var(--accent);flex-shrink:0;width:14px;text-align:center}
+  .hot-title{font-size:13px;font-weight:800;line-height:1.4}
+  .hot-likes{font-size:11px;color:var(--rise);font-weight:800;margin-top:3px}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <span class="logo">주만추</span>
+    <div class="nav-menu"><span>홈</span><span class="on">피드</span><span>주식 조회</span><span>보유 종목</span><span>매매일기</span><span>장투 케어</span></div>
+    <div class="nav-right"><span class="av" style="width:26px;height:26px">김</span> 김주만</div>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="back">← 커뮤니티 · 삼성전자 토론방</div>
+
+  <div class="grid">
+    <!-- ===== 본문 + 댓글 ===== -->
+    <div>
+      <!-- 게시글 -->
+      <section class="panel pad">
+        <div class="post-head">
+          <div class="av" style="width:42px;height:42px">주</div>
+          <div>
+            <div class="ph-name">주린이123 <span class="badge">🌱 입문</span></div>
+            <div class="ph-sub">3시간 전</div>
+          </div>
+          <div class="post-meta-right">
+            <span class="chip chip-cat">질문</span>
+            <span class="chip chip-stock">#삼성전자</span>
+          </div>
+        </div>
+
+        <h1 class="post-title">삼성전자 지금 매수 타이밍 맞나요?</h1>
+        <p class="post-body">반도체 업황이 개선된다는 뉴스를 봤는데, 삼성전자 지금 들어가도 될까요?
+
+처음 사보는 종목이라 고수분들 의견이 궁금합니다. PER도 낮아 보이고 배당도 있어서 장기로 묻어두려고 하는데, 타이밍이 괜찮을지 고민이에요. 🙏</p>
+
+        <div class="post-foot">
+          <button class="act-btn like" id="likeBtn">♡ <span id="likeCnt">24</span></button>
+          <button class="act-btn">💬 5</button>
+          <span class="views">👁 183</span>
+        </div>
+      </section>
+
+      <!-- 댓글 -->
+      <section class="panel pad" style="margin-top:16px">
+        <div class="cmt-count">댓글 5</div>
+
+        <div class="cmt-write">
+          <div class="av">김</div>
+          <input type="text" placeholder="댓글을 남겨보세요">
+          <button class="cmt-submit">등록</button>
+        </div>
+
+        <div class="cmt">
+          <div class="av" style="background:linear-gradient(135deg,#e58b10,#cf3d3d)">전</div>
+          <div>
+            <div><span class="cmt-name">전업투자자</span><span class="badge">🎓 고수</span><span class="cmt-time">28분 전</span></div>
+            <div class="cmt-body">HBM 수주 기대감이 주가에 반영되고 있는 것 같습니다. 단기 변동성은 있어도 방향은 위로 보고 있어요.</div>
+            <div class="cmt-mini"><button>♡ 12</button></div>
+          </div>
+        </div>
+
+        <div class="cmt">
+          <div class="av" style="background:linear-gradient(135deg,#0f9f6e,#0a7)">장</div>
+          <div>
+            <div><span class="cmt-name">장기투자자</span><span class="badge">🌳 가치</span><span class="cmt-time">1시간 전</span></div>
+            <div class="cmt-body">저도 분할매수 중이에요. PER 14배면 부담 없는 구간이라 장기로 묻어두기 괜찮아요.</div>
+            <div class="cmt-mini"><button>♡ 8</button></div>
+          </div>
+        </div>
+
+        <div class="cmt">
+          <div class="av" style="background:linear-gradient(135deg,#315dff,#7d4ee8)">주</div>
+          <div>
+            <div><span class="cmt-name">주식러버</span><span class="cmt-time">42분 전</span></div>
+            <div class="cmt-body">외국인 순매수 들어오는 거 보면 단기 반등 가능성도 있어 보여요. 호가창 한번 보세요.</div>
+            <div class="cmt-mini"><button>♡ 5</button></div>
+          </div>
+        </div>
+
+        <div class="cmt">
+          <div class="av" style="background:linear-gradient(135deg,#7d4ee8,#e0568f)">배</div>
+          <div>
+            <div><span class="cmt-name">배당킹</span><span class="badge">🎓 숙련</span><span class="cmt-time">2시간 전</span></div>
+            <div class="cmt-body">배당까지 생각하면 지금 단가 나쁘지 않아요. 조급해하지 말고 천천히 모아가세요.</div>
+            <div class="cmt-mini"><button>♡ 14</button></div>
+          </div>
+        </div>
+
+        <div class="cmt">
+          <div class="av" style="background:linear-gradient(135deg,#5a6a8a,#9aa8c4)">신</div>
+          <div>
+            <div><span class="cmt-name">신중이</span><span class="badge">🌱 입문</span><span class="cmt-time">10분 전</span></div>
+            <div class="cmt-body">저는 좀 더 지켜보려고요. 변동성이 커서 분할로 접근하는 게 안전할 것 같아요.</div>
+            <div class="cmt-mini"><button>♡ 3</button></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===== 사이드: 이 종목 ===== -->
+    <div>
+      <section class="panel pad">
+        <p class="eyebrow">이 글의 종목</p>
+        <div class="stock-mini-top" style="margin-top:8px">
+          <div><div class="sm-name">삼성전자</div><span class="sm-code">005930 · KOSPI</span></div>
+          <div class="av" style="width:36px;height:36px;background:#1428a0">삼</div>
+        </div>
+        <div class="sm-price">₩317,000</div>
+        <div class="sm-chg">▲ 7,500 (+2.42%)</div>
+        <button class="sm-btn">종목 상세 보기 →</button>
+      </section>
+
+      <section class="panel pad" style="margin-top:16px">
+        <p class="eyebrow">삼성전자 인기글</p>
+        <div class="hot-item"><span class="hot-rank">1</span><div><div class="hot-title">HBM 양산 확대…삼성도 수혜 받을까?</div><div class="hot-likes">♡ 34</div></div></div>
+        <div class="hot-item"><span class="hot-rank">2</span><div><div class="hot-title">삼성전자 vs SK하이닉스 비교 분석</div><div class="hot-likes">♡ 21</div></div></div>
+        <div class="hot-item"><span class="hot-rank">3</span><div><div class="hot-title">배당주로 삼성전자 모아가는 중입니다</div><div class="hot-likes">♡ 18</div></div></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+// 좋아요 토글
+const lb=document.getElementById('likeBtn'), lc=document.getElementById('likeCnt');
+let liked=false, base=24;
+lb.addEventListener('click',function(){
+  liked=!liked;
+  lb.classList.toggle('on',liked);
+  lb.firstChild.textContent = liked?'♥ ':'♡ ';
+  lc.textContent = base + (liked?1:0);
+});
+</script>
+</body>
+</html>
