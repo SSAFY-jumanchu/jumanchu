@@ -1,131 +1,141 @@
-# 주만추 (Jumanchu) — 프로젝트 산출물
+# 주만추 (Jumanchu)
 
-> **자연스러운 주식과의 만남 추구** — 건강한 투자 습관을 돕는 주린이용 모의 주식 투자 서비스
+> **자연스러운 주식과의 만남 추구** — 건강한 투자 습관 정립을 돕는 주린이용 모의 주식 투자 서비스
 >
-> SSAFY 광주 1반 6조 자율 프로젝트 · 2026-05-11 ~ 2026-06-25 (발표 6/25)
+> *"주식은 연애처럼 오래가야 한다."*
 
-이 문서는 **팀원·업무 분담**, **개발 일정(예정/변경/실제)**, **목표 서비스 대비 실제 구현 정도**를 정리한 산출물입니다.
-서비스 소개·기술 스택·실행 방법 등 상세 기술 문서는 [`jumanchu/README.md`](jumanchu/README.md)를 참고하세요.
-
----
-
-## 1. 팀원 정보 및 업무 분담
-
-| 이름 | 역할 | 담당 영역 |
-|---|---|---|
-| **강재민** | Backend / 팀 리딩 | Django 코드 전반(모델·뷰·URL·마이그레이션), 외부 API 연동(KIS·DART·yfinance·뉴스·OpenAI), 데이터 파이프라인, 추천 함수 REST 노출, CI/CD |
-| **정율** | Algorithm | 추천 도메인 기획 + 순수 Python 추천 알고리즘(Stock DNA·궁합 매칭·장투 점수·AI 리포트). Django 코드는 작성하지 않고 함수 시그니처로 BE와 협업 |
-| **송호영** | Frontend | Vue.js 코드 전반 — 회원/온보딩, 홈, 종목 상세, 스와이프 추천 UI 등 전 화면 |
-
-### 협업 규칙 (요약)
-- **브랜치**: `<type>/<JIRA-KEY>-<설명>` · **커밋**: `<type>(<scope>): <subject>  [SCRUM-NN]`
-- **PR**: `dev` 대상, CI 통과 + 1명 이상 리뷰 → Squash merge. `main`/`dev` 직접 push 금지
-- **이슈 관리**: Jira(`SCRUM` 프로젝트) — 모든 커밋·PR·브랜치명에 `[SCRUM-NN]` 포함
-- **모델 변경**: 마이그레이션과 같은 PR로 묶고, 마이그레이션 파일은 한 사람만 생성
-- 상세 → [`jumanchu/CLAUDE.md`](jumanchu/CLAUDE.md) · [`jumanchu/docs/BRANCH_STRATEGY.md`](jumanchu/docs/BRANCH_STRATEGY.md)
+SSAFY 광주 1반 6조 자율 프로젝트 (2026-05-11 ~ 2026-06-25)
 
 ---
 
-## 2. 개발 일정
-
-### 2.1 단계(Phase)별 일정
-
-| Phase | 핵심 산출물 | 예정 완료일 | 변경 예정일 | 실제 완료일 | 담당자 |
-|---|---|---|---|---|---|
-| 1. 기획·설계 | 사용자 스토리, ERD, API 명세, 와이어프레임 | 05-17 | — | 05-20 | 전원 |
-| 2. 백엔드 개발 | Django API, DB, 데이터 파이프라인, 추천 연동 | 06-07 | 06-22 | 06-22 | 강재민 |
-| 3. 프론트엔드 개발 | Vue SPA (10여 페이지) | 06-12 | 06-24 | **진행 중** | 송호영 |
-| 4. 통합·테스트 | FE↔BE 연동, 시나리오 테스트, 안정화 | 06-18 | 06-24 | **진행 중** | 전원 |
-| 5. 발표 준비 | 발표 자료, 시연 영상, 리허설 | 06-25 | — | **진행 중** | 전원 |
-
-> 📌 **마감 06-20 / 발표 06-25.** 백엔드·추천 알고리즘 범위가 기획 단계보다 확장되며 BE 일정이 06-22까지 연장되었고, 그 여파로 FE·통합 일정이 발표 직전(06-24)으로 압축되었습니다.
-
-### 2.2 주요 작업(Story/Task)별 일정
-
-날짜는 모두 2026년 기준, 실제 완료일은 머지된 커밋 기준입니다.
-
-| Jira | 작업 | 예정 완료일 | 변경 예정일 | 실제 완료일 | 담당자 |
-|---|---|---|---|---|---|
-| SCRUM-19 | 사용자 스토리 11개 정리 | 05-15 | — | 05-15 | 전원 |
-| — | ERD · 서비스 흐름도 1차 | 05-17 | — | 05-15 | 전원 |
-| — | API 명세 / DART 컬럼 사전 | 05-17 | 05-20 | 05-20 | 강재민 |
-| SCRUM-23 | 5개 도메인 모델 + 초기 마이그레이션 | 05-20 | — | 05-20 | 강재민 |
-| SCRUM-58 | 종목 마스터 적재(KR/US) | 05-24 | — | 05-27 | 강재민 |
-| SCRUM-58 | 재무·일봉·시장지표 적재 (약 4,090종목) | 05-29 | — | 05-29 | 강재민 |
-| SCRUM-131 | 캔들 차트 API (일/주/월/분봉) | 06-03 | — | 06-01 | 강재민 |
-| SCRUM-23 | JWT 인증 엔드포인트 + rate limiting | 06-03 | — | 06-03 | 강재민 |
-| SCRUM-121 | 매매(매수/매도) + 포트폴리오 조회 API | 06-08 | — | 06-14 | 강재민 |
-| SCRUM-26 | 일기 · 커뮤니티 · 워치리스트 CRUD API | 06-10 | — | 06-14 | 강재민 |
-| SCRUM-141~143 | 시장 요약 · 경제 캘린더 · 종목 언급 글 API | 06-12 | — | 06-17 | 강재민 |
-| SCRUM-145 | 종목 Stock DNA 4축 산정 (일배치) | 06-12 | — | 06-17 | 정율·강재민 |
-| SCRUM-23/146 | 투자성향 온보딩 + 궁합 매칭 (4유형) | 06-12 | — | 06-17 | 강재민·정율 |
-| SCRUM-138 | 재무 요약 + 투자지표 API | 06-14 | — | 06-19 | 강재민 |
-| SCRUM-25 | 궁합 스와이프 추천 API (top-N 카드) | 06-14 | — | 06-19 | 강재민·정율 |
-| SCRUM-113/148 | 장투 케어 — 점수 배치·개인 랭킹·AI 리포트 | 06-17 | 06-22 | 06-22 | 정율·강재민 |
-| SCRUM-27 | Vue 세팅 + 전 화면 구현 | 06-12 | 06-24 | **진행 중** | 송호영 |
-
----
-
-## 3. 목표 서비스 및 실제 구현 정도
-
-### 3.1 목표 서비스
+## 서비스 소개
 
 장기투자 실패 경험을 **연애·소개팅과의 유사성**에서 출발시켜, 취향을 담은 주식 투자 경험을 설계합니다.
-가입 시 1억 원 가상 잔고로 시작하는 **모의 투자**, 실제 시세·재무 기반의 **종목 탐색**, Tinder식 **스와이프 종목 추천**, **투자 일기·커뮤니티**, 장기보유 습관을 돕는 **장투 케어**를 핵심 가치로 합니다.
+판단 근거가 파편화되는 문제를 **종목별 뉴스 스크랩 · 투자 일기 · 포트폴리오 커뮤니티**로 보완해, 사용자가 자신의 판단 근거를 가시화하고 회고할 수 있게 합니다.
 
-### 3.2 기능별 구현 정도
+- **모의 투자** — 가입 시 1억 원 가상 잔고 지급, 실제 시세 기반 매수/매도
+- **시세·재무 데이터** — 한국(코스피·코스닥) + 미국(S&P500·나스닥100) 약 4,000여 종목
+- **투자 일기** — 매수/매도/관심 이유 기록 → 회고 → 투자 성향 데이터화
+- **커뮤니티** — 종목·포트폴리오 공유 및 리뷰
 
-> 범례: ✅ 구현 완료 · 🟡 부분 구현 · 🔲 모델/기획만 · ❌ 미착수
+## 기술 스택
 
-| 기능 (User Story) | 우선순위 | BE | FE | 비고 |
-|---|---|---|---|---|
-| US-01 종목 검색 | P0 | ✅ | 🔲 | 목록·상세 API 완료 |
-| US-02 회원가입 | P0 | ✅ | 🔲 | JWT + rate limiting |
-| US-03 로그인/로그아웃/토큰 | P0 | ✅ | 🔲 | refresh 블랙리스트 |
-| US-04 투자 패턴 추천 (스와이프) | P0 | ✅ | 🔲 | 온보딩 궁합 4유형 + top-N 카드 |
-| US-05 트렌딩 뉴스 추천 | P0 | 🔲 | 🔲 | 뉴스 수집·매핑 모델만 |
-| US-06 종목 상세 조회 | P0 | ✅ | 🔲 | 현재가·캔들차트·Redis 캐싱 |
-| US-07 커뮤니티 (공유) | P1 | ✅ | 🔲 | 게시글·댓글·좋아요·팔로우 API |
-| US-08 재무제표 조회 | P0 | ✅ | 🔲 | DART(KR)/yfinance(US) 분기 |
-| US-09 매수/매도/관심 일기 | P1 | ✅ | 🔲 | 일기 CRUD + 워치리스트 |
-| US-10 투자 MBTI/성향 리포트 | P2 | 🟡 | 🔲 | 장투 케어 AI 리포트로 일부 대체 |
-| US-11 홈 (시장 요약 + 포트폴리오) | P0 | ✅ | 🔲 | 시장요약·경제캘린더·포트폴리오 API |
-| (확장) 장투 케어 | — | ✅ | 🔲 | 장투점수 배치·개인 랭킹·AI 리포트 |
-
-### 3.3 영역별 요약
-
-**백엔드 — 거의 완료 (✅)**
-- 인증(`accounts`): 회원가입·로그인·로그아웃·토큰 재발급·내 정보·온보딩·비밀번호 재설정
-- 종목(`stocks`): 목록·상세·현재가·캔들차트·재무 요약·시장 요약·경제 캘린더·종목 언급 글 (호가창 1종만 스텁)
-- 포트폴리오(`portfolio`): 주문 미리보기·매수/매도 체결·주문내역·보유·잔액·자산배분
-- 일기(`diary`)·커뮤니티(`community`): CRUD + 좋아요·팔로우
-- 추천(`recommend`): 워치리스트·궁합 스와이프 추천·장투 랭킹·장투 AI 리포트
-- 데이터 파이프라인: KR 전체 + 미국 인덱스 구성종목 약 4,090종목, 일봉 1년치·재무·시장지표 적재 완료
-- API 문서: drf-spectacular 스키마(`/api/docs/`, `/api/redoc/`)
-
-**추천 알고리즘 — 핵심 구현 (✅)**
-- Stock DNA 4축 산정, 온보딩 궁합 매칭(4유형), 궁합 스와이프 top-N, 장투 점수·AI 리포트 산출 함수 완료
-- 트렌딩 뉴스 기반 추천은 모델·명세 단계
-
-**프론트엔드 — 진행 중 (🟡 / 스캐폴드)**
-- Vite + Vue 3.5 프로젝트 초기 구성 단계, 전 화면 구현은 발표 직전까지 진행 중
-
-### 3.4 미구현 / 잔여 과제
-- 프론트엔드 전 화면 (회원/온보딩, 홈, 종목 상세, 스와이프 추천 UI 등)
-- 트렌딩 뉴스 기반 추천 (뉴스 수집 → 종목 매핑 → 스크랩)
-- 호가창(StockOrderBook) API
-- 투자 MBTI 정식 리포트 (장투 케어 AI 리포트로 일부 대체)
-
----
-
-## 4. 산출물 위치
-
-| 산출물 | 위치 |
+| 영역 | 스택 |
 |---|---|
-| 기술 README (서비스·스택·실행법) | [`jumanchu/README.md`](jumanchu/README.md) |
-| 프로젝트 컨텍스트 / 컨벤션 | [`jumanchu/CLAUDE.md`](jumanchu/CLAUDE.md) |
-| ERD (DB 스키마) | [`jumanchu/docs/ERD.md`](jumanchu/docs/ERD.md) |
-| API 명세 / 스키마 | [`jumanchu/docs/API_명세_초안.md`](jumanchu/docs/API_명세_초안.md) · [`jumanchu/docs/API_스키마_v1.md`](jumanchu/docs/API_스키마_v1.md) |
-| 사용자 스토리 / 인수 조건 | [`jumanchu/docs/USER_STORIES.md`](jumanchu/docs/USER_STORIES.md) |
-| 추천 알고리즘 명세 | [`jumanchu/docs/stock_dna_산정로직.md`](jumanchu/docs/stock_dna_산정로직.md) · [`jumanchu/docs/장투점수_산정로직.md`](jumanchu/docs/장투점수_산정로직.md) |
-| 기획 자료 (기획서·WBS·간트차트·화면 시안) | [`jumanchu/planning/`](jumanchu/planning/) |
+| **Backend** | Django 5.2 · Django REST Framework 3.17 · PostgreSQL 16 · Redis 7 |
+| **인증** | JWT (`djangorestframework-simplejwt`, refresh 블랙리스트) · `django-ratelimit` |
+| **API 문서** | drf-spectacular (Swagger / ReDoc) |
+| **Frontend** | Vue 3.5 · Pinia · vue-router · axios · Vite 8 |
+| **외부 API** | KIS(한국투자증권) · DART OpenAPI · yfinance · NewsData·Gnews · OpenAI |
+| **인프라** | Docker Compose (PostgreSQL + Redis) · GitHub Actions CI |
+| **이슈 관리** | Jira (`SCRUM` 프로젝트) |
+
+> **종목 가격 데이터는 KIS API로 통일** (현재가·일봉·호가 — 국내/해외 모두).
+> yfinance는 `industry`·`homepage_url` 등 **메타데이터 보완용**으로만 사용 (스크래핑 throttling으로 가격 적재엔 부적합).
+
+## 구현 현황
+
+### ✅ 구현 완료
+
+| 도메인 | 내용 |
+|---|---|
+| **인증 (`accounts`)** | 회원가입·로그인·로그아웃·토큰 재발급·내 정보·온보딩·비밀번호 재설정 (7개 엔드포인트). JWT + 로그인/가입/재설정 rate limiting |
+| **종목 조회 (`stocks`)** | 종목 목록·상세·현재가·캔들 차트(일/주/월봉=DB, 분봉=KIS, 장중 today 합성). Redis 시세 캐싱(장중 3s / 장외 60s) |
+| **데이터 파이프라인** | 마스터 적재 + KIS·DART·yfinance enrichment + 일봉·재무·시장지표 적재 (관리 명령 9개). 한국 전체 + 미국 인덱스 구성종목 약 4,090종목, 일봉 1년치 적재 완료 |
+| **API 문서** | drf-spectacular 스키마 25종 (`/api/docs/`, `/api/redoc/`) |
+
+### 🚧 개발 예정
+
+| 도메인 | 내용 | 상태 |
+|---|---|---|
+| **매매·포트폴리오 (`portfolio`)** | 주문 미리보기·체결, 보유 종목·잔고·자산 배분 조회 | 모델·시리얼라이저·URL 완료, **뷰 미구현(501)** |
+| **종목 조회 잔여 (`stocks`)** | 호가창 · 재무 요약 · 종목 언급 글 · 시장 요약(홈 상단) | 스텁(501) |
+| **투자 일기 (`diary`)** | 매수/매도/관심 일기 작성, 회고(`DiaryReview`), 투자 성향 데이터화 | 모델만 |
+| **커뮤니티 (`community`)** | 공유 포트폴리오, 게시글·댓글·좋아요 | 모델만 |
+| **추천 알고리즘 (Algo)** | 트렌딩 뉴스 기반 / 재무 기반 / 투자 성향 기반 종목 추천. BE는 함수 호출 후 REST로 노출 | 인터페이스 협의 단계 |
+| **뉴스 연동** | NewsData·Gnews 수집 → 종목 매핑(`NewsRelatedStock`) → 스크랩/폴더화 | 모델만 |
+| **투자 MBTI · 리포트** | 일기·매매 데이터 기반 투자 성향 요약, 개인화 리포트 발행 | 기획 |
+| **프론트엔드** | 회원/온보딩, 홈(시장 요약·포트폴리오·커뮤니티), Tinder 스와이프형 종목 추천 UI 등 전 화면 | Vite 스캐폴드 단계 |
+
+## 디렉토리 구조
+
+```
+jumanchu/
+├── backend/                # Django 5.2 + DRF
+│   ├── config/             # settings, urls, wsgi/asgi
+│   ├── accounts/           # 인증 / 사용자 / 투자 성향   (구현)
+│   ├── stocks/             # 종목·시세·재무·뉴스          (조회 일부 구현 + 데이터 파이프라인)
+│   │   ├── services/       #   kis_client / dart_client / financials / price_dispatch
+│   │   └── management/     #   데이터 적재·enrichment 명령 9개
+│   ├── portfolio/          # 계좌·보유·주문               (모델·URL 완료, 뷰 예정)
+│   ├── diary/              # 투자 일기                    (모델만)
+│   ├── community/          # 공유 포트폴리오·게시글       (모델만)
+│   ├── postman/            # Postman 컬렉션
+│   └── requirements.txt
+├── frontend/               # Vue 3.5 + Pinia + vue-router + Vite 8
+├── docs/                   # 설계·운영 문서 (ERD/API/인증/Jira/브랜치 등)
+├── planning/               # 기획 자료 (기획서·ERD·UCD·화면 시안·아키텍처)
+├── docker-compose.yml      # PostgreSQL 16 + Redis 7
+├── .env.example            # 환경 변수 템플릿
+└── CLAUDE.md               # 프로젝트 컨텍스트 / 작업 컨벤션
+```
+
+## 빠른 시작
+
+> 새 PC 셋업 · 트러블슈팅 상세는 [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md), 작업 인수인계는 [docs/followup.md](docs/followup.md) 참고.
+
+```powershell
+# 0) 환경 변수
+cp .env.example .env          # SECRET_KEY / DB_PASSWORD / KIS·DART 키 등 채우기
+
+# 1) 인프라 (PostgreSQL + Redis)
+docker compose up -d          # 데이터는 named volume에 보존. down -v 는 DB 삭제이므로 주의
+
+# 2) Backend
+cd backend
+python -m venv venv           # 최초 1회
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver    # http://localhost:8000/api/docs/
+
+# 3) Frontend
+cd frontend
+npm install
+npm run dev                   # http://localhost:5173
+```
+
+데이터(종목 마스터·시세·재무)는 팀 공유 DB 덤프(`jumanchu_db_*.sql`)를 복원하거나, 적재 명령을 직접 실행해 채웁니다 — 절차는 [docs/followup.md](docs/followup.md) §4 참고.
+
+## 데이터 범위
+
+- **한국**: 코스피 + 코스닥 전체
+- **미국**: S&P500 + 나스닥100 구성종목 (비인덱스 USD 종목은 `is_active=False`)
+- **시세**: KIS 일봉 약 1년치 (5년 차트 버튼은 1년치만 표시)
+- **재무**: DART(한국) / yfinance(미국) → `FinancialSummary` + ROE·ROA·배당수익률 등 투자 지표
+
+## 컨벤션 (요약)
+
+- **브랜치**: `<type>/<JIRA-KEY>-<설명>` · **커밋**: `<type>(<scope>): <subject>  [SCRUM-NN]`
+- PR은 `dev` 대상, CI 통과 + 1명 이상 리뷰 → Squash merge. `main`/`dev` 직접 push 금지
+- 모델 변경 = 마이그레이션 같이 커밋 / 마이그레이션 파일은 한 사람만 생성
+- 상세 → [CLAUDE.md](CLAUDE.md) · [docs/BRANCH_STRATEGY.md](docs/BRANCH_STRATEGY.md)
+
+## 문서
+
+| 문서 | 내용 |
+|---|---|
+| [docs/ERD.md](docs/ERD.md) | DB 스키마 (진실의 원천) |
+| [docs/API_명세_초안.md](docs/API_명세_초안.md) · [docs/API_스키마_v1.5.md](docs/API_스키마_v1.5.md) | API 모듈·스키마 |
+| [docs/인증_권한_정책.md](docs/인증_권한_정책.md) | JWT / 권한 정책 |
+| [docs/DART_COLUMN.md](docs/DART_COLUMN.md) | 재무 지표 컬럼 사전 |
+| [docs/USER_STORIES.md](docs/USER_STORIES.md) | 유저 스토리 / 인수 조건 |
+| [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md) · [docs/followup.md](docs/followup.md) | 로컬 셋업 / 작업 인수인계 |
+
+## 팀
+
+| 이름 | 역할 |
+|---|---|
+| 강재민 | Backend — Django(모델/뷰/URL/마이그레이션), 외부 API 연동, CI/CD |
+| 정율 | Algorithm — 추천 도메인 기획 + 순수 Python 추천 알고리즘 |
+| 송호영 | Frontend — Vue.js 전반 |
