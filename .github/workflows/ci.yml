@@ -16,8 +16,6 @@ jobs:
   backend:
     name: Backend (Django)
     runs-on: ubuntu-latest
-    # backend/ 디렉토리가 없을 때는 skip — 초기 단계 보호
-    if: hashFiles('backend/**') != ''
     defaults:
       run:
         working-directory: backend
@@ -82,7 +80,6 @@ jobs:
   frontend:
     name: Frontend (Vue.js)
     runs-on: ubuntu-latest
-    if: hashFiles('frontend/**') != ''
     defaults:
       run:
         working-directory: frontend
