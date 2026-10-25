@@ -5,7 +5,9 @@ import { me as fetchMe, updateMe } from '../api/auth'
 import { fetchPortfolioSummary, fetchOrders, fetchHoldings, fetchMilestones } from '../api/portfolio'
 import { fetchPosts, fetchFollowers, fetchFollowing } from '../api/community'
 import { errMsg, retry } from '../api/client'
+import { useCopy } from '../composables/useCopy'
 
+const { t } = useCopy()
 const router = useRouter()
 const activeSection = ref('invest')
 
@@ -283,7 +285,7 @@ onMounted(() => {
             :class="{ active: activeSection === tab.key }"
             @click="activeSection = tab.key"
           >
-            {{ tab.label }}
+            {{ t('mp.tab.' + tab.key, tab.label) }}
           </li>
         </ul>
       </aside>
@@ -319,7 +321,7 @@ onMounted(() => {
 
           <!-- 보유 종목 현황 (국내/해외 분리) -->
           <div class="panel acc-holdings-card">
-            <div class="acc-label">보유 종목 현황</div>
+            <div class="acc-label">{{ t('mp.invest.holdings', '보유 종목 현황') }}</div>
             <template v-for="g in [{ label: '🇰🇷 국내', rows: domesticHoldings }, { label: '🇺🇸 해외', rows: overseasHoldings }]" :key="g.label">
               <template v-if="g.rows.length">
                 <div class="hold-group-label">{{ g.label }}</div>
@@ -339,7 +341,7 @@ onMounted(() => {
 
         <!-- 내 거래 내역 -->
         <div class="section-header">
-          <h2>내 거래 내역</h2>
+          <h2>{{ t('mp.invest.trades', '내 거래 내역') }}</h2>
           <div class="trade-filter-tabs">
             <button
               v-for="f in [{k:'all',l:'전체'},{k:'buy',l:'매수'},{k:'sell',l:'매도'}]"
@@ -431,13 +433,13 @@ onMounted(() => {
         <div class="info-grid">
           <!-- Invest Type Card -->
           <div class="panel info-card">
-            <div class="info-card-title">투자 성향</div>
+            <div class="info-card-title">{{ t('mp.profile.investType', '투자 성향') }}</div>
             <template v-if="user.investType">
               <div class="invest-type-badge">{{ user.investType }}</div>
               <p class="invest-desc">온보딩 설문 응답을 바탕으로 분석된 나의 투자 성향이에요.</p>
             </template>
             <p v-else class="invest-desc">아직 투자 성향 검사를 하지 않았어요. 검사하면 맞춤 추천이 정확해져요.</p>
-            <button class="retest-btn" type="button" @click="router.push('/onboarding')">투자 성향 재검사</button>
+            <button class="retest-btn" type="button" @click="router.push('/onboarding')">{{ t('mp.profile.retest', '투자 성향 재검사') }}</button>
           </div>
 
           <!-- Personal Info Card -->
@@ -472,7 +474,7 @@ onMounted(() => {
 
           <!-- Community Profile Card -->
           <div class="panel info-card span2">
-            <div class="info-card-title">커뮤니티 프로필</div>
+            <div class="info-card-title">{{ t('mp.profile.community', '커뮤니티 프로필') }}</div>
             <div class="community-profile">
               <div class="cp-avatar">{{ avatarChar }}</div>
               <div class="cp-details">
@@ -498,7 +500,7 @@ onMounted(() => {
           <div class="activity-main">
             <!-- Posts -->
             <div class="panel act-block">
-              <div class="act-block-title">작성한 글 ({{ myPosts.length }})</div>
+              <div class="act-block-title">{{ t('mp.act.posts', '작성한 글') }} ({{ myPosts.length }})</div>
               <div class="post-list">
                 <div v-for="post in myPosts" :key="post.id" class="post-item">
                   <div class="post-item-left">

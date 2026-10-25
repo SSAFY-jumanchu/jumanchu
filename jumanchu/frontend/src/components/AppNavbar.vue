@@ -3,14 +3,17 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
+import { useCopy } from '../composables/useCopy'
+
+const { t } = useCopy()
 
 const navItems = [
-  { to: '/', label: '홈' },
-  { to: '/community', label: '커뮤니티' },
-  { to: '/stocks', label: '주식 조회' },
-  { to: '/holdings', label: '보유 종목' },
-  { to: '/trading-diary', label: '매매일기' },
-  { to: '/portfolio', label: '장투 케어' },
+  { to: '/', key: 'home', label: '홈' },
+  { to: '/community', key: 'community', label: '커뮤니티' },
+  { to: '/stocks', key: 'stocks', label: '주식 조회' },
+  { to: '/holdings', key: 'holdings', label: '보유 종목' },
+  { to: '/trading-diary', key: 'diary', label: '매매일기' },
+  { to: '/portfolio', key: 'portfolio', label: '장투 케어' },
 ]
 
 const router = useRouter()
@@ -104,7 +107,7 @@ async function handleLogout() {
             active-class="is-active"
             exact-active-class="is-active"
           >
-            {{ item.label }}
+            {{ t('nav.' + item.key, item.label) }}
           </RouterLink>
         </nav>
 

@@ -7,7 +7,10 @@ import { fetchLongtermReport, fetchLongtermHistory } from '../api/recommend'
 import { fetchHoldingsNews } from '../api/news'
 import { fetchDiaries } from '../api/diary'
 import { errMsg, retry } from '../api/client'
+import { useCopy } from '../composables/useCopy'
 
+// 이 컴포넌트는 v-for 루프 변수로 t를 쓰므로 헬퍼는 tr로 별칭
+const { t: tr } = useCopy()
 const router = useRouter()
 const loading = ref(true)
 const loadError = ref('')
@@ -186,8 +189,8 @@ onMounted(loadPortfolio)
 
     <!-- 헤더 -->
     <header class="lt-header">
-      <h1>장투 페이지 <span class="ai-tag ai-tag-lg">AI</span></h1>
-      <p class="lt-sub">내가 산 종목, 계속 들고 갈 만한가요? — 재무 30% · 성장 40% · 궁합 30% 가중으로 점검해드려요.</p>
+      <h1>{{ tr('lt.title', '장투 페이지') }} <span class="ai-tag ai-tag-lg">AI</span></h1>
+      <p class="lt-sub">{{ tr('lt.sub', '내가 산 종목, 계속 들고 갈 만한가요? — 재무 30% · 성장 40% · 궁합 30% 가중으로 점검해드려요.') }}</p>
     </header>
 
     <!-- 로드 오류 -->
@@ -197,7 +200,7 @@ onMounted(loadPortfolio)
 
       <!-- ===== 좌: 보유 종목 ===== -->
       <aside class="panel lt-list" aria-label="보유 종목">
-        <p class="lt-list-title">보유 종목</p>
+        <p class="lt-list-title">{{ tr('lt.list.title', '보유 종목') }}</p>
         <button
           v-for="(h, i) in holdings"
           :key="h.code"
@@ -241,7 +244,7 @@ onMounted(loadPortfolio)
             <p class="lt-ov-summary"><span class="ai-tag">AI</span> {{ s.summary }}</p>
           </div>
           <button class="lt-ov-go" type="button" @click="router.push(`/stocks/${s.code}`)">
-            종목 상세 →
+            {{ tr('lt.overview.go', '종목 상세 →') }}
           </button>
         </section>
 
@@ -254,7 +257,7 @@ onMounted(loadPortfolio)
         <div v-else class="lt-score-row">
           <div v-for="card in scoreCards" :key="card.name" class="panel lt-score-card">
             <div class="lt-score-top">
-              <span class="lt-score-name">{{ card.name }} <span class="lt-weight">{{ card.weight }}</span></span>
+              <span class="lt-score-name">{{ tr('lt.score.' + card.name, card.name) }} <span class="lt-weight">{{ card.weight }}</span></span>
               <strong class="lt-score-num">{{ card.score }}</strong>
             </div>
             <div class="lt-score-bar"><div :style="{ width: card.score + '%' }"></div></div>
@@ -274,7 +277,7 @@ onMounted(loadPortfolio)
             <p class="lt-card-title">🧾 이 종목 거래내역</p>
             <div class="lt-journal-list">
               <div v-for="(t, i) in s.trades" :key="i" class="lt-row1">
-                <span class="lt-j-side" :class="t.side">{{ t.side === 'buy' ? '매수' : '매도' }}</span>
+                <span class="lt-j-side" :class="t.side">{{ t.side === 'buy' ? tr('lt.side.buy', '매수') : tr('lt.side.sell', '매도') }}</span>
                 <span class="lt-j-date">{{ t.date }}</span>
                 <span class="lt-row1-note">{{ t.qty }}주 @ {{ t.price }}</span>
               </div>
@@ -283,10 +286,10 @@ onMounted(loadPortfolio)
           </section>
 
           <section class="panel lt-card">
-            <p class="lt-card-title">📒 이 종목 매매일기</p>
+            <p class="lt-card-title">{{ tr('lt.journal.title', '📒 이 종목 매매일기') }}</p>
             <div class="lt-journal-list">
               <div v-for="(j, i) in s.journal" :key="i" class="lt-row1">
-                <span class="lt-j-side" :class="j.side">{{ j.side === 'buy' ? '매수' : '매도' }}</span>
+                <span class="lt-j-side" :class="j.side">{{ j.side === 'buy' ? tr('lt.side.buy', '매수') : tr('lt.side.sell', '매도') }}</span>
                 <span class="lt-j-date">{{ j.date }}</span>
                 <span class="lt-row1-note">{{ j.note }}</span>
               </div>
@@ -295,7 +298,7 @@ onMounted(loadPortfolio)
           </section>
 
           <section class="panel lt-card">
-            <p class="lt-card-title">📈 장투 점수 히스토리</p>
+            <p class="lt-card-title">{{ tr('lt.history.title', '📈 장투 점수 히스토리') }}</p>
             <div class="lt-history-list">
               <div v-for="(hi, i) in s.history" :key="hi.month" class="lt-history-row">
                 <span class="lt-h-month">{{ hi.month }}</span>
@@ -311,7 +314,7 @@ onMounted(loadPortfolio)
 
         <!-- 종목 관련 뉴스 -->
         <section class="panel lt-card">
-          <p class="lt-card-title">📰 종목 관련 뉴스</p>
+          <p class="lt-card-title">{{ tr('lt.news.title', '📰 종목 관련 뉴스') }}</p>
           <div class="lt-news-list">
             <a
               v-for="(n, i) in s.news"
