@@ -417,11 +417,12 @@ class StockChartTests(APITestCase):
     def setUpTestData(cls):
         cls.kr = Stock.objects.create(code='005930', market='KOSPI',
                                        name='삼성전자', currency='KRW')
-        # 일봉 5일치 (2026-05-25~05-29, 월요일=2026-06-01 이전)
-        for i, d in enumerate(['2026-05-25', '2026-05-26', '2026-05-27',
-                                '2026-05-28', '2026-05-29']):
+        # 일봉 5일치. 차트 API가 date.today() 기준으로 기간을 자르므로
+        # 고정 날짜 대신 오늘 기준 9~5일 전으로 만든다(period=1m 범위 안, today 제외).
+        base_day = date.today()
+        for i, back in enumerate([9, 8, 7, 6, 5]):
             StockPrice.objects.create(
-                stock=cls.kr, price_date=date.fromisoformat(d),
+                stock=cls.kr, price_date=base_day - timedelta(days=back),
                 open=Decimal(67000 + i * 100), high=Decimal(68000 + i * 100),
                 low=Decimal(66500 + i * 100), close=Decimal(67500 + i * 100),
                 volume=1000000 + i * 1000,
